@@ -202,6 +202,7 @@ function PANEL:Init( )
 		local Engines     = Mobility:AddNode( "Engines" , ItemIcon )
 		local Gearboxes   = Mobility:AddNode( "Gearboxes" , ItemIcon  )
 		local FuelTanks   = Mobility:AddNode( "Fuel Tanks" , ItemIcon  )
+		local Radiators   = Mobility:AddNode( "Radiators" , "icon16/cog.png"  )
 
 		local EngineCatNodes    = {} --Stores all Engine Cats Nodes (V12, V8, I4, etc)
 		local GearboxCatNodes   = {} --Stores all Gearbox Cats Nodes (CVT, Transfer, etc)
@@ -280,6 +281,19 @@ function PANEL:Init( )
 			function FuelTanks:DoClick()
 				RunConsoleCommand( "acemenu_type", FuelTankData.type )
 				acemenupanel:UpdateDisplay( FuelTankData )
+			end
+
+			break
+		end
+
+		-------------------- Radiator folder --------------------
+
+		--Creates the only button to access to radiator config menu.
+		for _, RadiatorData in pairs(FinalContainer["Radiators"] or {}) do
+
+			function Radiators:DoClick()
+				RunConsoleCommand( "acemenu_type", RadiatorData.type )
+				acemenupanel:UpdateDisplay( RadiatorData )
 			end
 
 			break
