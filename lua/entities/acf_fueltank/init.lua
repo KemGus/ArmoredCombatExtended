@@ -17,7 +17,9 @@ do
 		--Outputs
 		["Fuel"]        = "Returns the current fuel level.",
 		["Capacity"]    = "Returns the max capacity of this fuel tank.",
-		["Leaking"]     = "Is the fuel tank leaking?"
+		["Leaking"]     = "Is the fuel tank leaking?",
+		["Heat"]        = "Returns the current temperature of the battery in Celsius.",
+		["Wear"]        = "Returns the current wear of the battery as a percentage (0-1)."
 	}
 
 	function ENT:Initialize()
@@ -43,18 +45,28 @@ do
 		self.Legal            = true
 		self.LegalIssues      = ""
 
+		-- Battery specific properties
+		self.Heat             = ACE.AmbientTemp or 20
+		self.Wear             = 0
+		self.ChargeRate       = 0
+		self.PristineCapacity = 0
+		self.IsCharging       = false
+		self.LastChargeTime   = 0
+
 		self.Inputs = Wire_CreateInputs( self, { "Active", "Refuel Duty (" .. FueltankWireDescs["Refuel"] .. ")" } )
 		self.Outputs = WireLib.CreateSpecialOutputs( self,
-			{ "Fuel (" .. FueltankWireDescs["Fuel"] .. ")", "Capacity (" .. FueltankWireDescs["Capacity"] .. ")", "Leaking (" .. FueltankWireDescs["Leaking"] .. ")", "Entity" },
-			{ "NORMAL", "NORMAL", "NORMAL", "ENTITY" }
+			{ "Fuel (" .. FueltankWireDescs["Fuel"] .. ")", "Capacity (" .. FueltankWireDescs["Capacity"] .. ")", "Leaking (" .. FueltankWireDescs["Leaking"] .. ")", "Heat (" .. FueltankWireDescs["Heat"] .. ")", "Wear (" .. FueltankWireDescs["Wear"] .. ")", "Entity" },
+			{ "NORMAL", "NORMAL", "NORMAL", "NORMAL", "NORMAL", "ENTITY" }
 		)
 		Wire_TriggerOutput( self, "Leaking", 0 )
+		Wire_TriggerOutput( self, "Heat", self.Heat )
+		Wire_TriggerOutput( self, "Wear", self.Wear )
 		Wire_TriggerOutput( self, "Entity", self )
 
 		self.Master = {} --engines linked to this tank
 		ACF.FuelTanks = ACF.FuelTanks or {} --master list of acf fuel tanks
 
-		self.LastThink = 0
+		self.LastThink = CurTime()
 		self.NextThink = CurTime() +  1
 
 	end
@@ -351,8 +363,11 @@ function ENT:UpdateFuelTank(_, _, Data2)
 	self.NoLinks       = TankData and (TankData.nolinks == true) or false
 
 	if self.FuelType == "Electric" then
-		self.Liters   = self.Capacity --batteries capacity is different from internal volume
-		self.Capacity = self.Capacity * ACF.LiIonED
+		self.Liters = self.Capacity -- Store volume-based capacity for mass calculation
+		if not self.PristineCapacity or self.PristineCapacity == 0 then
+			self.PristineCapacity = self.Capacity * ACF.LiIonED
+		end
+		self.Capacity = self.PristineCapacity * (1 - (self.Wear or 0))
 		self.Fuel     = pct * self.Capacity
 	else
 		self.Fuel	= pct * self.Capacity
@@ -387,6 +402,8 @@ function ENT:UpdateOverlayText()
 		text = text .. "\nCurrent Charge Level:"
 		text = text .. "\n-  " .. math.Round( self.Fuel, 1 ) .. " / " .. math.Round( self.Capacity, 1 ) .. " kWh"
 		text = text .. "\n-  " .. math.Round( self.Fuel * 3.6, 1 ) .. " / " .. math.Round( self.Capacity * 3.6, 1) .. " MJ"
+		text = text .. "\n- Heat: " .. math.Round(self.Heat, 1) .. " °C"
+		text = text .. "\n- Wear: " .. string.format("%.2f%%", self.Wear * 100)
 
 	else
 
@@ -489,8 +506,21 @@ function ENT:Think()
 		self:NextThink( CurTime() + 1 )
 	end
 
+	if self.FuelType == "Electric" then
+		if self.IsCharging and (CurTime() - self.LastChargeTime < 0.1) then
+			self:NextThink(CurTime())
+		else
+			self.IsCharging = false
+		end
+
+		local temp_diff = self.Heat - (ACE.AmbientTemp or 20)
+		self.Heat = self.Heat - temp_diff * ACF.BatteryCoolingFactor * (CurTime() - self.LastThink)
+		Wire_TriggerOutput(self, "Heat", self.Heat)
+		Wire_TriggerOutput(self, "Wear", self.Wear)
+	end
+
 	--refuelling
-	if self.Active and self.SupplyFuel and self.Fuel > 0 and self.Legal then
+	if self.Active and self.SupplyFuel and self.Fuel > 0 and self.Legal and self.FuelType ~= "Electric" then
 		self:NextThink(CurTime())
 		for _,Tank in pairs(ACF.FuelTanks) do
 
@@ -498,22 +528,14 @@ function ENT:Think()
 				local dist = self:GetPos():Distance(Tank:GetPos())
 
 				if dist < ACF.RefillDistance and (Tank.Capacity - Tank.Fuel > 0.1) then
-					local exchange = ((self.FuelType == "Electric") and 1 or 15) / 200
+					local exchange = 15 / 200
 					exchange = math.min(exchange, self.Fuel, Tank.Capacity - Tank.Fuel)
 					self.Fuel = self.Fuel - exchange
 					Tank.Fuel = Tank.Fuel + exchange
 
-					if Tank.FuelType == "Electric" then
-						if not Tank.PlayedSound and CurTime() > (Tank.NextSoundTime or 0) then
-							sound.Play("ambient/energy/newspark04.wav", Tank:GetPos(), 75, 100, 0.5)
-							Tank.PlayedSound = true
-							Tank.NextSoundTime = CurTime() + 1 -- Adjust the delay time (in seconds) as needed
-						end
-					else
-						if CurTime() > (Tank.NextSoundTime or 0) then
-							sound.Play("vehicles/jetski/jetski_no_gas_start.wav", Tank:GetPos(), 75, 120, 0.5)
-							Tank.NextSoundTime = CurTime() + 1 -- Adjust the delay time (in seconds) as needed
-						end
+					if CurTime() > (Tank.NextSoundTime or 0) then
+						sound.Play("vehicles/jetski/jetski_no_gas_start.wav", Tank:GetPos(), 75, 120, 0.5)
+						Tank.NextSoundTime = CurTime() + 1 -- Adjust the delay time (in seconds) as needed
 					end
 				end
 			end
@@ -528,6 +550,39 @@ function ENT:Think()
 
 	return true
 
+end
+
+function ENT:Charge(power_kW, deltaTime_s)
+	if not self.Active or self.FuelType ~= "Electric" then return end
+
+	self.IsCharging = true
+	self.LastChargeTime = CurTime()
+
+	local charge_level = self.Fuel / self.Capacity
+	if charge_level >= 1 then return end
+
+	-- Charging rate decreases as the battery approaches full charge (e.g. using a power of 1.5)
+	local charge_rate_multiplier = (1 - charge_level)^1.5
+	local charge_rate_kW = ACF.BatteryMaxChargeRate * charge_rate_multiplier
+	charge_rate_kW = math.max(charge_rate_kW, 0.1)
+
+	local heat_factor = 1
+	if self.Heat > ACF.BatteryOptimalTemp then
+		heat_factor = 1 - math.min((self.Heat - ACF.BatteryOptimalTemp) / (ACF.BatteryMaxSafeTemp - ACF.BatteryOptimalTemp), 1)
+	end
+	charge_rate_kW = charge_rate_kW * heat_factor
+
+	local energy_to_deliver = math.min(power_kW, charge_rate_kW) * deltaTime_s
+	energy_to_deliver = math.min(energy_to_deliver, self.Capacity - self.Fuel)
+
+	local energy_drawn_from_source = energy_to_deliver / ACF.BatteryChargeEfficiency
+	local actual_energy_gained = energy_drawn_from_source * ACF.BatteryChargeEfficiency
+	local energy_lost_to_heat = energy_drawn_from_source - actual_energy_gained
+
+	self.Fuel = self.Fuel + actual_energy_gained
+	self.Heat = self.Heat + energy_lost_to_heat * ACF.kWhToHeat
+	self.Wear = self.Wear + ACF.BatteryWearPerCycle * (actual_energy_gained / self.PristineCapacity)
+	self.Capacity = self.PristineCapacity * (1 - self.Wear)
 end
 
 function ENT:OnRemove()

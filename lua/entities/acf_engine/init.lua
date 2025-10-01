@@ -795,6 +795,12 @@ function ENT:CalcRPM()
 	Wire_TriggerOutput(self, "Power", math.Round(Power))
 	Wire_TriggerOutput(self, "RPM", math.Round(self.FlyRPM))
 
+	for _, Tank in pairs(self.FuelLink) do
+		if IsValid(Tank) and Tank.FuelType == "Electric" then
+			Tank:Charge(Power, DeltaTime)
+		end
+	end
+
 	if self.Sound then
 		self.Sound:ChangePitch( math.min( 20 + (SmoothRPM * (self.SoundPitch / 100)) / 50, 255 ), 0 )
 		self.Sound:ChangeVolume( 0.25 + (0.1 + 0.9 * ((SmoothRPM / self.LimitRPM) ^ 1.5)) * self.Throttle / 1.5, 0 )
@@ -1031,7 +1037,11 @@ do
 
 	function ENT:LinkFuel( Target )
 
-		if not (self.FuelType == "Multifuel" and Target.FuelType ~= "Electric") and self.FuelType ~= Target.FuelType then
+		local isCompatible = (self.FuelType == Target.FuelType) or
+							 (self.FuelType == "Multifuel" and Target.FuelType ~= "Electric") or
+							 (self.FuelType ~= "Electric" and Target.FuelType == "Electric")
+
+		if not isCompatible then
 			return false, "Cannot link because fuel type is incompatible."
 		end
 

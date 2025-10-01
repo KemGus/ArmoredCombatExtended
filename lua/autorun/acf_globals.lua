@@ -53,6 +53,14 @@ ACF.FuelRate            = 10						-- multiplier for fuel usage, 1.0 is approx re
 ACF.ElecRate            = 4						-- multiplier for electrics								--BEFORE to balance: 0.458
 ACF.TankVolumeMul       = 1						-- multiplier for fuel tank capacity, 1.0 is approx real world
 
+ACF.BatteryChargeEfficiency = 0.9				-- 90% efficiency
+ACF.BatteryWearPerCycle     = 0.0001				-- 0.01% wear per full charge cycle
+ACF.BatteryMaxChargeRate    = 5                 -- Max charge rate in kW
+ACF.BatteryOptimalTemp      = 40                -- Optimal temperature for charging
+ACF.BatteryMaxSafeTemp      = 80                -- Charging is throttled above optimal temp, and stops at this temp.
+ACF.kWhToHeat               = 50                -- Conversion factor from kWh to heat
+ACF.BatteryCoolingFactor    = 0.05              -- How quickly the battery cools down
+
 ---------------------------------- Ammo Crate config ----------------------------------
 
 ACF.CrateMaximumSize    = 250
@@ -141,12 +149,35 @@ ACE.MatCostTables = {
 	Alum			= 1.06 * (0.8325 / 0.334),	--A 20% increase in cost for 60% reduction in weight.
 	CHA				= 0.7 * (0.98 / 1.25),	--20% more heavy for a 30% reduction in cost.
 	Cer				= 0.95 * (2.05 / 1.2),	--70% more protection per kg for a 10% increase in cost. Takes a ton of damage and evaporates if penetrated.
-	ERA				= 0.7 * (3 / 2.0),
+	["ERA-K1"]		= 1.2,
+	["ERA-K5"]		= 1.5,
+	["ERA-Relikt"]	= 2.0,
 	Rub				= 1.05 * (0.05 / 0.2),
 	Texto			= 0.9 * (0.5 / 0.35),
 	RHA 			= 1,
 	DU				= 1.2 * (3.9 / 2.43),	--A 20% increase in cost for 40% reduction in weight.
 	Ti				= 1.3 * (1.7 / 0.61)	--A 25% increase in cost for 64% reduction in weight.
+}
+
+ACE.ERAGenerations = {
+	["ERA-K1"] = {
+		Casing = 3, -- mm
+		ChainReactionChance = 0.5,
+		APPerformance = 0,
+		HEATPerformance = 0.8,
+	},
+	["ERA-K5"] = {
+		Casing = 15, -- mm
+		ChainReactionChance = 0.25,
+		APPerformance = 0.3,
+		HEATPerformance = 0.6,
+	},
+	["ERA-Relikt"] = {
+		Casing = 20, -- mm
+		ChainReactionChance = 0.1,
+		APPerformance = 0.5,
+		HEATPerformance = 0.7,
+	},
 }
 
 ---------------------------------- Misc & other ----------------------------------

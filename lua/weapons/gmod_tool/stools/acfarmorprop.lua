@@ -337,8 +337,15 @@ if CLIENT then
 
 			ArmorPanelText( "ComboCurve", ToolPanel.panel, getPhrase("tool.acfarmorprop.curve") .. ": " .. MaterialData.curve )
 			ArmorPanelText( "ComboMass" , ToolPanel.panel, getPhrase("tool.acfarmorprop.mass") .. ": " .. MaterialData.massMod .. "x RHA" )
-			ArmorPanelText( "ComboKE"	, ToolPanel.panel, getPhrase("tool.acfarmorprop.keprot") .. ": " .. MaterialData.effectiveness .. "x RHA" )
-			ArmorPanelText( "ComboCHE"  , ToolPanel.panel, getPhrase("tool.acfarmorprop.chemprot") .. ": " .. (MaterialData.HEATeffectiveness or MaterialData.effectiveness) .. "x RHA" )
+			if MaterialData.IsExplosive then
+				ArmorPanelText( "ComboKE"	, ToolPanel.panel, "AP Performance: " .. (MaterialData.APPerformance or 0) * 100 .. "%" )
+				ArmorPanelText( "ComboCHE"  , ToolPanel.panel, "HEAT Performance: " .. (MaterialData.HEATPerformance or 0) * 100 .. "%" )
+				ArmorPanelText( "ComboChain", ToolPanel.panel, "Chain Reaction: " .. (MaterialData.ChainReactionChance or 0) * 100 .. "%" )
+			else
+				ArmorPanelText( "ComboKE"	, ToolPanel.panel, getPhrase("tool.acfarmorprop.keprot") .. ": " .. MaterialData.effectiveness .. "x RHA" )
+				ArmorPanelText( "ComboCHE"  , ToolPanel.panel, getPhrase("tool.acfarmorprop.chemprot") .. ": " .. (MaterialData.HEATeffectiveness or MaterialData.effectiveness) .. "x RHA" )
+				ArmorPanelText( "ComboChain", ToolPanel.panel, "" ) -- Clear the chain reaction text if not ERA
+			end
 			ArmorPanelText( "ComboYear" , ToolPanel.panel, getPhrase("tool.acfarmorprop.year") .. ": " .. (MaterialData.year or "unknown") )
 
 			function ToolPanel.ComboMat:OnSelect(self, _, value )
@@ -444,8 +451,15 @@ if CLIENT then
 
 				ArmorPanelText( "ComboCurve", ToolPanel.panel, getPhrase("tool.acfarmorprop.curve") .. ": " .. MatData.curve )
 				ArmorPanelText( "ComboMass" , ToolPanel.panel, getPhrase("tool.acfarmorprop.mass_scale") .. ": " .. MatData.massMod .. "x RHA")
-				ArmorPanelText( "ComboKE"	, ToolPanel.panel, getPhrase("tool.acfarmorprop.keprot") .. " : " .. MatData.effectiveness .. "x RHA" )
-				ArmorPanelText( "ComboCHE"  , ToolPanel.panel, getPhrase("tool.acfarmorprop.chemprot") .. ": " .. (MatData.HEATeffectiveness or MatData.effectiveness) .. "x RHA" )
+				if MatData.IsExplosive then
+					ArmorPanelText( "ComboKE"	, ToolPanel.panel, "AP Performance: " .. (MatData.APPerformance or 0) * 100 .. "%" )
+					ArmorPanelText( "ComboCHE"  , ToolPanel.panel, "HEAT Performance: " .. (MatData.HEATPerformance or 0) * 100 .. "%" )
+					ArmorPanelText( "ComboChain", ToolPanel.panel, "Chain Reaction: " .. (MatData.ChainReactionChance or 0) * 100 .. "%" )
+				else
+					ArmorPanelText( "ComboKE"	, ToolPanel.panel, getPhrase("tool.acfarmorprop.keprot") .. " : " .. MatData.effectiveness .. "x RHA" )
+					ArmorPanelText( "ComboCHE"  , ToolPanel.panel, getPhrase("tool.acfarmorprop.chemprot") .. ": " .. (MatData.HEATeffectiveness or MatData.effectiveness) .. "x RHA" )
+					ArmorPanelText( "ComboChain", ToolPanel.panel, "" ) -- Clear the chain reaction text if not ERA
+				end
 				ArmorPanelText( "ComboYear" , ToolPanel.panel, getPhrase("tool.acfarmorprop.year") .. ": " .. (MatData.year or "unknown") )
 
 			end
@@ -527,10 +541,25 @@ if CLIENT then
 		Tabletxt = table.Add(Tabletxt,TMass2)
 		--Tabletxt = table.Add(Tabletxt,ArmorComp1)
 
+		local era_mass = {}
+		local era_percent = {}
+		local other_materials = {}
+
+		-- Separate ERA from other materials
+		for material, mass in pairs(FromJSON[1]) do
+			local MatData = ACE_GetMaterialData(material)
+			if MatData and MatData.IsExplosive then
+				local status = (material == "UsedERA") and "Spent" or "Active"
+				era_mass[status] = (era_mass[status] or 0) + mass
+				era_percent[status] = (era_percent[status] or 0) + FromJSON[2][material]
+			else
+				other_materials[material] = { mass = mass, percent = FromJSON[2][material] }
+			end
+		end
 
 		local Count = 0
-		for material, _ in pairs( FromJSON[1] ) do
-			local Percent	=  math.Round( FromJSON[2][material] * 100 ,1)
+		for material, data in pairs( other_materials ) do
+			local Percent	=  math.Round( data.percent * 100 ,1)
 			local MatText = material .. ": "
 			local MassText = math.Round(Percent,0) .. "%  "
 
@@ -543,15 +572,23 @@ if CLIENT then
 				table.Add(Tabletxt,{ Color4, MatText})
 				table.Add(Tabletxt,{ Color3, MassText})
 			end
+		end
 
+		if next(era_mass) then
+			local active_percent = (era_percent["Active"] or 0) * 100
+			local spent_percent = (era_percent["Spent"] or 0) * 100
+			table.Add(Tabletxt,{ Color4, "Active ERA: "})
+			table.Add(Tabletxt,{ Color3, math.Round(active_percent, 0) .. "%  "})
+			table.Add(Tabletxt,{ Color4, "Spent ERA: "})
+			table.Add(Tabletxt,{ Color3, math.Round(spent_percent, 0) .. "%  "})
 		end
 
 		table.Add(Tabletxt,{ Color4, Sep})
 
 		Count = 0
-		for material, mass in pairs( FromJSON[1] ) do
+		for material, data in pairs( other_materials ) do
 			local MatText = material .. ": "
-			local MassText = math.Round(mass,1) .. "kg  "
+			local MassText = math.Round(data.mass,1) .. "kg  "
 
 			Count = Count + 1
 			if Count >= 3 then
@@ -562,7 +599,15 @@ if CLIENT then
 				table.Add(Tabletxt,{ Color4, MatText})
 				table.Add(Tabletxt,{ Color3, MassText})
 			end
+		end
 
+		if next(era_mass) then
+			local active_mass = era_mass["Active"] or 0
+			local spent_mass = era_mass["Spent"] or 0
+			table.Add(Tabletxt,{ Color4, "Active ERA: "})
+			table.Add(Tabletxt,{ Color3, math.Round(active_mass, 1) .. "kg  "})
+			table.Add(Tabletxt,{ Color4, "Spent ERA: "})
+			table.Add(Tabletxt,{ Color3, math.Round(spent_mass, 1) .. "kg"})
 		end
 
 
