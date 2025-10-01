@@ -53,15 +53,6 @@ ACF.FuelRate            = 10						-- multiplier for fuel usage, 1.0 is approx re
 ACF.ElecRate            = 4						-- multiplier for electrics								--BEFORE to balance: 0.458
 ACF.TankVolumeMul       = 1						-- multiplier for fuel tank capacity, 1.0 is approx real world
 
-ACF.BatteryChargeEfficiency = 0.9				-- 90% efficiency
-ACF.BatteryHeatPerCharge    = 0.1				-- 10% of lost energy is converted to heat
-ACF.BatteryWearPerCycle     = 0.0001				-- 0.01% wear per full charge cycle
-ACF.BatteryMaxChargeRate    = 5                 -- Max charge rate in kW
-ACF.BatteryOptimalTemp      = 40                -- Optimal temperature for charging
-ACF.BatteryMaxSafeTemp      = 80                -- Temperature at which charging stops
-ACF.kWhToHeat               = 50                -- Conversion factor from kWh to heat
-ACF.BatteryCoolingFactor    = 0.05              -- How quickly the battery cools down
-
 ---------------------------------- Ammo Crate config ----------------------------------
 
 ACF.CrateMaximumSize    = 250

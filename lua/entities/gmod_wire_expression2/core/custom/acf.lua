@@ -347,43 +347,43 @@ do
 	end
 
 	-- Returns 1 if the entity is an ACF engine
-	[nodiscard, deprecated = "Just check the entity class yourself"]
+	[nodiscard][deprecated="Just check the entity class yourself"]
 	e2function number entity:acfIsEngine()
 		return isEngine(this) and 1 or 0
 	end
 
 	-- Returns 1 if the entity is an ACF gearbox
-	[nodiscard, deprecated = "Just check the entity class yourself"]
+	[nodiscard][deprecated="Just check the entity class yourself"]
 	e2function number entity:acfIsGearbox()
 		return isGearbox(this) and 1 or 0
 	end
 
 	-- Returns 1 if the entity is an ACF gun
-	[nodiscard, deprecated = "Just check the entity class yourself"]
+	[nodiscard][deprecated="Just check the entity class yourself"]
 	e2function number entity:acfIsGun()
 		return isGun(this) and 1 or 0
 	end
 
 	-- Returns 1 if the entity is an ACF rack
-	[nodiscard, deprecated = "Just check the entity class yourself"]
+	[nodiscard][deprecated="Just check the entity class yourself"]
 	e2function number entity:acfIsRack()
 		return isRack(this) and 1 or 0
 	end
 
 	-- Returns 1 if the entity is an ACF ammo crate
-	[nodiscard, deprecated = "Just check the entity class yourself"]
+	[nodiscard][deprecated="Just check the entity class yourself"]
 	e2function number entity:acfIsAmmo()
 		return isAmmo(this) and 1 or 0
 	end
 
 	-- Returns 1 if the entity is an ACF fuel tank
-	[nodiscard, deprecated = "Just check the entity class yourself"]
+	[nodiscard][deprecated="Just check the entity class yourself"]
 	e2function number entity:acfIsFuel()
 		return isFuel(this) and 1 or 0
 	end
 
 	-- Returns 1 if the entity is an ACF radar
-	[nodiscard, deprecated = "Just check the entity class yourself"]
+	[nodiscard][deprecated="Just check the entity class yourself"]
 	e2function number entity:acfIsRadar()
 		return isRadar(this) and 1 or 0
 	end
@@ -1428,7 +1428,7 @@ do
 	__e2setcost(1)
 
 	-- Returns 1 if the ACF engine requires fuel to run
-	[nodiscard, deprecated = "All engines require fuel now."]
+	[nodiscard][deprecated="All engines require fuel now."]
 	e2function number entity:acfFuelRequired()
 		return 1
 	end
