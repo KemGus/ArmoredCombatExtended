@@ -10,12 +10,12 @@ ACE.DefineEngine( "2.3-I5", {
 	sound = "acf_engines/i5_petrolsmall.wav",
 	category = "I5",
 	fuel = "Petrol",
-	enginetype = "GenericPetrol",
-	weight = 100,
+	enginetype = "I5",
+	weight = 50,
 	torque = 188,
 	flywheelmass = 0.12,
 	idlerpm = 900,
-	limitrpm = 7000,
+	limitrpm = 7000
 } )
 
 ACE.DefineEngine( "3.9-I5", {
@@ -25,12 +25,12 @@ ACE.DefineEngine( "3.9-I5", {
 	sound = "acf_engines/i5_petrolmedium.wav",
 	category = "I5",
 	fuel = "Petrol",
-	enginetype = "GenericPetrol",
-	weight = 250,
+	enginetype = "I5",
+	weight = 125,
 	torque = 412,
 	flywheelmass = 0.25,
 	idlerpm = 700,
-	limitrpm = 6500,
+	limitrpm = 6500
 } )
 
 -- Diesel
@@ -42,12 +42,12 @@ ACE.DefineEngine( "2.9-I5", {
 	sound = "acf_engines/i5_dieselsmall2.wav",
 	category = "I5",
 	fuel = "Diesel",
-	enginetype = "GenericDiesel",
-	weight = 130,
+	enginetype = "I5",
+	weight = 65,
 	torque = 270,
 	flywheelmass = 0.5,
 	idlerpm = 500,
-	limitrpm = 4200,
+	limitrpm = 4200
 } )
 
 ACE.DefineEngine( "4.1-I5", {
@@ -57,10 +57,10 @@ ACE.DefineEngine( "4.1-I5", {
 	sound = "acf_engines/i5_dieselmedium.wav",
 	category = "I5",
 	fuel = "Diesel",
-	enginetype = "GenericDiesel",
-	weight = 400,
+	enginetype = "I5",
+	weight = 200,
 	torque = 660,
 	flywheelmass = 1.5,
 	idlerpm = 650,
-	limitrpm = 3800,
+	limitrpm = 3800
 } )

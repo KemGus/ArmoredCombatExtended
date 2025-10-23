@@ -8,12 +8,12 @@ ACE.DefineEngine( "0.25-I1", {
 	sound = "acf_engines/i1_small.wav",
 	category = "Single",
 	fuel = "Petrol",
-	enginetype = "GenericPetrol",
-	weight = 15,
+	enginetype = "Single",
+	weight = 8,
 	torque = 30,
 	flywheelmass = 0.005,
 	idlerpm = 1200,
-	limitrpm = 7500,
+	limitrpm = 7500
 } )
 
 ACE.DefineEngine( "0.5-I1", {
@@ -23,12 +23,12 @@ ACE.DefineEngine( "0.5-I1", {
 	sound = "acf_engines/i1_medium.wav",
 	category = "Single",
 	fuel = "Petrol",
-	enginetype = "GenericPetrol",
-	weight = 20,
+	enginetype = "Single",
+	weight = 10,
 	torque = 60,
 	flywheelmass = 0.005,
 	idlerpm = 900,
-	limitrpm = 8000,
+	limitrpm = 8000
 } )
 
 ACE.DefineEngine( "1.3-I1", {
@@ -38,10 +38,10 @@ ACE.DefineEngine( "1.3-I1", {
 	sound = "acf_engines/i1_large.wav",
 	category = "Single",
 	fuel = "Petrol",
-	enginetype = "GenericPetrol",
-	weight = 50,
+	enginetype = "Single",
+	weight = 25,
 	torque = 135,
 	flywheelmass = 0.1,
 	idlerpm = 600,
-	limitrpm = 6700,
+	limitrpm = 6700
 } )

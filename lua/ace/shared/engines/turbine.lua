@@ -9,14 +9,14 @@ ACE.DefineEngine( "Turbine-Small-Trans", {
 	category = "Turbine",
 	fuel = "Multifuel",
 	enginetype = "Turbine",
-	weight = 160,
+	weight = 80,
 	torque = 660,
 	flywheelmass = 2.3,
 	idlerpm = 1400,
 	limitrpm = 10000,
 	iselec = true,
 	istrans = true,
-	flywheeloverride = 4167,
+	flywheeloverride = 4167
 } )
 
 ACE.DefineEngine( "Turbine-Medium-Trans", {
@@ -27,14 +27,14 @@ ACE.DefineEngine( "Turbine-Medium-Trans", {
 	category = "Turbine",
 	fuel = "Multifuel",
 	enginetype = "Turbine",
-	weight = 320,
+	weight = 160,
 	torque = 975,
 	flywheelmass = 3.4,
 	idlerpm = 1800,
 	limitrpm = 12000,
 	iselec = true,
 	istrans = true,
-	flywheeloverride = 5000,
+	flywheeloverride = 5000
 } )
 
 ACE.DefineEngine( "Turbine-Large-Trans", {
@@ -45,14 +45,14 @@ ACE.DefineEngine( "Turbine-Large-Trans", {
 	category = "Turbine",
 	fuel = "Multifuel",
 	enginetype = "Turbine",
-	weight = 880,
+	weight = 440,
 	torque = 2388,
 	flywheelmass = 8.4,
 	idlerpm = 2000,
 	limitrpm = 13500,
 	iselec = true,
 	istrans = true,
-	flywheeloverride = 5625,
+	flywheeloverride = 5625
 } )
 
 ACE.DefineEngine( "Turbine-Small", {
@@ -63,13 +63,13 @@ ACE.DefineEngine( "Turbine-Small", {
 	category = "Turbine",
 	fuel = "Multifuel",
 	enginetype = "Turbine",
-	weight = 200,
+	weight = 100,
 	torque = 825,
 	flywheelmass = 2.9,
 	idlerpm = 1400,
 	limitrpm = 10000,
 	iselec = true,
-	flywheeloverride = 4167,
+	flywheeloverride = 4167
 } )
 
 ACE.DefineEngine( "Turbine-Medium", {
@@ -80,13 +80,13 @@ ACE.DefineEngine( "Turbine-Medium", {
 	category = "Turbine",
 	fuel = "Multifuel",
 	enginetype = "Turbine",
-	weight = 400,
+	weight = 200,
 	torque = 1220,
 	flywheelmass = 4.3,
 	idlerpm = 1800,
 	limitrpm = 12000,
 	iselec = true,
-	flywheeloverride = 5000,
+	flywheeloverride = 5000
 } )
 
 ACE.DefineEngine( "Turbine-Large", {
@@ -97,13 +97,13 @@ ACE.DefineEngine( "Turbine-Large", {
 	category = "Turbine",
 	fuel = "Multifuel",
 	enginetype = "Turbine",
-	weight = 1100,
+	weight = 550,
 	torque = 2985,
 	flywheelmass = 10.5,
 	idlerpm = 2000,
 	limitrpm = 13500,
 	iselec = true,
-	flywheeloverride = 5625,
+	flywheeloverride = 5625
 } )
 
 --Forward facing ground turbines
@@ -115,14 +115,14 @@ ACE.DefineEngine( "Turbine-Ground-Small", {
 	sound = "acf_engines/turbine_small.wav",
 	category = "Turbine",
 	fuel = "Multifuel",
-	enginetype = "Turbine",
-	weight = 350,
+	enginetype = "GroundTurbine",
+	weight = 175,
 	torque = 1200,
 	flywheelmass = 14.3,
 	idlerpm = 700,
 	limitrpm = 3000,
 	iselec = true,
-	flywheeloverride = 1667,
+	flywheeloverride = 1667
 } )
 
 ACE.DefineEngine( "Turbine-Ground-Medium", {
@@ -132,15 +132,15 @@ ACE.DefineEngine( "Turbine-Ground-Medium", {
 	sound = "acf_engines/turbine_medium.wav",
 	category = "Turbine",
 	fuel = "Multifuel",
-	enginetype = "Turbine", --This is done to give proper fuel consumption and make the turbines not instant-torque from idle
-	weight = 600,
+	enginetype = "GroundTurbine", --This is done to give proper fuel consumption and make the turbines not instant-torque from idle
+	weight = 300,
 	torque = 1800,
 	flywheelmass = 29.6,
 	idlerpm = 600,
 	limitrpm = 3000,
 	iselec = true,
 	flywheeloverride = 1450,
-	pitch = 115,
+	pitch = 115
 } )
 
 ACE.DefineEngine( "Turbine-Ground-Large", {
@@ -150,15 +150,15 @@ ACE.DefineEngine( "Turbine-Ground-Large", {
 	sound = "acf_engines/turbine_large.wav",
 	category = "Turbine",
 	fuel = "Multifuel",
-	enginetype = "Turbine",
-	weight = 1650,
+	enginetype = "GroundTurbine",
+	weight = 825,
 	torque = 6000,
 	flywheelmass = 75,
 	idlerpm = 500,
 	limitrpm = 3000,
 	iselec = true,
 	flywheeloverride = 1250,
-	pitch = 135,
+	pitch = 135
 } )
 
 --Transaxial Ground Turbines
@@ -170,15 +170,15 @@ ACE.DefineEngine( "Turbine-Small-Ground-Trans", {
 	sound = "acf_engines/turbine_small.wav",
 	category = "Turbine",
 	fuel = "Multifuel",
-	enginetype = "Turbine",
-	weight = 280,
+	enginetype = "GroundTurbine",
+	weight = 140,
 	torque = 900,
 	flywheelmass = 11.4,
 	idlerpm = 700,
 	limitrpm = 3000,
 	iselec = true,
 	istrans = true,
-	flywheeloverride = 1667,
+	flywheeloverride = 1667
 } )
 
 ACE.DefineEngine( "Turbine-Medium-Ground-Trans", {
@@ -188,8 +188,8 @@ ACE.DefineEngine( "Turbine-Medium-Ground-Trans", {
 	sound = "acf_engines/turbine_medium.wav",
 	category = "Turbine",
 	fuel = "Multifuel",
-	enginetype = "Turbine",
-	weight = 480,
+	enginetype = "GroundTurbine",
+	weight = 240,
 	torque = 1350,
 	flywheelmass = 23.7,
 	idlerpm = 600,
@@ -197,7 +197,7 @@ ACE.DefineEngine( "Turbine-Medium-Ground-Trans", {
 	iselec = true,
 	istrans = true,
 	flywheeloverride = 1450,
-	pitch = 115,
+	pitch = 115
 } )
 
 ACE.DefineEngine( "Turbine-Large-Ground-Trans", {
@@ -207,8 +207,8 @@ ACE.DefineEngine( "Turbine-Large-Ground-Trans", {
 	sound = "acf_engines/turbine_large.wav",
 	category = "Turbine",
 	fuel = "Multifuel",
-	enginetype = "Turbine",
-	weight = 1320,
+	enginetype = "GroundTurbine",
+	weight = 655,
 	torque = 4500,
 	flywheelmass = 60,
 	idlerpm = 500,
@@ -216,31 +216,8 @@ ACE.DefineEngine( "Turbine-Large-Ground-Trans", {
 	iselec = true,
 	istrans = true,
 	flywheeloverride = 1250,
-	pitch = 135,
+	pitch = 135
 } )
-
-
-
-
-ACE.DefineEngine( "(+)Turbine-Small-SuperAero", {
-	name = "(+)Turboshaft, Small",
-	desc = "Gaghr Aerobine, notorious for being used in littlebirds. Experimental.",
-	model = "models/engines/gasturbine_s.mdl",
-	sound = "acf_engines/turbine_small.wav",
-	category = "Turbine",
-	fuel = "Multifuel",
-	enginetype = "Turbine",
-	weight = 72,
-	torque = 525,
-	flywheelmass = 0.5,
-	idlerpm = 1000,
-	limitrpm = 14000,
-	iselec = true,
-	pitch = 70,
-	flywheeloverride = 12000,
-} )
-
-
 
 ACE.DefineEngine( "AGT 1500 Large Turbine", {
 	name = "AGT 1500 Large Turbine",
@@ -249,14 +226,13 @@ ACE.DefineEngine( "AGT 1500 Large Turbine", {
 	sound = "acf_extra/vehiclefx/engines/abrams.wav",
 	category = "Turbine",
 	fuel = "Multifuel",
-	enginetype = "Turbine",
-	weight = 2500,
+	enginetype = "GroundTurbine",
+	weight = 1250,
 	torque = 6780,
-	torquecurve = {1, 0.82, 0.65, 0.529},
 	flywheelmass = 20,
 	idlerpm = 830,
 	limitrpm = 3000,
 	iselec = true,
 	pitch = 130,
-	flywheeloverride = 2500,
+	flywheeloverride = 2500
 } )

@@ -9,11 +9,11 @@ ACE.DefineEngine( "900cc-R", {
 	category = "Rotary",
 	fuel = "Petrol",
 	enginetype = "Wankel",
-	weight = 50,
+	weight = 35,
 	torque = 117,
 	flywheelmass = 0.06,
-	idlerpm = 950,
-	limitrpm = 9200,
+	idlerpm = 1200,
+	limitrpm = 9500
 } )
 
 ACE.DefineEngine( "1.3L-R", {
@@ -24,11 +24,11 @@ ACE.DefineEngine( "1.3L-R", {
 	category = "Rotary",
 	fuel = "Petrol",
 	enginetype = "Wankel",
-	weight = 140,
+	weight = 43,
 	torque = 186,
 	flywheelmass = 0.06,
-	idlerpm = 950,
-	limitrpm = 9000,
+	idlerpm = 1200,
+	limitrpm = 9450
 } )
 
 ACE.DefineEngine( "2.0L-R", {
@@ -39,9 +39,24 @@ ACE.DefineEngine( "2.0L-R", {
 	category = "Rotary",
 	fuel = "Petrol",
 	enginetype = "Wankel",
-	weight = 200,
+	weight = 54,
 	torque = 282,
 	flywheelmass = 0.1,
-	idlerpm = 950,
-	limitrpm = 9500,
+	idlerpm = 1200,
+	limitrpm = 9430
+} )
+
+ACE.DefineEngine( "2.6L-Wankel", {
+	name = "2.6L Rotary",
+	desc = "4 rotor racing Wankel, high revving and high strung.",
+	model = "models/engines/wankel_4_med.mdl",
+	sound = "acf_engines/wankel_large.wav",
+	category = "Rotary",
+	fuel = "Petrol",
+	enginetype = "Wankel",
+	weight = 76,
+	torque = 460,
+	flywheelmass = 0.11,
+	idlerpm = 1200,
+	limitrpm = 9330
 } )

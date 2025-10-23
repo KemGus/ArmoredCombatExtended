@@ -236,7 +236,7 @@ function ACE.DefineEngine( id, data )
 			if file.Exists("sound/" .. Alternate, "GAME") then data.sound = Alternate end
 		end
 
-		local engineData = ACE.CalcEnginePerformanceData(data.torquecurve or ACE.GenericTorqueCurves[data.enginetype], data.torque, data.idlerpm, data.limitrpm)
+		local engineData = ACE.CalcEnginePerformanceData(data.torquecurve or ACE.GenericTorqueCurves[data.enginetype], data.torque, data.idlerpm, data.limitrpm, data.fuel)
 
 		data.peaktqrpm    = engineData.peakTqRPM
 		data.peakpower    = engineData.peakPower
