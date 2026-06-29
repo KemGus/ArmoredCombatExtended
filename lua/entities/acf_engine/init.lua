@@ -671,6 +671,14 @@ function ENT:CalcRPM()
 
 	local DeltaTime = CurTime() - self.LastThink
 
+	-- The flywheel curve below was tuned assuming one CalcRPM step per default
+	-- tick (ACF.MobilityBaseTick, 66 tick). Normalise the spool integration to
+	-- real time so the engine revs at the same rate on any tickrate (e.g. a
+	-- 33-tick server), instead of being tied to how many ticks happen per
+	-- second. Clamped so a lag spike can't shove the flywheel past redline in a
+	-- single step.
+	local TickMul = math.Clamp( DeltaTime / ACF.MobilityBaseTick, 0, 4 )
+
 	------------------------ Fuel check section ------------------------
 
 	--First, find the first active fuel tank on among the linked fuels.
@@ -735,7 +743,7 @@ function ENT:CalcRPM()
 	else
 		Drag = self.PeakTorque * (math.max( self.FlyRPM - self.IdleRPM, 0) / self.PeakMaxRPM) * ( 1 - self.Throttle) / self.Inertia
 	end
-	self.FlyRPM = math.Clamp( self.FlyRPM + self.Torque / self.Inertia - Drag, 0 , self.LimitRPM )
+	self.FlyRPM = math.Clamp( self.FlyRPM + ( self.Torque / self.Inertia - Drag ) * TickMul, 0 , self.LimitRPM )
 
 	-- The gearboxes don't think on their own, it's the engine that calls them, to ensure consistent execution order
 	local Boxes = table.Count( self.GearLink )
@@ -760,7 +768,7 @@ function ENT:CalcRPM()
 
 		Link.Ent:Act( Link.ReqTq * AvailRatio * self.MassRatio, DeltaTime, self.MassRatio )
 	end
-	self.FlyRPM = self.FlyRPM - math.min( TorqueDiff, TotalReqTq ) / self.Inertia
+	self.FlyRPM = self.FlyRPM - math.min( TorqueDiff, TotalReqTq ) / self.Inertia * TickMul
 
 
 	-- Heat Temperature calculation. Below is the damage caused by rpm if damaged.

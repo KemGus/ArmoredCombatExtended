@@ -49,6 +49,7 @@ ACF.LiIonED             = 0.27                    -- li-ion energy density: kw h
 ACF.CuIToLiter          = 0.0163871                -- cubic inches to liters
 
 ACF.DriverTorqueBoost   = 1.25                    -- torque multiplier from having a driver
+ACF.MobilityBaseTick    = 0.015                   -- reference tick interval (66 tick) the flywheel curve was tuned at; used to keep engine spool-up tickrate-independent
 ACF.FuelRate            = 10                        -- multiplier for fuel usage, 1.0 is approx real world
 ACF.ElecRate            = 4                        -- multiplier for electrics                                --BEFORE to balance: 0.458
 ACF.TankVolumeMul       = 1                        -- multiplier for fuel tank capacity, 1.0 is approx real world
