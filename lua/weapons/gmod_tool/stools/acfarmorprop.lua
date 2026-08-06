@@ -10,6 +10,13 @@ TOOL.ClientConVar["thickness"]  = 1
 TOOL.ClientConVar["ductility"]  = 0
 TOOL.ClientConVar["material"]	= "RHA"
 
+-- ERA-only options (used when an ERA generation is the selected material).
+TOOL.ClientConVar["eradir"]      = "Up"  -- reactive (forward) face for legacy prop application
+TOOL.ClientConVar["erascalable"] = "0"   -- 1 = spawn a scalable ERA box; 0 = paint a prop
+TOOL.ClientConVar["eralength"]   = "10"  -- scalable box size (inches)
+TOOL.ClientConVar["erawidth"]    = "5"
+TOOL.ClientConVar["eraheight"]   = "3"
+
 if CLIENT then
 	TOOL.Information = {
 		{ name = "left" },
@@ -24,6 +31,7 @@ end
 
 -- Shared panel state used across panel rebuilds to keep UI controls stable.
 local ToolPanel = ToolPanel or {}
+local ERAStatsText -- DLabel showing ERA casing / effective armor for the selected generation
 
 CreateClientConVar( "acfarmorprop_area", 0, false, true ) -- Transient area cache; do not persist.
 
@@ -70,7 +78,12 @@ local function ApplySettings( _, ent, data )
 	if data.Material then
 		ent.ACF = ent.ACF or {}
 		ent.ACF.Material = data.Material
-		duplicator.StoreEntityModifier( ent, "acfsettings", { Material = data.Material } )
+
+		-- ERA reactive (forward) face, painted onto a legacy prop. Stored so it
+		-- survives dupes; ERA.GetForward reads ent.ERAForwardAxis.
+		if data.ERAForwardAxis then ent.ERAForwardAxis = data.ERAForwardAxis end
+
+		duplicator.StoreEntityModifier( ent, "acfsettings", { Material = data.Material, ERAForwardAxis = data.ERAForwardAxis } )
 	end
 
 	if ACE_ClearArmorPointCache then
@@ -84,24 +97,58 @@ end
 duplicator.RegisterEntityModifier( "acfsettings", ApplySettings )
 duplicator.RegisterEntityModifier( "mass", ApplySettings )
 
--- Left-click applies the current tool settings to the targeted prop.
+-- Left-click applies the current tool settings to the targeted prop. For ERA
+-- materials it either spawns a scalable reactive box (scalable mode) or paints
+-- the prop and sets its forward face (legacy mode).
 function TOOL:LeftClick( trace )
 
+	local ply      = self:GetOwner()
+	local material = self:GetClientInfo( "material" ) or "RHA"
+	local matData  = ACE.ArmorTypes and ACE.ArmorTypes[material]
+	local isERA    = matData and matData.IsERA
+
+	-- Scalable ERA: spawn a reactive box at the aim point. The box always faces
+	-- outward from the surface (its forward = hit normal); the forward dropdown
+	-- only applies to legacy prop painting below.
+	if isERA and self:GetClientNumber( "erascalable", 0 ) >= 1 then
+		if CLIENT then return true end
+
+		local mn = 2 -- ERA bricks can be thin (real Kontakt-1 is ~3in deep)
+		local mx = ACF.CrateMaximumSize or 200
+		local L  = math.Clamp( self:GetClientNumber( "eralength", 10 ), mn, mx )
+		local W  = math.Clamp( self:GetClientNumber( "erawidth",  5 ),  mn, mx )
+		local H  = math.Clamp( self:GetClientNumber( "eraheight", 3 ),  mn, mx )
+		local sizeStr = math.Round( L, 1 ) .. ":" .. math.Round( W, 1 ) .. ":" .. math.Round( H, 1 )
+
+		local box = MakeACE_ERA( ply, trace.HitPos + trace.HitNormal * 2, trace.HitNormal:Angle(), material, sizeStr, "Forward" )
+		if not IsValid( box ) then return false end
+
+		undo.Create( "ACE ERA" )
+			undo.AddEntity( box )
+			undo.SetPlayer( ply )
+		undo.Finish()
+
+		return true
+	end
+
+	-- Legacy: paint the material (and, for ERA, the forward face) onto a prop.
 	local ent = trace.Entity
 
 	if not IsValid( ent ) or ent:IsPlayer() then return false end
 	if CLIENT then return true end
 	if not ACF_Check( ent ) then return false end
 
-	local ply		= self:GetOwner()
-
 	local ductility = math.Clamp( self:GetClientNumber( "ductility" ), -80, 80 )
 	local thickness = math.Clamp( self:GetClientNumber( "thickness" ), 0.1, 50000 )
-	local material  = self:GetClientInfo( "material" ) or "RHA"
 
 	local mass		= CalcArmor( ent.ACF.Area, ductility / 100, thickness , material)
 
-	ApplySettings( ply, ent, { Mass = mass , Ductility = ductility, Material = material} )
+	ApplySettings( ply, ent, {
+		Mass           = mass,
+		Ductility      = ductility,
+		Material       = material,
+		ERAForwardAxis = isERA and ( self:GetClientInfo( "eradir" ) or "Up" ) or nil,
+	} )
 
 	-- Clear cached target to force a fresh network update of armor values.
 	self.AimEntity = nil
@@ -636,12 +683,24 @@ if CLIENT then
 			ToolPanel.ComboMat:Clear()
 		end
 
-		-- Rebuild the list each time to avoid stale entries.
-		for _, Mat  in pairs(MaterialTypes) do
+		-- Rebuild the list each time to avoid stale entries. Sorted by year then
+		-- name so the list is stable and related materials (e.g. ERA generations)
+		-- sit next to each other instead of landing in random table order.
+		local Sorted = {}
+		for _, Mat in pairs(MaterialTypes) do
 			local year = Mat.year or 0
 			if (ACF.Year or 0) >= year then
-				ToolPanel.ComboMat:AddChoice(Mat.sname, Mat.id )
+				Sorted[#Sorted + 1] = Mat
 			end
+		end
+
+		table.sort(Sorted, function(a, b)
+			if (a.year or 0) ~= (b.year or 0) then return (a.year or 0) < (b.year or 0) end
+			return (a.sname or a.id) < (b.sname or b.id)
+		end)
+
+		for _, Mat in ipairs(Sorted) do
+			ToolPanel.ComboMat:AddChoice(Mat.sname, Mat.id )
 		end
 
 		ToolPanel.ComboMat:SetValue( MaterialData.sname )
@@ -664,8 +723,30 @@ if CLIENT then
 		end
 	end
 
+	-- Show only the controls that make sense for the selected material. ERA bricks
+	-- are defined by their generation + box VOLUME and a fixed casing, so thickness
+	-- / ductility / presets are meaningless for them and get hidden; conversely the
+	-- ERA box options are hidden for ordinary plate materials (RHA, rubber, etc.).
+	local function SetERAControlsMode( isERA )
+		for _, p in ipairs( ToolPanel.BaseControls or {} ) do
+			if IsValid(p) then p:SetVisible( not isERA ) end
+		end
+		for _, p in ipairs( ToolPanel.ERAControls or {} ) do
+			if IsValid(p) then p:SetVisible( isERA ) end
+		end
+		if IsValid(ToolPanel.panel) then ToolPanel.panel:InvalidateLayout( true ) end
+	end
+	ACE_SetERAControlsMode = SetERAControlsMode
+
 	-- Build the tool control panel.
 	function TOOL.BuildCPanel( panel )
+		ToolPanel.panel = panel
+		ToolPanel.BaseControls = {}
+		ToolPanel.ERAControls  = {}
+
+		local function Base(p) ToolPanel.BaseControls[#ToolPanel.BaseControls + 1] = p return p end
+		local function Era(p)  ToolPanel.ERAControls[#ToolPanel.ERAControls + 1]   = p return p end
+
 		local Presets = vgui.Create( "ControlPresets" )
 
 		Presets:AddConVar( "acfarmorprop_thickness" )
@@ -674,14 +755,43 @@ if CLIENT then
 		Presets:SetPreset( "acfarmorprop" )
 
 		panel:AddItem( Presets )
+		Base( Presets )
 
-		panel:NumSlider( "#tool.acfarmorprop.thickness", "acfarmorprop_thickness", 1, 5000 )
-		panel:ControlHelp( "#tool.acfarmorprop.thicknessdesc" )
+		Base( panel:NumSlider( "#tool.acfarmorprop.thickness", "acfarmorprop_thickness", 1, 5000 ) )
+		Base( panel:ControlHelp( "#tool.acfarmorprop.thicknessdesc" ) )
 
-		panel:NumSlider( "#tool.acfarmorprop.ductility", "acfarmorprop_ductility", -80, 80 )
-		panel:ControlHelp( "#tool.acfarmorprop.ductilitydesc" )
+		Base( panel:NumSlider( "#tool.acfarmorprop.ductility", "acfarmorprop_ductility", -80, 80 ) )
+		Base( panel:ControlHelp( "#tool.acfarmorprop.ductilitydesc" ) )
 
 		MaterialTable(panel)
+
+		--------------------- ERA options ---------------------
+		-- These only take effect (and only show) when an ERA generation is the
+		-- selected material. ERA has no thickness/ductility - its protection is the
+		-- fixed casing plus the reactive plates, and its explosive scales with VOLUME.
+		Era( panel:Help("\nExplosive Reactive Armor - casing is fixed; size below sets VOLUME (explosive + plate length):") )
+
+		local fwd, fwdLbl = panel:ComboBox("Reactive (forward) face", "acfarmorprop_eradir")
+		for _, axis in ipairs({ "Up", "Down", "Forward", "Back", "Left", "Right" }) do
+			fwd:AddChoice(axis)
+		end
+		Era( fwd )
+		if IsValid(fwdLbl) then Era( fwdLbl ) end
+		Era( panel:ControlHelp("The face ERA reacts on (legacy/prop mode). Side and rear hits only meet the inert casing. A green arrow on the brick shows this face.") )
+
+		Era( panel:CheckBox("Spawn as scalable box (off = paint a prop)", "acfarmorprop_erascalable") )
+
+		Era( panel:NumSlider("ERA box length", "acfarmorprop_eralength", 2, 200, 1) )
+		Era( panel:NumSlider("ERA box width",  "acfarmorprop_erawidth",  2, 200, 1) )
+		Era( panel:NumSlider("ERA box height", "acfarmorprop_eraheight", 2, 200, 1) )
+		Era( panel:ControlHelp("Scalable box size (inches). Picking a generation loads its recommended real-world size. Bigger Gen 2/3 bricks carry more explosive and a longer plate to bite; scalable boxes always face outward from the surface you click.") )
+
+		ERAStatsText = Era( panel:Help("") )
+
+		-- Apply the correct visibility for whatever material is currently selected.
+		local curMat = GetConVar("acfarmorprop_material"):GetString()
+		local curData = ACE.ArmorTypes and ACE.ArmorTypes[curMat]
+		SetERAControlsMode( curData and curData.IsERA or false )
 
 	end
 
@@ -752,6 +862,9 @@ if CLIENT then
 				-- Fallback to RHA if the selected material is invalid.
 				if not MatData then RunConsoleCommand( "acfarmorprop_material", "RHA" ) return end
 
+				-- Show ERA box controls / hide thickness+ductility for ERA (and vice versa).
+				if ACE_SetERAControlsMode then ACE_SetERAControlsMode( MatData.IsERA or false ) end
+
 				-- Ensure the combo box reflects updates triggered from props.
 				ToolPanel.ComboMat:SetText(MatData.sname)
 
@@ -764,8 +877,92 @@ if CLIENT then
 				ArmorPanelText( "ComboCHE"  , ToolPanel.panel, getPhrase("tool.acfarmorprop.chemprot") .. ": " .. (MatData.HEATeffectiveness or MatData.effectiveness) .. "x RHA" )
 				ArmorPanelText( "ComboYear" , ToolPanel.panel, getPhrase("tool.acfarmorprop.year") .. ": " .. (MatData.year or "unknown") )
 
+				-- ERA: load the generation's recommended real-world size and show a
+				-- casing / effective-armor readout. Cleared for non-ERA materials.
+				if MatData.IsERA and ACE.ERA then
+					local g = ACE.ERA.Generations[value]
+					if g then
+						if g.RecommendedSize then
+							RunConsoleCommand("acfarmorprop_eralength", g.RecommendedSize.L)
+							RunConsoleCommand("acfarmorprop_erawidth",  g.RecommendedSize.W)
+							RunConsoleCommand("acfarmorprop_eraheight", g.RecommendedSize.H)
+						end
+						if IsValid(ERAStatsText) then
+							ERAStatsText:SetText(string.format(
+								"\nCasing: %d mm RHA (fixed)\nEffective: ~%d mm vs KE  /  ~%d mm vs HEAT\nGen 1 barely affects long rods; Gen 2/3 grow with angle and brick size.",
+								g.CasingMM or 0,
+								ACE.ERA.EstimateEffectiveArmor(g, "KE"),
+								ACE.ERA.EstimateEffectiveArmor(g, "HEAT")))
+							ERAStatsText:SizeToContents()
+						end
+					end
+				elseif IsValid(ERAStatsText) then
+					ERAStatsText:SetText("")
+					ERAStatsText:SizeToContents()
+				end
+
 			end
 	end, "acfarmorprop_material")
+
+	-- Forward-face arrow. ONLY drawn on actual ERA: an existing ace_era brick shows
+	-- its real reactive face (current state), and -- when an ERA material is selected
+	-- for legacy painting -- a preview arrow shows where forward WILL be on the prop
+	-- you are about to convert. It never paints a generic hit-normal on walls/world.
+	local AxisLocal = {
+		Up = Vector(0, 0, 1), Down = Vector(0, 0, -1),
+		Forward = Vector(1, 0, 0), Back = Vector(-1, 0, 0),
+		Right = Vector(0, 1, 0), Left = Vector(0, -1, 0),
+	}
+
+	local function DrawForwardArrow(origin, dir, col)
+		local tip   = origin + dir * 24
+		local right = dir:Angle():Right()
+		local up    = dir:Angle():Up()
+
+		render.SetColorMaterial()
+		render.DrawLine(origin, tip, col, true)
+		render.DrawLine(tip, tip - dir * 6 + right * 4, col, true)
+		render.DrawLine(tip, tip - dir * 6 - right * 4, col, true)
+		render.DrawLine(tip, tip - dir * 6 + up * 4,    col, true)
+		render.DrawLine(tip, tip - dir * 6 - up * 4,    col, true)
+	end
+
+	hook.Add("PostDrawTranslucentRenderables", "ACE_ERA_ForwardArrow", function(bDepth, bSky)
+		if bDepth or bSky then return end
+
+		local ply = LocalPlayer()
+		if not IsValid(ply) then return end
+
+		local wep = ply:GetActiveWeapon()
+		if not IsValid(wep) or wep:GetClass() ~= "gmod_tool" then return end
+		if (ply:GetInfo("gmod_toolmode") or "") ~= "acfarmorprop" then return end
+
+		local tr  = ply:GetEyeTrace()
+		local ent = tr.Entity
+
+		-- 1) Aiming at a real ERA brick: show its actual reactive face (green).
+		--    Spawned bricks always use their entity Forward as the reactive face.
+		if IsValid(ent) and ent.IsACE_ERA then
+			DrawForwardArrow(ent:WorldSpaceCenter(), ent:GetForward(), Color(0, 255, 128))
+			return
+		end
+
+		-- 2) ERA material selected for legacy painting: preview where forward WILL be
+		--    on the prop you are about to convert (cyan). Only on a real prop, never
+		--    on world/walls, and not in scalable-spawn mode (the box just faces out).
+		local mat = ply:GetInfo("acfarmorprop_material")
+		local md  = ACE.ArmorTypes and ACE.ArmorTypes[mat]
+		if not (md and md.IsERA) then return end
+		if (ply:GetInfo("acfarmorprop_erascalable") or "0") ~= "0" then return end
+		if not (IsValid(ent) and not ent:IsWorld()) then return end
+
+		local axis = AxisLocal[ply:GetInfo("acfarmorprop_eradir")] or AxisLocal.Up
+		local dir  = ent:LocalToWorld(axis) - ent:GetPos()
+		if dir:LengthSqr() <= 0 then return end
+		dir:Normalize()
+
+		DrawForwardArrow(ent:WorldSpaceCenter(), dir, Color(0, 200, 255))
+	end)
 
 	net.Receive("ACE_ArmorSummary", function()
 

@@ -825,7 +825,25 @@ function ACF_RoundImpact( Bullet, Speed, Energy, Target, HitPos, HitNormal , Bon
 	Bullet.Ricochets = Bullet.Ricochets or 0
 
 	local Angle	= ACF_GetHitAngle( HitNormal , Bullet["Flight"] )
+
+	-- Stash live impact geometry for reactive armor (ERA). ArmorResolution gets
+	-- no hit direction/speed/mass, so hand them over here: travel direction (for
+	-- the front-face gate + angle of attack), impact speed in m/s, and projectile
+	-- mass (rod length). Localized so the ArmorResolution signature is untouched.
+	if Target.ACF then
+		Target.ACF.ERAHitDir      = Bullet["Flight"]:GetNormalized()
+		Target.ACF.ERAHitSpeed    = Speed / 39.37          -- source in/s -> m/s
+		Target.ACF.ERAHitProjMass = Bullet["ProjMass"]
+	end
+
 	local HitRes	= ACF_Damage( Target, Energy, Bullet["PenArea"], Angle, Bullet["Owner"], Bone, Bullet["Gun"], Bullet["Type"] )
+
+	-- ERA flyer plate deflection (concept by Delectros): a detonating brick
+	-- shoves a solid penetrator off its path. Set by ERA ArmorResolution.
+	if HitRes.ERADeflect and HitRes.ERADeflect > 0 and IsValid(Target) then
+		local f = HitRes.ERADeflect
+		Bullet["Flight"] = (Bullet["Flight"]:GetNormalized() * (1 - f) + HitNormal * f):GetNormalized() * Bullet["Flight"]:Length()
+	end
 
 	HitRes.Ricochet = false
 

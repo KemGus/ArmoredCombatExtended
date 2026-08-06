@@ -243,6 +243,7 @@ function Round.detonate( _, Bullet, HitPos, HitNormal )
 		Bullet.StartTrace       = Bullet.Pos - Bullet.Flight:GetNormalized() * math.min(ACF.PhysMaxVel * DeltaTime,Bullet.FlightTime * Bullet.Flight:Length())
 		Bullet.NextPos          = Bullet.Pos + (Bullet.Flight * ACF.VelScale * DeltaTime)	--Calculates the next shell position
 		Bullet.HEATLastPos = HitPos --Used to backtrack the HEAT's travel distance
+		Bullet.FirstPos = HitPos --Pin the strike point: if the 1st charge fails deeper in, the 2nd charge must fire from here (open air), not from inside armor where its trace starts solid and returns no usable HitNormal
 
 	--Second Detonation
 	elseif DetCount == 2 then

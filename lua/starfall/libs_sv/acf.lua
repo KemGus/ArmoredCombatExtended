@@ -577,12 +577,28 @@ do
 		local matData = ACE.ArmorTypes[mat]
 		if not matData then return empty end
 
-		return {
+		local out = {
 			Curve = matData.curve,
 			Effectiveness = matData.effectiveness,
 			HEATEffectiveness = matData.HEATeffectiveness or matData.effectiveness,
 			Material = mat
 		}
+
+		-- Reactive armor: surface generation + casing + a representative effective
+		-- RHA figure so the "actual armor" of an ERA prop/brick means something.
+		if matData.IsERA and ACE.ERA then
+			out.IsERA = true
+			out.Generation = matData.ERAGeneration or 0
+			out.CasingArmor = matData.CasingMM or 0
+
+			local Gen = ACE.ERA.Generations[mat]
+			if Gen then
+				out.EffectiveKE = ACE.ERA.EstimateEffectiveArmor(Gen, "KE")
+				out.EffectiveHEAT = ACE.ERA.EstimateEffectiveArmor(Gen, "HEAT")
+			end
+		end
+
+		return out
 	end
 
 	function ents_methods:aceSetArmorProperties(thickness, ductility, material)

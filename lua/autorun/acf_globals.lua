@@ -492,6 +492,8 @@ include("acf/shared/sh_ace_particles.lua")
 include("acf/shared/sh_ace_sound_loader.lua")
 include("autorun/acf_missile/folder.lua")
 include("acf/shared/sh_ace_functions.lua")
+include("acf/shared/sh_ace_era.lua") -- ERA core, must load before the armor folder
+AddCSLuaFile("acf/shared/sh_ace_era.lua")
 include("acf/shared/sh_ace_loader.lua")
 include("acf/shared/sh_ace_concommands.lua")
 include("acf/shared/sh_acfm_roundinject.lua")

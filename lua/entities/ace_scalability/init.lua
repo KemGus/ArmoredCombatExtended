@@ -102,6 +102,8 @@ do
 		local Scale 		= ScaleData.Scale
 		local PhysMaterial 	= ScaleData.Material or ""
 
+		self.ACE_ERAVolume = nil -- rescaling invalidates the cached ERA brick volume
+
 		MeshData = self:ConvertMeshToScale( MeshData, Scale )
 
 		self:PhysicsInitMultiConvex( MeshData )

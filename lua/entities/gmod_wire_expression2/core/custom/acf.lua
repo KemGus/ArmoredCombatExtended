@@ -1394,6 +1394,29 @@ do
 		ret.s.Material = mat
 		ret.stypes.Material = "s"
 
+		-- Reactive armor: surface generation + casing + a representative effective
+		-- RHA figure so the "actual armor" of an ERA prop/brick means something.
+		if matData.IsERA and ACE.ERA then
+			local Gen = ACE.ERA.Generations[mat]
+
+			ret.s.IsERA = 1
+			ret.stypes.IsERA = "n"
+			ret.s.Generation = matData.ERAGeneration or 0
+			ret.stypes.Generation = "n"
+			ret.s.CasingArmor = matData.CasingMM or 0
+			ret.stypes.CasingArmor = "n"
+
+			if Gen then
+				ret.s.EffectiveKE = ACE.ERA.EstimateEffectiveArmor(Gen, "KE")
+				ret.stypes.EffectiveKE = "n"
+				ret.s.EffectiveHEAT = ACE.ERA.EstimateEffectiveArmor(Gen, "HEAT")
+				ret.stypes.EffectiveHEAT = "n"
+				ret.size = 9
+			else
+				ret.size = 7
+			end
+		end
+
 		return ret
 	end
 

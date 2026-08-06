@@ -223,6 +223,7 @@ function Round.detonate( _, Bullet, HitPos, HitNormal )
 		Bullet.StartTrace	= Bullet.Pos - Bullet.Flight:GetNormalized() * math.min(ACF.PhysMaxVel * DeltaTime,Bullet.FlightTime * Bullet.Flight:Length() + 25)
 		Bullet.NextPos		= Bullet.Pos + (Bullet.Flight * ACF.VelScale * DeltaTime)	--Calculates the next shell position
 		Bullet.HEATLastPos = HitPos --Used to backtrack the HEAT's travel distance
+		Bullet.FirstPos = HitPos --Pin the strike point: if the 1st charge fails deeper in, the 2nd charge must fire from here (open air), not from inside armor where its trace starts solid and returns no usable HitNormal
 
 	elseif DetCount == 2 then --Second Detonation
 
@@ -255,6 +256,9 @@ function Round.propimpact( Index, Bullet, Target, HitNormal, HitPos, Bone )
 
 	local DetCount = Bullet.Detonated or 0
 
+	--2nd charge should always appear in the same place as 1st charge
+	if Bullet.FirstPos then HitPos = Bullet.FirstPos end
+
 	if ACF_Check( Target ) then
 
 		if DetCount > 0 then --Bullet Has Detonated
@@ -280,6 +284,7 @@ function Round.propimpact( Index, Bullet, Target, HitNormal, HitPos, Bone )
 				return "Penetrated"
 			elseif DetCount == 1 then --If bullet has detonated once and fails to pen
 
+				Bullet.Filter = {} --2nd charge starts over from the strike point and must re-penetrate everything on the way in
 				Round.detonate( Index, Bullet, HitPos, HitNormal )
 
 				return "Penetrated"
