@@ -180,6 +180,20 @@ function ACE_CalcArmor( Area, Ductility, Mass )
 
 end
 
+--- Per-step ceiling for a drivetrain torque impulse.
+-- The drivetrain feeds ApplyTorqueCenter an impulse (torque * step), and that
+-- impulse has always been clamped at a flat 500000. A flat ceiling on a
+-- per-step quantity is a per-second ceiling that shrinks as the tickrate drops,
+-- so a saturated drivetrain loses half its output on a 33-tick server. Scaling
+-- the ceiling with the step keeps the per-second limit the same everywhere.
+-- @param DeltaTime number Length of this step, in seconds.
+-- @return number Symmetric clamp bound for this step's impulse.
+function ACE_TorqueImpulseLimit( DeltaTime )
+
+	return 500000 * ( DeltaTime / ACE.MobilityBaseTick )
+
+end
+
 function ACE_MuzzleVelocity( Propellant, Mass )
 
 	local PEnergy	= ACE.PBase * ((1 + Propellant) ^ ACE.PScale-1)

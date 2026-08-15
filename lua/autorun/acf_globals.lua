@@ -112,6 +112,7 @@ ACE.LiIonED             = 0.27                    -- li-ion energy density: kw h
 ACE.CuIToLiter          = 0.0163871                -- cubic inches to liters
 
 ACE.DriverTorqueBoost   = 1.25                    -- torque multiplier from having a driver
+ACE.MobilityBaseTick    = 0.015                   -- reference tick interval (66 tick) the drivetrain was tuned at; used to keep mobility tickrate-independent
 ACE.FuelRate            = 10                        -- multiplier for fuel usage, 1.0 is approx real world
 ACE.ElecRate            = 4                        -- multiplier for electrics                                --BEFORE to balance: 0.458
 ACE.TankVolumeMul       = 1                        -- multiplier for fuel tank capacity, 1.0 is approx real world

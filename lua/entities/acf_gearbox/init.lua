@@ -648,7 +648,8 @@ function ENT:Act( Torque, DeltaTime, MassRatio )
 	end
 
 	if IsValid( BoxPhys ) and ReactTq ~= 0 then
-		local Torque = self:GetRight() * math.Clamp( 2 * math.deg( ReactTq * MassRatio ) * DeltaTime, -500000, 500000 )
+		local Limit = ACE_TorqueImpulseLimit( DeltaTime )
+		local Torque = self:GetRight() * math.Clamp( 2 * math.deg( ReactTq * MassRatio ) * DeltaTime, -Limit, Limit )
 		BoxPhys:ApplyTorqueCenter( Torque )
 	end
 
@@ -665,7 +666,8 @@ function ENT:ActWheel( Link, Torque, Brake, DeltaTime )
 	if Brake > 0 then
 		BrakeMult = Link.Vel * Link.Inertia * Brake / 5
 	end
-	local Torque = TorqueAxis * math.Clamp( math.deg( -Torque - BrakeMult ) * DeltaTime, -500000, 500000 )
+	local Limit = ACE_TorqueImpulseLimit( DeltaTime )
+	local Torque = TorqueAxis * math.Clamp( math.deg( -Torque - BrakeMult ) * DeltaTime, -Limit, Limit )
 	Phys:ApplyTorqueCenter( Torque )
 end
 

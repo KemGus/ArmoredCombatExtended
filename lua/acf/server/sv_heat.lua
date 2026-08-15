@@ -90,14 +90,22 @@ function ACE_HeatFromGun( Gun , Heat, DeltaTime )
 end
 
 --[[-------------------------------------------------------------------------------------
-	ACE_HeatFromEngine( Engine , Radiator )  --used mostly by engines
+	ACE_HeatFromEngine( Engine , DeltaTime )  --used mostly by engines
 
 ->  Input information:
 
-	Engine - The Engine Entity
+	Engine    - The Engine Entity
+	DeltaTime - Length of this step in seconds. Omit to use the default tick,
+	            which reproduces the old per-tick behaviour.
 
 ]]---------------------------------------------------------------------------------------
-function ACE_HeatFromEngine( Engine )
+function ACE_HeatFromEngine( Engine, DeltaTime )
+
+	-- Heating and cooling below are per-step amounts tuned at the default tick,
+	-- so on a 33-tick server an engine would both warm up and cool down at half
+	-- the real-time rate. Scale both by the caller's step. Callers that pass
+	-- nothing keep the old behaviour exactly.
+	local TickMul = math.Clamp( ( DeltaTime or ACE.MobilityBaseTick ) / ACE.MobilityBaseTick, 0, 4 )
 
 	--bullshiet code below, better using tables next time
 
@@ -159,12 +167,12 @@ function ACE_HeatFromEngine( Engine )
 			end
 		end
 
-		Temp = Temp + Heat
+		Temp = Temp + Heat * TickMul
 
 	end
 
 	local Diff = Temp - (ACE.AmbientTemp + ExTemp )
-	Temp = Temp - Diff / 750
+	Temp = Temp - Diff / 750 * TickMul
 
 	return Temp
 

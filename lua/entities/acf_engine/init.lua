@@ -540,7 +540,11 @@ function ENT:Think()
 		self.NextUpdate = ACE.CurTime + 1
 	end
 
-	self.Heat = ACE_HeatFromEngine( self )
+	-- Heat is integrated here and only here. CalcRPM used to run a second step
+	-- of its own on the same tick, which double-counted heat for every running
+	-- engine; with the step now passed in, that would double the rate instead
+	-- of merely doubling the resolution.
+	self.Heat = ACE_HeatFromEngine( self, ACE.CurTime - self.LastThink )
 	Wire_TriggerOutput(self, "EngineHeat", self.Heat)
 
 	if ACE.CurTime > self.NextUpdate then
@@ -660,6 +664,14 @@ function ENT:CalcRPM()
 
 	local DeltaTime = CurTime() - self.LastThink
 
+	-- The flywheel curve below was tuned assuming one CalcRPM step per default
+	-- tick (ACE.MobilityBaseTick, 66 tick). Normalise the spool integration to
+	-- real time so the engine revs at the same rate on any tickrate (e.g. a
+	-- 33-tick server), instead of being tied to how many ticks happen per
+	-- second. Clamped so a lag spike can't shove the flywheel past redline in a
+	-- single step.
+	local TickMul = math.Clamp( DeltaTime / ACE.MobilityBaseTick, 0, 4 )
+
 	------------------------ Fuel check section ------------------------
 
 	--First, find the first active fuel tank on among the linked fuels.
@@ -724,7 +736,7 @@ function ENT:CalcRPM()
 	else
 		Drag = self.PeakTorque * (math.max( self.FlyRPM - self.IdleRPM, 0) / self.PeakMaxRPM) * ( 1 - self.Throttle) / self.Inertia
 	end
-	self.FlyRPM = math.Clamp( self.FlyRPM + self.Torque / self.Inertia - Drag, 0 , self.LimitRPM )
+	self.FlyRPM = math.Clamp( self.FlyRPM + ( self.Torque / self.Inertia - Drag ) * TickMul, 0 , self.LimitRPM )
 
 	-- The gearboxes don't think on their own, it's the engine that calls them, to ensure consistent execution order
 	local Boxes = table.Count( self.GearLink )
@@ -749,12 +761,14 @@ function ENT:CalcRPM()
 
 		Link.Ent:Act( Link.ReqTq * AvailRatio * self.MassRatio, DeltaTime, self.MassRatio )
 	end
-	self.FlyRPM = self.FlyRPM - math.min( TorqueDiff, TotalReqTq ) / self.Inertia
+	-- Same normalisation as the spool step: the load drawn off the flywheel has
+	-- to be per-second, not per-tick, or a low-tickrate server drains RPM more
+	-- slowly while the wheels still receive the same torque per second.
+	self.FlyRPM = self.FlyRPM - math.min( TorqueDiff, TotalReqTq ) / self.Inertia * TickMul
 
 
-	-- Heat Temperature calculation. Below is the damage caused by rpm if damaged.
-	self.Heat = ACE_HeatFromEngine( self )
-
+	-- Heat is integrated once per tick in Think, not here. Below is the damage
+	-- caused by rpm if damaged.
 	local HealthRatio = self.ACF.Health / self.ACF.MaxHealth
 	if HealthRatio < 0.995 then
 		if HealthRatio > 0.025 then
