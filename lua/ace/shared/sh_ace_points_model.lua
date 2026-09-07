@@ -4,8 +4,8 @@ ACE.Points = ACE.Points or {}
 --[[-----------------------------------------------------------------------------
 	ACE Contraption Points -- pricing model
 
-	Ammo count is not a points input; linked round capability prices guns and racks.
-	Retune the calibrated constants together against the reference corpus.
+	Linked ammunition sets configuration shares; reserve inventory is not billed.
+	Shell length and assigned warhead premiums set firepower; cadence adds a mild premium.
 	The pure model must load under vanilla Lua 5.1; GMod calls belong in the adapters.
 -------------------------------------------------------------------------------]]
 
@@ -13,39 +13,21 @@ ACE.Points = ACE.Points or {}
 --  SECTION 1 -- PURE MODEL  (vanilla Lua 5.1; no GMod calls)
 -- ================================================================
 
--- Retune these fields together and mutate them in place because Model retains this table.
+-- Mutate these fields in place because Model retains this table.
 ACE.PointsModel = ACE.PointsModel or {
-	kGun   = 5.408,            -- firepower scale
+	kGun   = 12.0,            -- firepower scale
 	kArmor = 0.259845,         -- armor survivability scale
 	kEng   = 1.501,            -- engine power scale
-	P50    = 548.5,            -- gate half-point: pen where a round defeats half the meta
-	Scale  = 0.65,             -- global display scale; sets how much of PointsLimit real fielded
-	                           -- vehicles use, deliberately independent of the corpus fit below
+	Scale  = 0.65,            -- global display scale shared by all point categories
 }
 
 local Model = ACE.PointsModel
 
-local pi   = math.pi
-local sqrt = math.sqrt
-local max  = math.max
-local min  = math.min
+local max = math.max
+local min = math.min
 
--- --- FIXED structural constants (NOT calibration knobs) ---
-local FRAREA_REF = pi * 5.0 ^ 2   -- 100mm reference round cross-section (radius 5cm), cm^2
-local BLAST_REF  = 6.0            -- kg filler reference
--- HE lethality pen-equivalent: 30 * filler_kg^(2/3) mm -- the splash coverage channel
--- (blast radius^2 scales with kg^(2/3)).
-local HE_EQUIV   = 30.0
--- Armor actually defeated by blast: filler_kg x HEPower / HEBlastPenetration (the damage
--- code's own blast-penetration channel). Used by the gate so heavy ordnance that genuinely
--- penetrates through blast is judged by that real reach rather than only its splash equivalent.
-local HE_BLAST_PEN_PER_KG = 8000.0 / 3500.0
-local ROUND_COST_FLOOR = 1.0        -- every configured round has a non-zero weapon-pricing input
--- HE's splash, module damage, and soft-target utility add value beyond its direct lethality terms.
-local HE_INTRINSIC_VALUE_MULT = 1.50
--- GATE is LINEAR (GATE_EXP = 1): effectiveness = pen/(pen+P50). Kept linear for legibility;
--- a saturating (Hill-style) fit prices the corpus the same, so no exponent term is needed.
-local GUN_FLAT    = 20.0          -- no weapon is free (utility launchers price here)
+local ROUND_COST_FLOOR = 1.0
+local GUN_FLAT    = 20.0          -- empty or minimal weapons retain a nonzero price
 local RACK_FLAT   = 100.0
 -- 30s engagement window: a rack's sustained rate is capped at tubes/window -- it is NOT an
 -- infinite-reload DPS machine. Tubes are launcher hardware (mountpoint count), not a
@@ -53,39 +35,33 @@ local RACK_FLAT   = 100.0
 -- floor (1/RACK_WINDOW): no mounted delivery system prices below one round per window, closing
 -- the slow-alpha and tiny-ROFLimit aliases of the same cheese.
 local RACK_WINDOW = 30.0
--- Balance reference: an identical unguided warhead fired by a 5 rpm gun. A ready
--- tube pays the remaining 3 rpm of value in addition to its 2 rpm delivery allowance.
+-- At the tube/window cap, each tube costs one five-rpm reference gun:
+-- 40% delivery value plus 60% ready payload; guidance multiplies the total.
 local RACK_REFERENCE_RPS = 5.0 / 60.0
-local RACK_READY_RPS = RACK_REFERENCE_RPS - 1.0 / RACK_WINDOW
+local RACK_READY_SHARE = 1.0 - 1.0 / (RACK_WINDOW * RACK_REFERENCE_RPS)
+local FIRE_RATE_EXP = 0.25 -- sixteen times the cadence doubles its price multiplier
 local EXP_MM = 1.4                -- armor thickness exponent (intensive term -- untouched)
 -- Armor HP exponent. LINEAR/extensive on purpose: N props of the same total HP price
 -- identically to 1 prop, so splitting armor into fragments is points-neutral. A sub-linear
 -- exponent would reward that split as a pricing exploit.
 local EXP_HP = 1.0
 
--- --- type tables ---
-local DAMAGE_MULT = {   -- post-pen damage multipliers (acf_globals.lua:253-261 ACE.*DamageMult)
-	AP = 2.0, APHE = 1.75, APDS = 3.0, APFSDS = 3.0, HVAP = 2.0,
-	HEAT = 6.0, HE = 2.0, HESH = 1.2, HP = 8.0, FL = 1.4,
+-- Balance multipliers, not damage simulation: every warhead pays at least its total shell length.
+local WARHEAD = {
+	SM = 1.0, FLR = 1.0, CHF = 1.0, Refill = 1.0, HP = 1.0, FL = 1.0,
+	AP = 1.25, CAP = 1.25, HE = 1.25, HEFS = 1.25, CHE = 1.25, HESH = 1.25,
+	APHE = 1.5, HVAP = 1.5, APDS = 1.5,
+	APFSDS = 2.0, HEAT = 1.75, HEATFS = 1.75, CHEAT = 1.75, GLATGM = 1.75,
+	THEAT = 2.0, THEATFS = 2.0, ["GLATGM-HE"] = 1.25,
 }
-local TYPE_MAP = {      -- round type id -> damage family
-	AP = "AP", APHE = "APHE", APDS = "APDS", APFSDS = "APFSDS", HVAP = "HVAP",
-	HP = "HP", CAP = "AP",
-	HEAT = "HEAT", HEATFS = "HEAT", THEAT = "HEAT", THEATFS = "HEAT", CHEAT = "HEAT",
-	GLATGM = "HEAT", ["GLATGM-HE"] = "HE",
-	HE = "HE", HEFS = "HE", CHE = "HE",
-	HESH = "HESH",
-	SM = "SM", FLR = "SM", CHF = "SM", FL = "FL", Refill = "Refill",
-}
-local function hasHEPayload(round, fam)
-	if fam == "HE" then return true end
-	if fam ~= "APHE" then return false end
 
-	return (tonumber(round.blastMass) or 0) > 0
+--- Returns the assigned warhead premium; unknown types retain the full length baseline.
+-- @param round table Converted round configuration.
+-- @return number Warhead multiplier, always at least one.
+function ACE.Points.WarheadMul(round)
+	return WARHEAD[round.Type] or 1.0
 end
--- HEAT jet family: the shaped-charge slug caliber (not the shell body) sets the area.
-local HEAT_FAMILY = { HEAT = true, HEATFS = true, THEAT = true, THEATFS = true, CHEAT = true, GLATGM = true }
-local UTILITY     = { SM = true, Refill = true }   -- smoke, chaff, flares, and refill carry no damage
+
 -- Guidance names omitted from this table use a 1.0 multiplier.
 local GUIDANCE = {
 	Dumb = 0.5,
@@ -114,49 +90,6 @@ function ACE.Points.RackGuidanceMul(round)
 	return RACK_GUIDANCE[guidance] or GUIDANCE[guidance] or 1.0
 end
 
--- Lethality once the round is inside armor: base damage plus the hole it tears
--- (frontal area x the type's damage multiplier, normalized so a 100mm AP shell = 1.0; HEAT
--- uses its jet cross-section, not the shell body), plus the explosive payload it delivers
--- (sqrt of filler kg vs a 6kg reference). Utility (smoke/refill) rounds return 0,0,0.
-function ACE.Points.PostPenParts(round)
-	local t = round.Type
-	if not t or t == "" then t = "AP" end
-	local fam = TYPE_MAP[t] or "AP"
-	if UTILITY[fam] then return 0.0, 0.0, 0.0 end
-
-	local mult = DAMAGE_MULT[fam] or 1.0
-	local slug = tonumber(round.SlugCaliber) or 0
-	local area
-	if HEAT_FAMILY[t] and slug ~= 0 then
-		area = pi * (slug / 2) ^ 2            -- shaped-charge jet, not shell body
-	else
-		area = tonumber(round.FrArea) or 0.0
-	end
-
-	local blast = tonumber(round.blastMass) or 0.0
-	return 1.0,
-		(area * mult) / (FRAREA_REF * DAMAGE_MULT.AP),    -- FrArea normalized vs 100mm AP
-		sqrt(max(blast, 0.0) / BLAST_REF)
-end
-
--- The three parts summed: the per-round "inside-armor damage" multiplier.
-function ACE.Points.PostPenMult(round)
-	local base, hole, blast = ACE.Points.PostPenParts(round)
-	return base + hole + blast
-end
-
--- Penetration used for lethality: raw maxPen, but HE/APHE/HESH payloads floor it at a
--- blast-equivalent so big fillers still register a threat even with token stated pen.
-function ACE.Points.LethalityPen(round)
-	local pen = tonumber(round.maxPen) or 0.0
-	local fam = TYPE_MAP[round.Type or "AP"] or "AP"
-	if hasHEPayload(round, fam) or fam == "HESH" then
-		local blast = tonumber(round.blastMass) or 0.0
-		pen = max(pen, HE_EQUIV * blast ^ (2.0 / 3.0))
-	end
-	return pen
-end
-
 -- Guidance multiplier for a round (1.0 for everything but guided missile ammo). Public so
 -- displays can show the "x 1.5 guidance" factor instead of hiding it inside baseRoundCost.
 function ACE.Points.GuidanceMul(round)
@@ -167,51 +100,22 @@ function ACE.Points.GuidanceMul(round)
 	return 1.0
 end
 
--- Intrinsic value beyond direct lethality terms; shared by billing and explanatory readouts.
-function ACE.Points.IntrinsicValueMul(round)
-	local fam = TYPE_MAP[round and round.Type or "AP"] or "AP"
-	return hasHEPayload(round, fam) and HE_INTRINSIC_VALUE_MULT or 1.0
-end
-
--- Intrinsic cost of one configured round. Inventory count is not billed, but every weapon
--- multiplies this value by its own delivery rate and threat factor.
---- Computes intrinsic round value, optionally before guidance for rack pricing.
--- @param round table Converted round configuration.
+--- Computes total shell length times the assigned warhead premium.
+-- @param round table Converted round, with ProjLength and PropLength in centimeters.
 -- @param unguided boolean Omit guidance when the weapon applies it to its final price.
--- @return number Intrinsic round value.
+-- @return number Intrinsic round value; inventory is not billed.
 function ACE.Points.BaseRoundCost(round, unguided)
-	local cost = ACE.Points.LethalityPen(round) * ACE.Points.PostPenMult(round)
-		* (unguided and 1.0 or ACE.Points.GuidanceMul(round)) * ACE.Points.IntrinsicValueMul(round)
-	return max(cost, ROUND_COST_FLOOR)
+	local length = max(tonumber(round.ProjLength) or 0, 0)
+	local propellant = max(tonumber(round.PropLength) or 0, 0)
+	local guidance = unguided and 1.0 or ACE.Points.GuidanceMul(round)
+	return max((length + propellant) * ACE.Points.WarheadMul(round) * guidance, ROUND_COST_FLOOR)
 end
 
--- Share of the meta this pen defeats. The curve is continuous from zero with no minimum share.
-function ACE.Points.Gate(pen)
-	pen = tonumber(pen) or 0
-	if pen <= 0 then return 0 end
-	return pen / (pen + Model.P50)
-end
-
--- Penetration the GATE judges a round by. HE/APHE payloads use their blast lethality reach because splash,
--- module damage, and soft-target effects create combat value without literal armor penetration;
--- HESH retains only the damage code's literal blast-penetration channel.
-function ACE.Points.GatePen(round)
-	local pen = tonumber(round.maxPen) or 0.0
-	local fam = TYPE_MAP[round.Type or "AP"] or "AP"
-	if hasHEPayload(round, fam) then
-		pen = max(pen, ACE.Points.LethalityPen(round))
-		local blast = tonumber(round.blastMass) or 0.0
-		pen = max(pen, blast * HE_BLAST_PEN_PER_KG)
-	elseif fam == "HESH" then
-		local blast = tonumber(round.blastMass) or 0.0
-		pen = max(pen, blast * HE_BLAST_PEN_PER_KG)
-	end
-	return pen
-end
-
--- Round score = threat * baseRoundCost.
+--- Returns the configured round value used to rank weapon candidates.
+-- @param round table Converted round configuration.
+-- @return number Round value.
 function ACE.Points.RoundScore(round)
-	return ACE.Points.Gate(ACE.Points.GatePen(round)) * ACE.Points.BaseRoundCost(round)
+	return ACE.Points.BaseRoundCost(round)
 end
 
 -- Candidate ordering is final weapon output, then per-shot score, then stable source order.
@@ -238,14 +142,22 @@ function ACE.Points.SustainedRps(baseRps, magSize, magReload)
 	return base
 end
 
--- Gun firepower cost (scaled). This is called once per gun entity; identical guns therefore
--- add linearly instead of sharing or deduplicating the round cost.
-function ACE.Points.GunCost(sustainedRps, baseRoundCost, threat)
+--- Returns the mild cadence premium relative to a five-rpm weapon.
+-- @param rate number Configured rounds per second.
+-- @return number Fourth-root rate multiplier, before the delivery-rate floor.
+function ACE.Points.FireRateMul(rate)
+	return (max(tonumber(rate) or 0, 0) / RACK_REFERENCE_RPS) ^ FIRE_RATE_EXP
+end
+
+--- Prices each gun's configured delivery rate and round value.
+-- @param sustainedRps number Configured sustained rounds per second.
+-- @param baseRoundCost number Total-length/warhead round value.
+-- @return number Scaled firepower points, additive per gun entity.
+function ACE.Points.GunCost(sustainedRps, baseRoundCost)
 	local pricedRps = max(tonumber(sustainedRps) or 0, 1.0 / RACK_WINDOW)
 	return max(Model.kGun
-		* pricedRps
-		* (tonumber(baseRoundCost) or 0)
-		* (tonumber(threat) or 0), GUN_FLAT) * Model.Scale
+		* ACE.Points.FireRateMul(pricedRps)
+		* (tonumber(baseRoundCost) or 0), GUN_FLAT) * Model.Scale
 end
 
 function ACE.Points.RackRate(reloadTime, maxMissile)
@@ -258,7 +170,7 @@ end
 
 --- Prices rack delivery and one base-round charge per ready tube.
 -- @param rate number Sustained rounds per second.
--- @param bestScore number Selected round's threat-weighted score.
+-- @param bestScore number Selected round's round value.
 -- @param baseRoundCost number Selected round's base cost.
 -- @param maxMissile number Ready tube count, default/minimum 1.
 -- @param guidance number Final guidance ratio; omitted retains legacy helper pricing.
@@ -271,8 +183,10 @@ function ACE.Points.RackCostFromRate(rate, bestScore, baseRoundCost, maxMissile,
 	if guidance then
 		local score = max(tonumber(bestScore) or 0, 0)
 		local scale = Model.Scale * guidance
-		local delivery = Model.kGun * pricedRate * score
-		local ready = Model.kGun * RACK_READY_RPS * score
+		local deliveryShare = 1.0 - RACK_READY_SHARE
+		local rateFraction = pricedRate / (tubes / RACK_WINDOW)
+		local delivery = Model.kGun * deliveryShare * tubes * rateFraction ^ FIRE_RATE_EXP * score
+		local ready = Model.kGun * RACK_READY_SHARE * score
 		local deliveryFloor = GUN_FLAT / (RACK_WINDOW * RACK_REFERENCE_RPS)
 		local readyFloor = GUN_FLAT - deliveryFloor
 		local readyPoints = max(ready, readyFloor) * tubes * scale
@@ -294,7 +208,7 @@ end
 --- Prices a rack from its configured reload time and ready capacity.
 -- @param reloadTime number Configured reload time in seconds.
 -- @param maxMissile number Ready tube count.
--- @param bestScore number Selected round's threat-weighted score.
+-- @param bestScore number Selected round's round value.
 -- @param baseRoundCost number Selected round's base cost.
 -- @param guidance number Final guidance ratio; omitted retains legacy helper pricing.
 -- @return number Scaled rack points.
@@ -306,8 +220,11 @@ end
 function ACE.Points.ChargeCost(fillerKg)
 	fillerKg = tonumber(fillerKg) or 0
 	if fillerKg <= 0 then return 0 end
-	local round = { Type = "HE", maxPen = 0, FrArea = 0, blastMass = fillerKg, guidance = "Dumb" }
-	return Model.kGun * (1.0 / RACK_WINDOW) * ACE.Points.RoundScore(round) * Model.Scale
+	-- Mounted explosives have no shell dimensions; retain their existing filler-only pricing.
+	local pen = 30 * fillerKg ^ (2 / 3)
+	local reach = max(pen, fillerKg * (8000 / 3500))
+	local value = pen * (1 + math.sqrt(fillerKg / 6)) * 0.5 * 1.5
+	return 5.408 * (1 / RACK_WINDOW) * (reach / (reach + 548.5)) * max(value, ROUND_COST_FLOOR) * Model.Scale
 end
 
 --- Blends normal-incidence protection after the material's thickness curve.
@@ -413,10 +330,8 @@ function ACE.Points.RoundFromBullet(bdata)
 
 	local round = {
 		Type        = ACE.ResolveAmmoType(nil, bdata),   -- bdata branch: bdata.Type or bdata.RoundType
-		maxPen      = ACE.GetAmmoMaxPen(bdata),
-		FrArea      = tonumber(bdata.FrArea) or 0,
-		SlugCaliber = tonumber(bdata.SlugCaliber),       -- HEAT family only; nil otherwise
-		blastMass   = ACE.GetAmmoBlastMass(bdata),
+		ProjLength = tonumber(bdata.ProjLength) or 0,
+		PropLength = tonumber(bdata.PropLength) or 0,
 	}
 
 	-- Guidance folds the old per-missile pricing premium into baseRoundCost. Candidates:

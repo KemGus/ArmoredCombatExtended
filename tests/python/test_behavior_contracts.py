@@ -80,7 +80,7 @@ class EntityPipelineContractTests(unittest.TestCase):
         functions = source("ace/shared/sh_ace_functions.lua")
         self.assertIn("local isRack = class == \"acf_rack\"", functions)
         self.assertIn(
-            "local flooredRawPoints = rackRawPoints or flooredRate * roundScore * firepowerScale",
+            "local flooredRawPoints = rackRawPoints or ACE.Points.FireRateMul(flooredRate) * roundScore * firepowerScale",
             functions,
         )
         self.assertIn(

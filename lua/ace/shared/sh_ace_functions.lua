@@ -1202,8 +1202,7 @@ local function resolveGunPricingCandidate(gun)
 		if not round then return end
 
 		local rate = ACE.Points.GunSustainedRps(gun, bdata, crate)
-		local cost = ACE.Points.GunCost(rate, ACE.Points.BaseRoundCost(round),
-			ACE.Points.Gate(ACE.Points.GatePen(round)))
+		local cost = ACE.Points.GunCost(rate, ACE.Points.BaseRoundCost(round))
 		capacity = capacity + rounds
 		totalWeight = totalWeight + weight
 		weightedPoints = weightedPoints + weight * cost
@@ -1237,7 +1236,7 @@ local function resolveRackPricingCandidate(rack)
 				local reload = ACE.GetRackConfiguredReloadTime(rack, crate.BulletData)
 				local rate = ACE.Points.RackRate(reload, rack.MaxMissile)
 				local baseRoundCost = ACE.Points.BaseRoundCost(round, true)
-				local roundScore = ACE.Points.Gate(ACE.Points.GatePen(round)) * baseRoundCost
+				local roundScore = baseRoundCost
 				local guidance = ACE.Points.RackGuidanceMul(round)
 				local candidate = {
 					Round = round,
@@ -1277,32 +1276,31 @@ local function resolveWeaponPricingInputs(ent)
 	end
 	local round = candidate and candidate.Round
 	local rate = candidate and candidate.Rate or 0
-	local threat = round and ACE.Points.Gate(ACE.Points.GatePen(round)) or 0
 	local baseRoundCost = round and ACE.Points.BaseRoundCost(round, isRack) or 0
-	local roundScore = threat * baseRoundCost
+	local roundScore = baseRoundCost
 	local guidance = isRack and ACE.Points.RackGuidanceMul(round) or 1
 	local points, baseRoundCostPoints, rackRawPoints
 	if isRack then
 		points, baseRoundCostPoints, rackRawPoints = ACE.Points.RackCostFromRate(
 			rate, roundScore, baseRoundCost, ent.MaxMissile, guidance)
 	else
-		points, baseRoundCostPoints = ACE.Points.GunCost(rate, baseRoundCost, threat), 0
+		points, baseRoundCostPoints = ACE.Points.GunCost(rate, baseRoundCost), 0
 	end
 	local model = ACE.PointsModel or {}
 	local firepowerScale = (tonumber(model.kGun) or 0) * (tonumber(model.Scale) or 0)
 	-- BaseRoundCostPoints includes every ready tube; DeliveryPoints is the floored delivery term.
-	local rawPoints = rate * roundScore * firepowerScale * guidance
+	local rawPoints = rackRawPoints or ACE.Points.FireRateMul(rate) * roundScore * firepowerScale
 	local rateFloor = ACE.Points.RateFloor and ACE.Points.RateFloor() or 0
 	-- Compare against the FLOORED rate's raw product, not the true rate's -- otherwise every
 	-- floor-affected weapon falsely reads as having hit the flat weapon minimum instead.
 	local flooredRate = (rateFloor > 0) and math.max(rate, rateFloor) or rate
-	local flooredRawPoints = rackRawPoints or flooredRate * roundScore * firepowerScale
+	local flooredRawPoints = rackRawPoints or ACE.Points.FireRateMul(flooredRate) * roundScore * firepowerScale
 	local minimumApplied = points > flooredRawPoints + 0.01
 
 	return {
 		Points = points,
 		Rate = rate,
-		Threat = threat,
+		RateMultiplier = not isRack and ACE.Points.FireRateMul(rate) or nil,
 		BaseRoundCost = baseRoundCost,
 		FirepowerScale = firepowerScale,
 		RawPoints = rawPoints,
@@ -1345,7 +1343,7 @@ function ACE.GetGunFirepowerPricingLine(readout, menuFormat)
 			string.Comma(math.Round(readout.Capacity)),
 			string.Comma(math.Round(readout.Points)))
 	end
-	if not readout.Rate or not readout.Threat or not readout.BaseRoundCost then return end
+	if not readout.Rate or not readout.BaseRoundCost then return end
 
 	if not menuFormat then
 		if readout.IsRack then
@@ -1355,9 +1353,9 @@ function ACE.GetGunFirepowerPricingLine(readout, menuFormat)
 				string.Comma(math.Round(readout.Points)), readout.GuidanceMultiplier or 1)
 		end
 
-		return string.format("%.3f/s x %.1f%% threat x %s base x %.4f scale = %s pts",
+		return string.format("%.3f/s (%.2fx rate) x %s base x %.4f scale = %s pts",
 			readout.Rate,
-			readout.Threat * 100,
+			readout.RateMultiplier,
 			string.Comma(math.Round(readout.BaseRoundCost)),
 			readout.FirepowerScale,
 			string.Comma(math.Round(readout.RawPoints)))
@@ -1370,9 +1368,9 @@ function ACE.GetGunFirepowerPricingLine(readout, menuFormat)
 			string.Comma(math.Round(readout.BaseRoundCostPoints)), readout.GuidanceMultiplier or 1)
 	end
 
-	return string.format("%.1f rpm / 60 x %.1f%% threat x %.1f base x %.1f scale",
+	return string.format("%.1f rpm (%.2fx rate) x %.1f base x %.1f scale",
 		readout.Rate * 60,
-		readout.Threat * 100,
+		readout.RateMultiplier,
 		readout.BaseRoundCost,
 		readout.FirepowerScale)
 end
@@ -1392,39 +1390,18 @@ function ACE.GetRateFloorLine(readout, menuFormat)
 		(readout.Rate or 0) * 60)
 end
 
---- Formats the lethality factors used by the points model.
+--- Formats the dimensions and warhead multiplier used by the points model.
 -- @param round table Converted round configuration.
--- @param menuFormat boolean Use compact formatting.
+-- @param _ boolean Reserved compact-format argument.
 -- @param unguided boolean Omit guidance when it is shown on the rack's total-price line.
--- @return string Round lethality explanation.
-function ACE.GetRoundLethalityLine(round, menuFormat, unguided)
+-- @return string Shell length and warhead pricing explanation.
+function ACE.GetRoundLethalityLine(round, _, unguided)
 	if not istable(round) then return nil end
 
-	local base, hole, blast = ACE.Points.PostPenParts(round)
-	local dmg = base + hole + blast
-	if dmg <= 0 then return string.format("%s utility round", round.Type or "Unspecified") end
-
-	local rawPen = tonumber(round.maxPen) or 0
-	local pen = ACE.Points.LethalityPen(round)
-	local penLabel = (pen > rawPen + 0.5) and "mm HE-equiv" or "mm pen"
-
-	local line
-	if menuFormat then
-		line = string.format("%s %.1f%s x %.1f dmg",
-			round.Type or "Round", pen, penLabel, dmg)
-	else
-		line = string.format("%s %d%s x %.2f dmg (%d + %.2f hole + %.2f blast)",
-			round.Type or "Round", math.Round(pen), penLabel, dmg, base, hole, blast)
-	end
-
+	local line = string.format("%s (%.1f cm projectile + %.1f cm propellant) x %.2f warhead",
+		round.Type or "Round", round.ProjLength or 0, round.PropLength or 0, ACE.Points.WarheadMul(round))
 	local guid = unguided and 1.0 or ACE.Points.GuidanceMul(round)
-	if guid ~= 1.0 then
-		line = line .. string.format(" x %.1f guidance", guid)
-	end
-	local intrinsicValue = ACE.Points.IntrinsicValueMul(round)
-	if intrinsicValue ~= 1.0 then
-		line = line .. string.format(" x %.1f HE utility", intrinsicValue)
-	end
+	if guid ~= 1.0 then line = line .. string.format(" x %.1f guidance", guid) end
 
 	return line
 end

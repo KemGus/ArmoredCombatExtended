@@ -8,19 +8,33 @@ dofile(root .. "/lua/ace/shared/sh_ace_entity_state.lua")
 
 dofile(root .. "/lua/ace/shared/sh_ace_points_model.lua")
 
-local empty = { Type = "APHE", maxPen = 200, FrArea = math.pi * 5 ^ 2, blastMass = 0 }
-local loaded = { Type = "APHE", maxPen = 200, FrArea = math.pi * 5 ^ 2, blastMass = 60 }
+local loaded = { Type = "APHE", ProjLength = 40 }
+for _, name in ipairs({ "SM", "FLR", "CHF", "Refill", "HP", "FL", "AP", "CAP", "HE", "HEFS",
+	"CHE", "HESH", "APHE", "HVAP", "APDS", "APFSDS", "HEAT", "HEATFS", "CHEAT", "GLATGM",
+	"THEAT", "THEATFS", "GLATGM-HE", "Unknown" }) do
+	local round = { Type = name, PropLength = 80, ProjLength = 60 }
+	local base = ACE.Points.BaseRoundCost(round)
+	assert(base >= 140, "every warhead must pay the complete shell-length baseline")
+	round.maxPen, round.FrArea, round.SlugCaliber, round.blastMass, round.Caliber = 9999, 9999, 9999, 9999, 9999
+	assert(ACE.Points.BaseRoundCost(round) == base, "old damage/penetration inputs must not affect cost")
+	round.ProjLength, round.PropLength = 30, 40
+	assert(ACE.Points.BaseRoundCost(round) == base / 2, "halving length must halve round value")
+	round.ProjLength, round.PropLength = 10, 25
+	assert(ACE.Points.BaseRoundCost(round) == base / 4, "halving total length again must halve round value")
+end
+assert(ACE.Points.BaseRoundCost({}) == 1, "missing dimensions retain the round floor")
+assert(ACE.Points.BaseRoundCost({ PropLength = -80, ProjLength = -60 }) == 1,
+	"invalid dimensions must not multiply into a positive size")
 
-assert(ACE.Points.IntrinsicValueMul(empty) == 1.0,
-	"zero-filler APHE must not receive HE utility value")
-assert(ACE.Points.GatePen(empty) == empty.maxPen,
-	"zero-filler APHE must retain only its kinetic penetration gate")
-assert(ACE.Points.IntrinsicValueMul(loaded) == 1.5,
-	"loaded APHE must receive HE payload value")
-assert(ACE.Points.GatePen(loaded) > ACE.Points.GatePen(empty),
-	"loaded APHE filler must add HE-equivalent threat reach")
-assert(ACE.Points.BaseRoundCost(loaded) > ACE.Points.BaseRoundCost(empty),
-	"loaded APHE filler must add round cost")
+-- Conversion must use the clamped shell dimensions without evaluating damage or caliber.
+ACE.ResolveAmmoType = function(_, bullet) return bullet.Type or bullet.RoundType end
+ACE.IsGLATGMAmmoType = function() return false end
+local converted = ACE.Points.RoundFromBullet({ Type = "HE", ProjLength = 60, PropLength = 80,
+	Caliber = 14, SlugCaliber = 0.1, maxPen = 0 })
+assert(converted.ProjLength == 60 and converted.PropLength == 80 and converted.Caliber == nil)
+local convertedCost = ACE.Points.BaseRoundCost(converted)
+assert(ACE.Points.BaseRoundCost({ Type = "HE", ProjLength = 80, PropLength = 60 }) == convertedCost,
+	"redistributing a fixed total length between projectile and propellant must preserve round value")
 
 local primitive = {
 	GetClass = function() return "prop_physics" end,
@@ -35,6 +49,15 @@ assert(ACE.Points.PropArmor(primitive) == nil,
 local function near(actual, expected, message)
 	assert(math.abs(actual - expected) <= 1e-9 * math.max(1, math.abs(expected)), message)
 end
+
+near(ACE.Points.FireRateMul(5 / 60), 1, "five rpm is the reference cadence")
+near(ACE.Points.FireRateMul(80 / 60), 2, "sixteen times the RPM must double the rate premium")
+local referenceGun = ACE.Points.GunCost(5 / 60, 140)
+near(ACE.Points.GunCost(80 / 60, 140), 2 * referenceGun,
+	"the billing path must apply the mild rate premium")
+assert(ACE.Points.GunCost(10 / 60, 140) > referenceGun, "increasing RPM must still cost more")
+near(ACE.Points.GunCost(1 / 300, 140), ACE.Points.GunCost(1 / 30, 140),
+	"tiny configured ROFLimits must retain the delivery floor")
 
 for _, fuel in ipairs({ "Petrol", "Diesel", "Multifuel", "Electric", "Unknown" }) do
 	near(ACE.Points.EngineCost(1000, fuel), ACE.Points.EngineCost(1000),
@@ -86,8 +109,8 @@ assert(loadstring(pricingSource))()
 local convertRound, configuredRate = ACE.Points.RoundFromBullet, ACE.GetGunConfiguredRps
 ACE.Points.RoundFromBullet = function(round) return round end
 ACE.GetGunConfiguredRps = function(_, _, round) return round.rate end
-local lowRound = { Type = "APFSDS", maxPen = 200, FrArea = 1, rate = 0.2, ProjLength = 10 }
-local highRound = { Type = "THEATFS", maxPen = 1000, FrArea = 1, rate = 0.1, ProjLength = 10 }
+local lowRound = { Type = "APFSDS", maxPen = 200, rate = 0.2, ProjLength = 10 }
+local highRound = { Type = "THEATFS", maxPen = 1000, rate = 0.1, ProjLength = 10 }
 local function ammo(round, capacity, index)
 	return { BulletData = round, Capacity = capacity, Ammo = capacity,
 		EntIndex = function() return index end }
@@ -103,20 +126,24 @@ near(ACE.GetGunFirepowerPoints(mixedGun), 0.75 * lowCost + 0.25 * highCost,
 local mixedReadout = ACE.GetGunFirepowerReadout(mixedGun)
 assert(mixedReadout.AmmoMix and not mixedReadout.Round,
 	"mixed readout must not label a single round as the billed best round")
+assert(loadstring(assert(shared:match("(function ACE.GetRoundLethalityLine%b().-\nend)"))))()
+local shellLine = ACE.GetRoundLethalityLine(converted, true)
+assert(shellLine:find("60.0 cm projectile + 80.0 cm propellant", 1, true)
+	and not shellLine:find("caliber", 1, true), "round explanation must show both billed lengths")
 local comma, roundNumber = string.Comma, math.Round
 string.Comma, math.Round = tostring, function(value) return math.floor(value + 0.5) end
 assert(ACE.GetGunFirepowerPricingLine(mixedReadout, true):find("capacity x projectile length", 1, true),
 	"tool explanation must identify the weighted ammo mix")
 string.Comma, math.Round = comma, roundNumber
 highRound.ProjLength = 30
-near(ACE.GetGunFirepowerPoints(mixedGun), 0.5 * lowCost + 0.5 * highCost,
+near(ACE.GetGunFirepowerPoints(mixedGun), 0.5 * lowCost + 0.5 * highCost * 3,
 	"9 short and 3 triple-length rounds must have equal influence")
 lowCrate.Capacity, lowRound.ProjLength = 90, 1
-near(ACE.GetGunFirepowerPoints(mixedGun), 0.5 * lowCost + 0.5 * highCost,
+near(ACE.GetGunFirepowerPoints(mixedGun), 0.5 * lowCost / 10 + 0.5 * highCost * 3,
 	"packing ten times as many tenth-length rounds must not dilute the average")
 for _, invalid in ipairs({ 0, -1, "missing" }) do
 	lowRound.ProjLength = tonumber(invalid)
-	near(ACE.GetGunFirepowerPoints(mixedGun), highCost,
+	near(ACE.GetGunFirepowerPoints(mixedGun), highCost * 3,
 		"missing or nonpositive projectile length must not dilute valid ammunition")
 end
 lowCrate.Capacity, lowRound.ProjLength, highRound.ProjLength = 9, 10, 10
@@ -147,8 +174,7 @@ near(ACE.GetGunFirepowerPoints(rack), rackExpected, "racks must retain strongest
 for _, tubes in ipairs({ 1, 2, 4 }) do
 	rack.MaxMissile = tubes
 	local function expected(round)
-		return tubes * ACE.Points.GunCost(5 / 60, ACE.Points.BaseRoundCost(round),
-			ACE.Points.Gate(ACE.Points.GatePen(round)))
+		return tubes * ACE.Points.GunCost(5 / 60, ACE.Points.BaseRoundCost(round))
 	end
 	local readout = ACE.GetGunFirepowerReadout(rack)
 	near(readout.Points, math.max(expected(lowRound), expected(highRound)),
@@ -160,16 +186,15 @@ for _, tubes in ipairs({ 1, 2, 4 }) do
 	rack.CurMissile = 0
 	near(ACE.GetGunFirepowerPoints(rack), readout.Points, "empty tubes retain design points")
 end
-local dumb = { Type = "HEAT", maxPen = 900, FrArea = 1, guidance = "Dumb" }
-local seeker = { Type = "HEAT", maxPen = 500, FrArea = 1, guidance = "Radar" }
+local dumb = { Type = "HEAT", ProjLength = 90, guidance = "Dumb" }
+local seeker = { Type = "HEAT", ProjLength = 50, guidance = "Radar" }
 rack.MaxMissile, rack.AmmoLink = 4, { ammo(dumb, 1, 7), ammo(seeker, 1, 8) }
 assert(ACE.GetGunFirepowerReadout(rack).Round == seeker,
 	"candidate ordering must apply the new guidance ratios before selecting ammo")
 for _, pen in ipairs({ 0, 1, 100, 840, 2000 }) do
-	local round = { Type = "HEAT", maxPen = pen, FrArea = 1 }
+	local round = { Type = "HEAT", ProjLength = pen }
 	local base = ACE.Points.BaseRoundCost(round, true)
-	local threat = ACE.Points.Gate(pen)
-	local reference = ACE.Points.GunCost(5 / 60, base, threat)
+	local reference = ACE.Points.GunCost(5 / 60, base)
 	for name, ratio in pairs({ Dumb = 0.7, Laser = 1.1, Infrared = 2.5, Radar = 2.5, Top_Attack_IR = 3.5 }) do
 		round.guidance = name
 		near(ACE.Points.BaseRoundCost(round, true), base, "rack payload must exclude legacy guidance")
@@ -181,7 +206,7 @@ for _, pen in ipairs({ 0, 1, 100, 840, 2000 }) do
 			near(readout.DeliveryPoints + readout.BaseRoundCostPoints, readout.Points,
 				"guidance-adjusted readout must reconcile")
 			near(readout.GuidanceMultiplier, ratio, "readout must expose the final guidance ratio")
-			near(ACE.Points.RackCost(2, tubes, base * threat, base, ratio), readout.Points,
+			near(ACE.Points.RackCost(2, tubes, base, base, ratio), readout.Points,
 				"wrapper must pass the guidance ratio")
 		end
 	end
@@ -189,6 +214,14 @@ end
 local fast = ACE.GetGunFirepowerPoints(rack)
 math.Round = function(value) return math.floor(value + 0.5) end
 string.Comma = tostring
+mixedGun.AmmoLink = { lowCrate }
+local singleReadout = ACE.GetGunFirepowerReadout(mixedGun)
+near(singleReadout.RawPoints, singleReadout.Points, "raw gun readout must use the billed rate curve")
+for _, compact in ipairs({ true, false }) do
+	local line = ACE.GetGunFirepowerPricingLine(singleReadout, compact)
+	assert(line:find("x rate", 1, true) and not line:find("threat", 1, true),
+		"both readouts must explain the rate premium without the removed threat term")
+end
 local rackReadout = ACE.GetGunFirepowerReadout(rack)
 assert(ACE.GetGunFirepowerPricingLine(rackReadout, true):find(
 	string.format("includes %.2fx guidance", rackReadout.GuidanceMultiplier), 1, true),
