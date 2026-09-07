@@ -53,8 +53,6 @@ local RACK_FLAT   = 100.0
 -- floor (1/RACK_WINDOW): no mounted delivery system prices below one round per window, closing
 -- the slow-alpha and tiny-ROFLimit aliases of the same cheese.
 local RACK_WINDOW = 30.0
-local CREW_SEAT   = 100.0
-local LOADER_SEAT = 300.0
 local EXP_MM = 1.4                -- armor thickness exponent (intensive term -- untouched)
 -- Armor HP exponent. LINEAR/extensive on purpose: N props of the same total HP price
 -- identically to 1 prop, so splitting armor into fragments is points-neutral. A sub-linear
@@ -88,7 +86,6 @@ local UTILITY     = { SM = true, Refill = true }   -- smoke, chaff, flares, and 
 -- included by the model so salvo launchers price like the other auto classes rather than
 -- taking a crewed-loader reload buff they cannot use.
 local AUTO_CLASSES = { AC = true, MG = true, RAC = true, HMG = true, GL = true, SA = true, SL = true, AL = true }
-local FUEL_FACTOR  = { Petrol = 1.0, Diesel = 1.2, Multifuel = 1.2, Electric = 0.8 }
 -- Guidance names omitted from this table use a 1.0 multiplier.
 local GUIDANCE = {
 	Dumb = 0.5,
@@ -270,26 +267,41 @@ function ACE.Points.ChargeCost(fillerKg)
 	return Model.kGun * (1.0 / RACK_WINDOW) * ACE.Points.RoundScore(round) * Model.Scale
 end
 
-function ACE.Points.EffectiveMm(armourMm, ke, chem)
-	return (tonumber(armourMm) or 0) * (0.7 * (tonumber(ke) or 1) + 0.3 * (tonumber(chem) or 1))
+--- Blends normal-incidence protection after the material's thickness curve.
+-- @param armourMm number Nominal armor thickness in mm.
+-- @param ke number Kinetic effectiveness.
+-- @param chem number Chemical effectiveness.
+-- @param curve number Optional thickness exponent, default 1.
+-- @return number Blended effective thickness in mm.
+function ACE.Points.EffectiveMm(armourMm, ke, chem, curve)
+	return max(tonumber(armourMm) or 0, 0) ^ (tonumber(curve) or 1)
+		* (0.7 * (tonumber(ke) or 1) + 0.3 * (tonumber(chem) or 1))
 end
 
--- Per-prop armor survivability cost (scaled). mm is intensive (^1.4), HP is linear (^1.0).
-function ACE.Points.ArmorProp(effMm, maxHealth)
+--- Prices protection and its mass efficiency relative to RHA.
+-- @param effMm number Blended effective thickness in mm.
+-- @param maxHealth number Undamaged prop health.
+-- @param massEfficiency number Optional equal-protection mass ratio, default 1.
+-- @return number Scaled armor points.
+function ACE.Points.ArmorProp(effMm, maxHealth, massEfficiency)
 	return Model.kArmor * 100.0
 		* ((tonumber(effMm) or 0) / 50.0) ^ EXP_MM
 		* ((tonumber(maxHealth) or 0) / 75.0) ^ EXP_HP
+		* (tonumber(massEfficiency) or 1)
 		* Model.Scale
 end
 
--- Engine cost (scaled). hp is peak power (peakkw / 0.7457); fuel scales upkeep-ish value.
-function ACE.Points.EngineCost(hp, fuelType)
-	return Model.kEng * (tonumber(hp) or 0) * (FUEL_FACTOR[fuelType or "Petrol"] or 1.0) * Model.Scale
+--- Prices peak engine power independently of fuel type.
+-- @param hp number Peak horsepower (peakkw / 0.7457).
+-- @return number Scaled engine points.
+function ACE.Points.EngineCost(hp)
+	return Model.kEng * (tonumber(hp) or 0) * Model.Scale
 end
 
--- Crew seat cost (scaled). Loader seats cost more than generic seats.
-function ACE.Points.CrewCost(isLoader)
-	return (isLoader and LOADER_SEAT or CREW_SEAT) * Model.Scale
+--- Keeps required crew free; loader capability is priced through gun cadence.
+-- @return number Zero crew points.
+function ACE.Points.CrewCost()
+	return 0
 end
 
 -- ================================================================
@@ -317,31 +329,39 @@ local function resolveGuidanceName(guidanceValue)
 	return nil
 end
 
--- These calibrated pricing weights intentionally differ from some live armor material values.
--- Retune them against the reference corpus; unknown materials use (1, 1).
+-- KE/CHEM weights, mass modifier, pricing thickness curve. Unknown materials use RHA.
+-- ERA's active detonation path uses linear thickness, not its depleted-plate curve.
 local MATERIAL_EFF = {
-	RHA   = { 1.0,    1.0 },
-	CHA   = { 0.98,   0.98 },
-	Cer   = { 2.05,   2.05 },
-	DU    = { 3.0,    3.0 },
-	Ti    = { 1.7,    1.7 },
-	Alum  = { 0.8325, 0.8325 / 5.0 },
-	ERA   = { 2.5,    8.0 },
-	Rub   = { 0.05,   3.0 },
-	Texto = { 0.5,    1.2 },
+	RHA   = { 1.0,    1.0,          1.0,   1.0 },
+	CHA   = { 0.98,   0.98,         1.2,   1.0 },
+	Cer   = { 2.05,   2.05,         1.2,   0.99 },
+	DU    = { 3.0,    3.0,          2.43,  1.06 },
+	Ti    = { 1.7,    1.7,          0.61,  1.0 },
+	Alum  = { 0.8325, 0.8325 / 5.0, 0.333, 0.92 },
+	ERA   = { 2.5,    8.0,          2.0,   1.0 },
+	Rub   = { 0.05,   3.0,          0.2,   0.93 },
+	Texto = { 0.5,    1.2,          0.35,  0.94 },
 }
-
-local function materialEff(mat)
-	local eff = MATERIAL_EFF[mat or "RHA"]
-	if not eff then return 1.0, 1.0 end
-	return eff[1], eff[2]
-end
 
 -- Returns nil for unknown materials so display code can fall back to live material data.
 function ACE.Points.MaterialEff(mat)
 	local eff = MATERIAL_EFF[mat]
 	if not eff then return nil end
 	return eff[1], eff[2]
+end
+
+--- Resolves shared billing and preview inputs for a material.
+-- @param armourMm number Nominal armor thickness in mm.
+-- @param mat string Material identifier; unknown materials price as RHA.
+-- @return number Blended effective thickness in mm.
+-- @return number RHA mass divided by material mass at equal blended protection and area.
+function ACE.Points.MaterialArmor(armourMm, mat)
+	armourMm = tonumber(armourMm) or 0
+	if armourMm <= 0 then return 0, 1 end
+
+	local eff = MATERIAL_EFF[mat or "RHA"] or MATERIAL_EFF.RHA
+	local effMm = ACE.Points.EffectiveMm(armourMm, eff[1], eff[2], eff[4])
+	return effMm, effMm / (armourMm * eff[3])
 end
 
 -- Build the plain pricing round from a gun/crate/rack BulletData table. nil if not a table.
@@ -384,9 +404,13 @@ function ACE.Points.ChargeEntCost(ent)
 	return ACE.Points.ChargeCost(tonumber(ent.FillerMass) or 0)
 end
 
--- Prop -> (effectiveMm, maxHealth) for the armor term, or nil to skip. Skips ACF/ACE
--- components and pods (they price in their own categories) and props with no armour or HP.
--- Uses MAX armour/health (static design). Material ke/chem via the curated MATERIAL_EFF above.
+--- Resolves a prop's static armor pricing inputs.
+-- Skips components, pods and props with no armor/health. Uses undamaged state, shared
+-- with the armor-tool preview.
+-- @param ent Entity Armor prop.
+-- @return number Effective thickness, or nil for an excluded/unready entity.
+-- @return number Undamaged health.
+-- @return number Relative mass efficiency.
 function ACE.Points.PropArmor(ent)
 	if not ACE.IsEnt(ent) then return nil end
 	if ent.ACE_PrimitiveArmorPending or ent.ACE_PrimitivePropertiesPending
@@ -407,6 +431,6 @@ function ACE.Points.PropArmor(ent)
 	local hp       = tonumber(acf.MaxHealth) or 0
 	if armourMm <= 0 or hp <= 0 then return nil end
 
-	local ke, chem = materialEff(acf.Material or ent.ACE_Material)
-	return ACE.Points.EffectiveMm(armourMm, ke, chem), hp
+	local effMm, massEfficiency = ACE.Points.MaterialArmor(armourMm, acf.Material or ent.ACE_Material)
+	return effMm, hp, massEfficiency
 end

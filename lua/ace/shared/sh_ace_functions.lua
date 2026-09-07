@@ -941,13 +941,16 @@ function ACE.GetPtsType(className)
 	return ACE.ClassToType[className] or "Ignore"
 end
 
+--- Prices a prop's static protection and relative armor mass efficiency.
+-- @param ent Entity Armor prop.
+-- @return number Scaled armor points.
 function ACE.GetSurvivabilityIndex(ent)
 	if not ACE.IsEnt(ent) then return 0 end
 
-	local effMm, maxHealth = ACE.Points.PropArmor(ent)
+	local effMm, maxHealth, massEfficiency = ACE.Points.PropArmor(ent)
 	if not effMm or not maxHealth then return 0 end
 
-	return math.max(ACE.Points.ArmorProp(effMm, maxHealth), 0)
+	return math.max(ACE.Points.ArmorProp(effMm, maxHealth, massEfficiency), 0)
 end
 
 function ACE.GetArmorPoints(ent)

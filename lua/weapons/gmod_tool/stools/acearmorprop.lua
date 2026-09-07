@@ -467,25 +467,16 @@ if CLIENT then
 
 	local getPhrase = language.GetPhrase
 
-	-- Use the server pricing weights; unknown materials fall back to live material data.
-	local function getArmorPointPreview(armor, health, mat, matData)
-		if not ACE.Points.EffectiveMm or not ACE.Points.ArmorProp then return 0 end
+	-- Use the same material inputs and unknown-material fallback as server billing.
+	local function getArmorPointPreview(armor, health, mat)
+		if not ACE.Points.MaterialArmor or not ACE.Points.ArmorProp then return 0 end
 
-		local effKE, effCHEM
-		if ACE.Points.MaterialEff then
-			effKE, effCHEM = ACE.Points.MaterialEff(mat)
-		end
-		if not effKE then
-			if not matData then return 0 end
-			effKE = tonumber(matData.effectiveness) or 1
-			effCHEM = tonumber(matData.HEATeffectiveness or matData.effectiveness) or effKE
-		end
-		local effMm = ACE.Points.EffectiveMm(armor, effKE, effCHEM)
+		local effMm, massEfficiency = ACE.Points.MaterialArmor(armor, mat)
 		local hp = tonumber(health) or 0
 
 		if effMm <= 0 or hp <= 0 then return 0 end
 
-		return ACE.Points.ArmorProp(effMm, hp)
+		return ACE.Points.ArmorProp(effMm, hp, massEfficiency)
 	end
 
 	-- Helper to add centered help text; mirrors PANEL:CPanelText for this file.
@@ -815,7 +806,7 @@ if CLIENT then
 		local mass, armor, health = CalcArmor( area, ductility / 100, thickness , mat)
 		mass = math.min( mass, 50000 )
 		-- Preserve non-armor component cost when previewing an armor change.
-		local afterCost = getArmorPointPreview(armor, health, mat, MatData) + nonArmorCost
+		local afterCost = getArmorPointPreview(armor, health, mat) + nonArmorCost
 
 		local pointLine = ""
 		if acepointcost > 0 then
