@@ -53,6 +53,10 @@ local RACK_FLAT   = 100.0
 -- floor (1/RACK_WINDOW): no mounted delivery system prices below one round per window, closing
 -- the slow-alpha and tiny-ROFLimit aliases of the same cheese.
 local RACK_WINDOW = 30.0
+-- Balance reference: an identical unguided warhead fired by a 5 rpm gun. A ready
+-- tube pays the remaining 3 rpm of value in addition to its 2 rpm delivery allowance.
+local RACK_REFERENCE_RPS = 5.0 / 60.0
+local RACK_READY_RPS = RACK_REFERENCE_RPS - 1.0 / RACK_WINDOW
 local EXP_MM = 1.4                -- armor thickness exponent (intensive term -- untouched)
 -- Armor HP exponent. LINEAR/extensive on purpose: N props of the same total HP price
 -- identically to 1 prop, so splitting armor into fragments is points-neutral. A sub-linear
@@ -95,6 +99,20 @@ local GUIDANCE = {
 	AntiRadiation = 0.6, --Cost lowered to increase viability of antiradiation missiles as a backup weapon.
 	Beam_Riding = 0.8, --Beamriding is an inferior guidance method due to inability to see in 3d and wasted energy.
 }
+
+-- Total rack-price ratios against the reference gun, applied after weapon floors.
+-- Unlisted guidance keeps its existing relative factor; guns/explosives are unchanged.
+local RACK_GUIDANCE = {
+	Dumb = 0.7, Laser = 1.1, Infrared = 2.5, Radar = 2.5, Top_Attack_IR = 3.5,
+}
+
+--- Returns the rack's guidance price ratio against the reference gun.
+-- @param round table Converted round configuration.
+-- @return number Guidance ratio; unspecified guidance uses parity.
+function ACE.Points.RackGuidanceMul(round)
+	local guidance = round and round.guidance
+	return RACK_GUIDANCE[guidance] or GUIDANCE[guidance] or 1.0
+end
 
 -- Lethality once the round is inside armor: base damage plus the hole it tears
 -- (frontal area x the type's damage multiplier, normalized so a 100mm AP shell = 1.0; HEAT
@@ -157,9 +175,13 @@ end
 
 -- Intrinsic cost of one configured round. Inventory count is not billed, but every weapon
 -- multiplies this value by its own delivery rate and threat factor.
-function ACE.Points.BaseRoundCost(round)
+--- Computes intrinsic round value, optionally before guidance for rack pricing.
+-- @param round table Converted round configuration.
+-- @param unguided boolean Omit guidance when the weapon applies it to its final price.
+-- @return number Intrinsic round value.
+function ACE.Points.BaseRoundCost(round, unguided)
 	local cost = ACE.Points.LethalityPen(round) * ACE.Points.PostPenMult(round)
-		* ACE.Points.GuidanceMul(round) * ACE.Points.IntrinsicValueMul(round)
+		* (unguided and 1.0 or ACE.Points.GuidanceMul(round)) * ACE.Points.IntrinsicValueMul(round)
 	return max(cost, ROUND_COST_FLOOR)
 end
 
@@ -239,9 +261,24 @@ end
 -- @param bestScore number Selected round's threat-weighted score.
 -- @param baseRoundCost number Selected round's base cost.
 -- @param maxMissile number Ready tube count, default/minimum 1.
+-- @param guidance number Final guidance ratio; omitted retains legacy helper pricing.
 -- @return number Scaled rack points.
-function ACE.Points.RackCostFromRate(rate, bestScore, baseRoundCost, maxMissile)
+-- @return number Scaled ready-tube points.
+-- @return number Scaled total before flat minima, with the delivery-rate floor applied.
+function ACE.Points.RackCostFromRate(rate, bestScore, baseRoundCost, maxMissile, guidance)
 	local pricedRate = max(tonumber(rate) or 0, 1.0 / RACK_WINDOW)
+	local tubes = max(tonumber(maxMissile) or 1, 1)
+	if guidance then
+		local score = max(tonumber(bestScore) or 0, 0)
+		local scale = Model.Scale * guidance
+		local delivery = Model.kGun * pricedRate * score
+		local ready = Model.kGun * RACK_READY_RPS * score
+		local deliveryFloor = GUN_FLAT / (RACK_WINDOW * RACK_REFERENCE_RPS)
+		local readyFloor = GUN_FLAT - deliveryFloor
+		local readyPoints = max(ready, readyFloor) * tubes * scale
+		return max(delivery, deliveryFloor * tubes) * scale + readyPoints, readyPoints,
+			(delivery + ready * tubes) * scale
+	end
 	local deliveryCost = max(Model.kGun * pricedRate
 		* (tonumber(bestScore) or 0), RACK_FLAT)
 	local readyCost = max(tonumber(baseRoundCost) or 0, 0) * max(tonumber(maxMissile) or 1, 1)
@@ -259,9 +296,10 @@ end
 -- @param maxMissile number Ready tube count.
 -- @param bestScore number Selected round's threat-weighted score.
 -- @param baseRoundCost number Selected round's base cost.
+-- @param guidance number Final guidance ratio; omitted retains legacy helper pricing.
 -- @return number Scaled rack points.
-function ACE.Points.RackCost(reloadTime, maxMissile, bestScore, baseRoundCost)
-	return ACE.Points.RackCostFromRate(ACE.Points.RackRate(reloadTime, maxMissile), bestScore, baseRoundCost, maxMissile)
+function ACE.Points.RackCost(reloadTime, maxMissile, bestScore, baseRoundCost, guidance)
+	return ACE.Points.RackCostFromRate(ACE.Points.RackRate(reloadTime, maxMissile), bestScore, baseRoundCost, maxMissile, guidance)
 end
 
 -- Mounted charges use one tube-window without the rack hardware floor. Stored ammo remains free.

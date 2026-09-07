@@ -1232,14 +1232,15 @@ local function resolveRackPricingCandidate(rack)
 			if round then
 				local reload = ACE.GetRackConfiguredReloadTime(rack, crate.BulletData)
 				local rate = ACE.Points.RackRate(reload, rack.MaxMissile)
-				local baseRoundCost = ACE.Points.BaseRoundCost(round)
-				local roundScore = ACE.Points.RoundScore(round)
+				local baseRoundCost = ACE.Points.BaseRoundCost(round, true)
+				local roundScore = ACE.Points.Gate(ACE.Points.GatePen(round)) * baseRoundCost
+				local guidance = ACE.Points.RackGuidanceMul(round)
 				local candidate = {
 					Round = round,
 					Rate = rate,
 					RoundScore = roundScore,
 					BaseRoundCost = baseRoundCost,
-					FinalScore = ACE.Points.RackCostFromRate(rate, roundScore, baseRoundCost, rack.MaxMissile),
+					FinalScore = ACE.Points.RackCostFromRate(rate, roundScore, baseRoundCost, rack.MaxMissile, guidance),
 					SourceIndex = crate:EntIndex(),
 				}
 
@@ -1273,23 +1274,25 @@ local function resolveWeaponPricingInputs(ent)
 	local round = candidate and candidate.Round
 	local rate = candidate and candidate.Rate or 0
 	local threat = round and ACE.Points.Gate(ACE.Points.GatePen(round)) or 0
-	local baseRoundCost = round and ACE.Points.BaseRoundCost(round) or 0
+	local baseRoundCost = round and ACE.Points.BaseRoundCost(round, isRack) or 0
 	local roundScore = threat * baseRoundCost
-	local points = class == "acf_gun"
-		and ACE.Points.GunCost(rate, baseRoundCost, threat)
-		or ACE.Points.RackCostFromRate(rate, roundScore, baseRoundCost, ent.MaxMissile)
+	local guidance = isRack and ACE.Points.RackGuidanceMul(round) or 1
+	local points, baseRoundCostPoints, rackRawPoints
+	if isRack then
+		points, baseRoundCostPoints, rackRawPoints = ACE.Points.RackCostFromRate(
+			rate, roundScore, baseRoundCost, ent.MaxMissile, guidance)
+	else
+		points, baseRoundCostPoints = ACE.Points.GunCost(rate, baseRoundCost, threat), 0
+	end
 	local model = ACE.PointsModel or {}
 	local firepowerScale = (tonumber(model.kGun) or 0) * (tonumber(model.Scale) or 0)
 	-- BaseRoundCostPoints includes every ready tube; DeliveryPoints is the floored delivery term.
-	local rawPoints = rate * roundScore * firepowerScale
-	local baseRoundCostPoints = isRack
-		and baseRoundCost * math.max(tonumber(ent.MaxMissile) or 1, 1) * (tonumber(model.Scale) or 0)
-		or 0
+	local rawPoints = rate * roundScore * firepowerScale * guidance
 	local rateFloor = ACE.Points.RateFloor and ACE.Points.RateFloor() or 0
 	-- Compare against the FLOORED rate's raw product, not the true rate's -- otherwise every
 	-- floor-affected weapon falsely reads as having hit the flat weapon minimum instead.
 	local flooredRate = (rateFloor > 0) and math.max(rate, rateFloor) or rate
-	local flooredRawPoints = flooredRate * roundScore * firepowerScale + baseRoundCostPoints
+	local flooredRawPoints = rackRawPoints or flooredRate * roundScore * firepowerScale
 	local minimumApplied = points > flooredRawPoints + 0.01
 
 	return {
@@ -1302,6 +1305,7 @@ local function resolveWeaponPricingInputs(ent)
 		BaseRoundCostPoints = baseRoundCostPoints,
 		DeliveryPoints = points - baseRoundCostPoints,
 		IsRack = isRack,
+		GuidanceMultiplier = guidance,
 		MinimumApplied = minimumApplied,
 		-- Distinct from MinimumApplied: this is the delivery-rate floor, not the flat weapon
 		-- minimum, and can engage on builds pricing well above the flat floor. Mutually
@@ -1341,10 +1345,10 @@ function ACE.GetGunFirepowerPricingLine(readout, menuFormat)
 
 	if not menuFormat then
 		if readout.IsRack then
-			return string.format("Rack delivery: %s pts + %s ready-missile pts = %s pts",
+			return string.format("Rack delivery: %s pts + %s ready-missile pts = %s pts (includes %.2fx guidance)",
 				string.Comma(math.Round(readout.DeliveryPoints)),
 				string.Comma(math.Round(readout.BaseRoundCostPoints)),
-				string.Comma(math.Round(readout.Points)))
+				string.Comma(math.Round(readout.Points)), readout.GuidanceMultiplier or 1)
 		end
 
 		return string.format("%.3f/s x %.1f%% threat x %s base x %.4f scale = %s pts",
@@ -1356,10 +1360,10 @@ function ACE.GetGunFirepowerPricingLine(readout, menuFormat)
 	end
 
 	if readout.IsRack then
-		return string.format("%.1f rpm / 60; %s delivery pts + %s ready-missile pts",
+		return string.format("%.1f rpm / 60; %s delivery pts + %s ready-missile pts (includes %.2fx guidance)",
 			readout.Rate * 60,
 			string.Comma(math.Round(readout.DeliveryPoints)),
-			string.Comma(math.Round(readout.BaseRoundCostPoints)))
+			string.Comma(math.Round(readout.BaseRoundCostPoints)), readout.GuidanceMultiplier or 1)
 	end
 
 	return string.format("%.1f rpm / 60 x %.1f%% threat x %.1f base x %.1f scale",
@@ -1384,8 +1388,12 @@ function ACE.GetRateFloorLine(readout, menuFormat)
 		(readout.Rate or 0) * 60)
 end
 
--- Formats the lethality factors used by the points model.
-function ACE.GetRoundLethalityLine(round, menuFormat)
+--- Formats the lethality factors used by the points model.
+-- @param round table Converted round configuration.
+-- @param menuFormat boolean Use compact formatting.
+-- @param unguided boolean Omit guidance when it is shown on the rack's total-price line.
+-- @return string Round lethality explanation.
+function ACE.GetRoundLethalityLine(round, menuFormat, unguided)
 	if not istable(round) then return nil end
 
 	local base, hole, blast = ACE.Points.PostPenParts(round)
@@ -1405,7 +1413,7 @@ function ACE.GetRoundLethalityLine(round, menuFormat)
 			round.Type or "Round", math.Round(pen), penLabel, dmg, base, hole, blast)
 	end
 
-	local guid = ACE.Points.GuidanceMul(round)
+	local guid = unguided and 1.0 or ACE.Points.GuidanceMul(round)
 	if guid ~= 1.0 then
 		line = line .. string.format(" x %.1f guidance", guid)
 	end

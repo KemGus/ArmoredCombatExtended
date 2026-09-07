@@ -317,7 +317,7 @@ local function getPopupPoints(ent)
 			end
 			local floorLine = ACE.GetRateFloorLine and ACE.GetRateFloorLine(readout, true)
 			if floorLine then lines[#lines + 1] = floorLine end
-			local roundLine = readout.Round and ACE.GetRoundLethalityLine and ACE.GetRoundLethalityLine(readout.Round, true)
+			local roundLine = readout.Round and ACE.GetRoundLethalityLine and ACE.GetRoundLethalityLine(readout.Round, true, readout.IsRack)
 			if roundLine then lines[#lines + 1] = "Best Round: " .. roundLine end
 		end
 	elseif cls == "acf_ammo" then

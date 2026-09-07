@@ -932,7 +932,7 @@ function ENT:GetOverlayText()
 		if readout then
 			txt = txt .. "\nFirepower: " .. string.Comma(math.Round(readout.Points)) .. " pts"
 			local roundLine = readout.Round and ACE.GetRoundLethalityLine
-				and ACE.GetRoundLethalityLine(readout.Round, true)
+				and ACE.GetRoundLethalityLine(readout.Round, true, true)
 			if roundLine then txt = txt .. "\nBest Round: " .. roundLine end
 			if readout.MinimumApplied then
 				txt = txt .. "\nWeapon Minimum Applied: " .. string.Comma(math.Round(readout.Points)) .. " pts"

@@ -80,7 +80,7 @@ class EntityPipelineContractTests(unittest.TestCase):
         functions = source("ace/shared/sh_ace_functions.lua")
         self.assertIn("local isRack = class == \"acf_rack\"", functions)
         self.assertIn(
-            "local flooredRawPoints = flooredRate * roundScore * firepowerScale + baseRoundCostPoints",
+            "local flooredRawPoints = rackRawPoints or flooredRate * roundScore * firepowerScale",
             functions,
         )
         self.assertIn(
@@ -92,7 +92,7 @@ class EntityPipelineContractTests(unittest.TestCase):
             functions,
         )
         self.assertIn(
-            "FinalScore = ACE.Points.RackCostFromRate(rate, roundScore, baseRoundCost, rack.MaxMissile)",
+            "FinalScore = ACE.Points.RackCostFromRate(rate, roundScore, baseRoundCost, rack.MaxMissile, guidance)",
             functions,
         )
         for field in (

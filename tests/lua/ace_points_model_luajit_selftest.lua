@@ -129,31 +129,69 @@ local rack = { GetClass = function() return "acf_rack" end, MaxMissile = 1,
 	AmmoLink = { lowCrate, highCrate } }
 local rate = ACE.Points.RackRate(2, 1)
 local rackExpected = math.max(
-	ACE.Points.RackCostFromRate(rate, ACE.Points.RoundScore(lowRound), ACE.Points.BaseRoundCost(lowRound)),
-	ACE.Points.RackCostFromRate(rate, ACE.Points.RoundScore(highRound), ACE.Points.BaseRoundCost(highRound)))
+	ACE.Points.RackCostFromRate(rate, ACE.Points.RoundScore(lowRound), ACE.Points.BaseRoundCost(lowRound), 1, 1),
+	ACE.Points.RackCostFromRate(rate, ACE.Points.RoundScore(highRound), ACE.Points.BaseRoundCost(highRound), 1, 1))
 near(ACE.GetGunFirepowerPoints(rack), rackExpected, "racks must retain strongest-candidate pricing")
 for _, tubes in ipairs({ 1, 2, 4 }) do
 	rack.MaxMissile = tubes
-	local rackRate = ACE.Points.RackRate(2, tubes)
 	local function expected(round)
-		return (math.max(ACE.PointsModel.kGun * rackRate * ACE.Points.RoundScore(round), 100)
-			+ tubes * ACE.Points.BaseRoundCost(round)) * ACE.PointsModel.Scale
+		return tubes * ACE.Points.GunCost(5 / 60, ACE.Points.BaseRoundCost(round),
+			ACE.Points.Gate(ACE.Points.GatePen(round)))
 	end
 	local readout = ACE.GetGunFirepowerReadout(rack)
 	near(readout.Points, math.max(expected(lowRound), expected(highRound)),
 		"rack candidate selection and billing must charge every ready tube")
-	near(readout.BaseRoundCostPoints, tubes * ACE.Points.BaseRoundCost(readout.Round) * ACE.PointsModel.Scale,
+	near(readout.BaseRoundCostPoints, 0.6 * readout.Points,
 		"readout must expose all ready-missile points")
 	near(readout.DeliveryPoints + readout.BaseRoundCostPoints, readout.Points,
 		"rack readout components must reconcile")
 	rack.CurMissile = 0
 	near(ACE.GetGunFirepowerPoints(rack), readout.Points, "empty tubes retain design points")
 end
-local largeBase = { Type = "AP", maxPen = 10, FrArea = 119 * math.pi * 25, rate = 0.1 }
-local highThreat = { Type = "AP", maxPen = 1000, FrArea = 0, rate = 0.1 }
-rack.MaxMissile, rack.AmmoLink = 4, { ammo(largeBase, 1, 7), ammo(highThreat, 1, 8) }
-assert(ACE.GetGunFirepowerReadout(rack).Round == largeBase,
-	"candidate ordering must include all ready tubes, not just the final billing call")
+local dumb = { Type = "HEAT", maxPen = 900, FrArea = 1, guidance = "Dumb" }
+local seeker = { Type = "HEAT", maxPen = 500, FrArea = 1, guidance = "Radar" }
+rack.MaxMissile, rack.AmmoLink = 4, { ammo(dumb, 1, 7), ammo(seeker, 1, 8) }
+assert(ACE.GetGunFirepowerReadout(rack).Round == seeker,
+	"candidate ordering must apply the new guidance ratios before selecting ammo")
+for _, pen in ipairs({ 0, 1, 100, 840, 2000 }) do
+	local round = { Type = "HEAT", maxPen = pen, FrArea = 1 }
+	local base = ACE.Points.BaseRoundCost(round, true)
+	local threat = ACE.Points.Gate(pen)
+	local reference = ACE.Points.GunCost(5 / 60, base, threat)
+	for name, ratio in pairs({ Dumb = 0.7, Laser = 1.1, Infrared = 2.5, Radar = 2.5, Top_Attack_IR = 3.5 }) do
+		round.guidance = name
+		near(ACE.Points.BaseRoundCost(round, true), base, "rack payload must exclude legacy guidance")
+		for _, tubes in ipairs({ 1, 2, 4 }) do
+			rack.MaxMissile, rack.AmmoLink = tubes, { ammo(round, 1, 9) }
+			local readout = ACE.GetGunFirepowerReadout(rack)
+			near(readout.Points, reference * ratio * tubes,
+				"actual rack billing must hit total-price targets including flat minima and tube scaling")
+			near(readout.DeliveryPoints + readout.BaseRoundCostPoints, readout.Points,
+				"guidance-adjusted readout must reconcile")
+			near(readout.GuidanceMultiplier, ratio, "readout must expose the final guidance ratio")
+			near(ACE.Points.RackCost(2, tubes, base * threat, base, ratio), readout.Points,
+				"wrapper must pass the guidance ratio")
+		end
+	end
+end
+local fast = ACE.GetGunFirepowerPoints(rack)
+math.Round = function(value) return math.floor(value + 0.5) end
+string.Comma = tostring
+local rackReadout = ACE.GetGunFirepowerReadout(rack)
+assert(ACE.GetGunFirepowerPricingLine(rackReadout, true):find(
+	string.format("includes %.2fx guidance", rackReadout.GuidanceMultiplier), 1, true),
+	"rack pricing text must show the billed guidance ratio")
+ACE.GetRackConfiguredReloadTime = function() return 120 end
+local slow = ACE.GetGunFirepowerPoints(rack)
+assert(slow <= fast and slow >= fast * 0.6,
+	"slow racks retain per-tube value while delivery cost may decrease")
+rack.MaxMissile, rack.AmmoLink = nil, {}
+near(ACE.GetGunFirepowerPoints(rack), ACE.Points.GunCost(5 / 60, 0, 0),
+	"empty racks with missing tube capacity must retain the reference minimum")
+for _, name in ipairs({ "Beam_Riding", "GPS", "Unknown" }) do
+	near(ACE.Points.RackGuidanceMul({ guidance = name }), ACE.Points.GuidanceMul({ guidance = name }),
+		"guidance outside the agreed tiers retains its relative factor")
+end
 ACE.GetRackConfiguredReloadTime = rackReload
 ACE.Points.RoundFromBullet, ACE.GetGunConfiguredRps = convertRound, configuredRate
 assert(loadstring(assert(shared:match("(function ACE.GetSurvivabilityIndex%b().-\nend)"))))()
