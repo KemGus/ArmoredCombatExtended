@@ -80,6 +80,60 @@ local function readSource(path)
 	return source
 end
 local shared = readSource("ace/shared/sh_ace_functions.lua")
+local pricingSource = shared:sub(assert(shared:find("local function resolveGunPricingCandidate", 1, true)),
+	assert(shared:find("-- Tells a player when their weapon priced", 1, true)) - 1)
+assert(loadstring(pricingSource))()
+local convertRound, configuredRate = ACE.Points.RoundFromBullet, ACE.GetGunConfiguredRps
+ACE.Points.RoundFromBullet = function(round) return round end
+ACE.GetGunConfiguredRps = function(_, _, round) return round.rate end
+local lowRound = { Type = "APFSDS", maxPen = 200, FrArea = 1, rate = 0.2 }
+local highRound = { Type = "THEATFS", maxPen = 1000, FrArea = 1, rate = 0.1 }
+local function ammo(round, capacity, index)
+	return { BulletData = round, Capacity = capacity, Ammo = capacity,
+		EntIndex = function() return index end }
+end
+local lowCrate, highCrate = ammo(lowRound, 9, 1), ammo(highRound, 3, 2)
+local mixedGun = { GetClass = function() return "acf_gun" end, AmmoLink = { lowCrate } }
+local lowCost = ACE.GetGunFirepowerPoints(mixedGun)
+mixedGun.AmmoLink = { highCrate }
+local highCost = ACE.GetGunFirepowerPoints(mixedGun)
+mixedGun.AmmoLink = { lowCrate, highCrate }
+near(ACE.GetGunFirepowerPoints(mixedGun), 0.75 * lowCost + 0.25 * highCost,
+	"9 low and 3 high rounds must weight complete gun costs 75/25")
+local mixedReadout = ACE.GetGunFirepowerReadout(mixedGun)
+assert(mixedReadout.AmmoMix and not mixedReadout.Round,
+	"mixed readout must not label a single round as the billed best round")
+local comma, roundNumber = string.Comma, math.Round
+string.Comma, math.Round = tostring, function(value) return math.floor(value + 0.5) end
+assert(ACE.GetGunFirepowerPricingLine(mixedReadout, true):find("capacity-weighted", 1, true),
+	"tool explanation must identify the weighted ammo mix")
+string.Comma, math.Round = comma, roundNumber
+lowCrate.Ammo, highCrate.Ammo = 0, 0
+near(ACE.GetGunFirepowerPoints(mixedGun), mixedReadout.Points,
+	"firing or resupplying must not change design points")
+lowCrate.Capacity, highCrate.Capacity = 18, 6
+near(ACE.GetGunFirepowerPoints(mixedGun), mixedReadout.Points,
+	"doubling inventory at the same mix must not double cost")
+mixedGun.AmmoLink = { ammo(lowRound, 9, 3), highCrate, ammo(lowRound, 9, 4) }
+near(ACE.GetGunFirepowerPoints(mixedGun), mixedReadout.Points,
+	"splitting the same rounds across crates must preserve cost")
+mixedGun.AmmoLink = { lowCrate, ammo(highRound, 0, 5), ammo(highRound, nil, 6) }
+near(ACE.GetGunFirepowerPoints(mixedGun), lowCost,
+	"zero or missing capacities must not dilute the loadout")
+mixedGun.AmmoLink = {}
+near(ACE.GetGunFirepowerPoints(mixedGun), ACE.Points.GunCost(0, 0, 0),
+	"unlinked guns must retain the weapon minimum")
+local rackReload = ACE.GetRackConfiguredReloadTime
+ACE.GetRackConfiguredReloadTime = function() return 2 end
+local rack = { GetClass = function() return "acf_rack" end, MaxMissile = 1,
+	AmmoLink = { lowCrate, highCrate } }
+local rate = ACE.Points.RackRate(2, 1)
+local rackExpected = math.max(
+	ACE.Points.RackCostFromRate(rate, ACE.Points.RoundScore(lowRound), ACE.Points.BaseRoundCost(lowRound)),
+	ACE.Points.RackCostFromRate(rate, ACE.Points.RoundScore(highRound), ACE.Points.BaseRoundCost(highRound)))
+near(ACE.GetGunFirepowerPoints(rack), rackExpected, "racks must retain strongest-candidate pricing")
+ACE.GetRackConfiguredReloadTime = rackReload
+ACE.Points.RoundFromBullet, ACE.GetGunConfiguredRps = convertRound, configuredRate
 assert(loadstring(assert(shared:match("(function ACE.GetSurvivabilityIndex%b().-\nend)"))))()
 local tool = readSource("weapons/gmod_tool/stools/acearmorprop.lua")
 local previewSource = assert(tool:match("(local function getArmorPointPreview%b().-\n\tend)"))
