@@ -4,7 +4,7 @@ ACE.Points = ACE.Points or {}
 --[[-----------------------------------------------------------------------------
 	ACE Contraption Points -- pricing model
 
-	Linked ammunition sets configuration shares; reserve inventory is not billed.
+	The most expensive linked configuration sets weapon cost; inventory is not billed.
 	Shell length and assigned warhead premiums set firepower; cadence adds a mild premium.
 	The pure model must load under vanilla Lua 5.1; GMod calls belong in the adapters.
 -------------------------------------------------------------------------------]]
@@ -15,7 +15,7 @@ ACE.Points = ACE.Points or {}
 
 -- Mutate these fields in place because Model retains this table.
 ACE.PointsModel = ACE.PointsModel or {
-	kGun   = 12.0,            -- firepower scale
+	kGun   = 6.0,            -- firepower scale
 	kArmor = 0.259845,         -- armor survivability scale
 	kEng   = 1.501,            -- engine power scale
 	Scale  = 0.65,            -- global display scale shared by all point categories
@@ -39,25 +39,25 @@ local RACK_WINDOW = 30.0
 -- 40% delivery value plus 60% ready payload; guidance multiplies the total.
 local RACK_REFERENCE_RPS = 5.0 / 60.0
 local RACK_READY_SHARE = 1.0 - 1.0 / (RACK_WINDOW * RACK_REFERENCE_RPS)
-local FIRE_RATE_EXP = 0.25 -- sixteen times the cadence doubles its price multiplier
+local FIRE_RATE_EXP = 0.2 -- thirty-two times the cadence doubles its price multiplier
 local EXP_MM = 1.4                -- armor thickness exponent (intensive term -- untouched)
 -- Armor HP exponent. LINEAR/extensive on purpose: N props of the same total HP price
 -- identically to 1 prop, so splitting armor into fragments is points-neutral. A sub-linear
 -- exponent would reward that split as a pricing exploit.
 local EXP_HP = 1.0
 
--- Balance multipliers, not damage simulation: every warhead pays at least its total shell length.
+-- Assigned combat premiums; utility and anti-personnel rounds retain lower specialist prices.
 local WARHEAD = {
-	SM = 1.0, FLR = 1.0, CHF = 1.0, Refill = 1.0, HP = 1.0, FL = 1.0,
-	AP = 1.25, CAP = 1.25, HE = 1.25, HEFS = 1.25, CHE = 1.25, HESH = 1.25,
-	APHE = 1.5, HVAP = 1.5, APDS = 1.5,
-	APFSDS = 2.0, HEAT = 1.75, HEATFS = 1.75, CHEAT = 1.75, GLATGM = 1.75,
-	THEAT = 2.0, THEATFS = 2.0, ["GLATGM-HE"] = 1.25,
+	SM = 0.05, FLR = 0.05, CHF = 0.05, FL = 0.2,
+	Refill = 1.0, HP = 1.0, HE = 1.0, HEFS = 1.1, HESH = 1.15,
+	HEAT = 1.1, HEATFS = 1.25, THEAT = 1.4, THEATFS = 1.6,
+	HVAP = 1.25, AP = 1.5, APHE = 1.7, APDS = 1.75, APFSDS = 2.0,
+	CAP = 1.25, CHE = 1.25, CHEAT = 1.75, GLATGM = 1.75, ["GLATGM-HE"] = 1.25,
 }
 
 --- Returns the assigned warhead premium; unknown types retain the full length baseline.
 -- @param round table Converted round configuration.
--- @return number Warhead multiplier, always at least one.
+-- @return number Positive warhead multiplier, including specialist discounts.
 function ACE.Points.WarheadMul(round)
 	return WARHEAD[round.Type] or 1.0
 end
@@ -144,7 +144,7 @@ end
 
 --- Returns the mild cadence premium relative to a five-rpm weapon.
 -- @param rate number Configured rounds per second.
--- @return number Fourth-root rate multiplier, before the delivery-rate floor.
+-- @return number Fifth-root rate multiplier, before the delivery-rate floor.
 function ACE.Points.FireRateMul(rate)
 	return (max(tonumber(rate) or 0, 0) / RACK_REFERENCE_RPS) ^ FIRE_RATE_EXP
 end

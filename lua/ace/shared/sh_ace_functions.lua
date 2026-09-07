@@ -1186,40 +1186,27 @@ function ACE.GetRackConfiguredReloadTime(rack, bdata)
 	return reload > 0 and reload or 1
 	end
 
--- Weight each complete gun configuration by capacity times converted projectile length,
--- never remaining Ammo. Short, densely packed rounds must not dominate by count alone.
+-- Select by final gun price so each round retains its own configured cadence.
 local function resolveGunPricingCandidate(gun)
 	if not ACE.IsEnt(gun) then return end
 
 	local best
-	local capacity, totalWeight, weightedPoints, count = 0, 0, 0, 0
-	local function consider(bdata, crate)
-		local rounds = math.max(tonumber(crate.Capacity) or 0, 0)
-		local length = tonumber(bdata.ProjLength) or 0
-		if rounds <= 0 or length <= 0 then return end
-		local weight = rounds * length
-		local round = ACE.Points.RoundFromBullet(bdata)
-		if not round then return end
-
-		local rate = ACE.Points.GunSustainedRps(gun, bdata, crate)
-		local cost = ACE.Points.GunCost(rate, ACE.Points.BaseRoundCost(round))
-		capacity = capacity + rounds
-		totalWeight = totalWeight + weight
-		weightedPoints = weightedPoints + weight * cost
-		count = count + 1
-		best = {
-			Round = round,
-			Rate = rate
-		}
-	end
-
 	for _, crate in pairs(gun.AmmoLink or {}) do
-		if ACE.IsEnt(crate) and istable(crate.BulletData) then consider(crate.BulletData, crate) end
-	end
-
-	if best and count > 1 then
-		best.MixPoints = weightedPoints / totalWeight
-		best.Capacity = capacity
+		if ACE.IsEnt(crate) and istable(crate.BulletData) then
+			local round = ACE.Points.RoundFromBullet(crate.BulletData)
+			if round then
+				local rate = ACE.Points.GunSustainedRps(gun, crate.BulletData, crate)
+				local score = ACE.Points.BaseRoundCost(round)
+				local candidate = {
+					Round = round,
+					Rate = rate,
+					RoundScore = score,
+					FinalScore = ACE.Points.GunCost(rate, score),
+					SourceIndex = crate:EntIndex(),
+				}
+				if ACE.Points.IsBetterCandidate(candidate, best) then best = candidate end
+			end
+		end
 	end
 	return best
 end
@@ -1261,18 +1248,12 @@ local function resolveWeaponPricingInputs(ent)
 	local class = ent:GetClass()
 	if class ~= "acf_gun" and class ~= "acf_rack" then return end
 
-	local candidate = class == "acf_gun"
-		and resolveGunPricingCandidate(ent)
-		or resolveRackPricingCandidate(ent)
 	local isRack = class == "acf_rack"
-	if not isRack and candidate and candidate.MixPoints then
-		return {
-			Points = candidate.MixPoints,
-			DeliveryPoints = candidate.MixPoints,
-			IsRack = false,
-			AmmoMix = true,
-			Capacity = candidate.Capacity
-		}
+	local candidate
+	if isRack then
+		candidate = resolveRackPricingCandidate(ent)
+	else
+		candidate = resolveGunPricingCandidate(ent)
 	end
 	local round = candidate and candidate.Round
 	local rate = candidate and candidate.Rate or 0
@@ -1332,17 +1313,12 @@ function ACE.GetGunFirepowerReadout(ent, _)
 	return resolveWeaponPricingInputs(ent)
 end
 
---- Formats a single configuration or capacity-weighted gun ammo mix.
+--- Formats the most expensive linked weapon configuration.
 -- @param readout table Weapon pricing inputs.
 -- @param menuFormat boolean Use the compact menu format.
 -- @return string Pricing explanation, or nil for an invalid readout.
 function ACE.GetGunFirepowerPricingLine(readout, menuFormat)
 	if not istable(readout) then return end
-	if readout.AmmoMix then
-		return string.format("Ammo mix: %s rounds, capacity x projectile length weighted = %s pts",
-			string.Comma(math.Round(readout.Capacity)),
-			string.Comma(math.Round(readout.Points)))
-	end
 	if not readout.Rate or not readout.BaseRoundCost then return end
 
 	if not menuFormat then
