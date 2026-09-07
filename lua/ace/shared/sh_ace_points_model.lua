@@ -82,10 +82,6 @@ end
 -- HEAT jet family: the shaped-charge slug caliber (not the shell body) sets the area.
 local HEAT_FAMILY = { HEAT = true, HEATFS = true, THEAT = true, THEATFS = true, CHEAT = true, GLATGM = true }
 local UTILITY     = { SM = true, Refill = true }   -- smoke, chaff, flares, and refill carry no damage
--- Gun classes whose definitions set noloader=true, so acf_gun refuses loader links. SL is
--- included by the model so salvo launchers price like the other auto classes rather than
--- taking a crewed-loader reload buff they cannot use.
-local AUTO_CLASSES = { AC = true, MG = true, RAC = true, HMG = true, GL = true, SA = true, SL = true, AL = true }
 -- Guidance names omitted from this table use a 1.0 multiplier.
 local GUIDANCE = {
 	Dumb = 0.5,
@@ -204,21 +200,18 @@ function ACE.Points.IsBetterCandidate(candidate, best)
 	return candidate.SourceIndex < best.SourceIndex
 end
 
--- Static sustained cadence. Magazine-aware (burst then mag reload) and loader-aware for
--- non-auto classes. baseRps already folds in the gun's current wire ROFLimit (the adapter
--- below applies it via ACE_GetGunConfiguredRps before calling here), so a low limit lengthens
--- the effective cycle through this same math rather than being ignored.
-function ACE.Points.SustainedRps(baseRps, magSize, magReload, gunClass, loaders)
+--- Prices magazine-aware cadence without crew reload modifiers.
+-- @param baseRps number Configured rounds per second, including the wire ROFLimit.
+-- @param magSize number Magazine capacity.
+-- @param magReload number Magazine reload time in seconds.
+-- @return number Sustained rounds per second used for points.
+function ACE.Points.SustainedRps(baseRps, magSize, magReload)
 	local base   = tonumber(baseRps) or 0
 	local mag    = tonumber(magSize) or 0
 	local magrel = tonumber(magReload) or 0
-	loaders      = tonumber(loaders) or 0
 
 	if mag > 1 and magrel > 0 and base > 0 then
 		base = mag / (mag / base + magrel)
-	end
-	if not AUTO_CLASSES[gunClass or ""] then
-		base = base / max(1.25 - 0.25 * loaders, 0.5)   -- crewed-loader buff (static design)
 	end
 	return base
 end
@@ -298,7 +291,7 @@ function ACE.Points.EngineCost(hp)
 	return Model.kEng * (tonumber(hp) or 0) * Model.Scale
 end
 
---- Keeps required crew free; loader capability is priced through gun cadence.
+--- Keeps required crew and their reload benefits free.
 -- @return number Zero crew points.
 function ACE.Points.CrewCost()
 	return 0
@@ -388,12 +381,16 @@ function ACE.Points.RoundFromBullet(bdata)
 	return round
 end
 
--- ROFLimit is a pricing input and its trigger path must dirty points. LoaderCount is local to
--- the gun, including loaders linked across contraption fragments.
+--- Resolves priced gun cadence without loader bonuses or uncrewed penalties.
+-- ROFLimit remains a pricing input and its trigger path must dirty points.
+-- @param gun Entity Gun being priced.
+-- @param bdata table Candidate bullet data.
+-- @param crate Entity Candidate ammo crate.
+-- @return number Sustained rounds per second used for points.
 function ACE.Points.GunSustainedRps(gun, bdata, crate)
 	if not ACE.IsEnt(gun) then return 0 end
 	local base = ACE.GetGunConfiguredRps(gun, tonumber(gun.ROFLimit) or 0, bdata, crate)
-	return ACE.Points.SustainedRps(base, gun.MagSize, gun.MagReload, gun.Class, gun.LoaderCount)
+	return ACE.Points.SustainedRps(base, gun.MagSize, gun.MagReload)
 end
 
 -- Mounted charge (scalable explosives / bombs family) -> scaled points. Prices the charge's

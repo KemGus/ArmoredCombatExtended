@@ -44,9 +44,27 @@ near(ACE.Points.EngineCost(2000), 2 * ACE.Points.EngineCost(1000),
 	"engine points must remain linear in power")
 assert(ACE.Points.CrewCost(false) == 0 and ACE.Points.CrewCost(true) == 0,
 	"all required crew must be free")
-assert(ACE.Points.SustainedRps(0.1, 1, 0, "SBC", 3)
-	> ACE.Points.SustainedRps(0.1, 1, 0, "SBC", 2),
-	"free loaders must still increase the gun's priced cadence")
+for _, class in ipairs({ "SBC", "C", "HW", "AL" }) do
+	for loaders = 0, 4 do
+		near(ACE.Points.SustainedRps(0.1, 1, 0, class, loaders), 0.1,
+			"crew count must not change priced cadence")
+		near(ACE.Points.SustainedRps(2, 4, 6, class, loaders), 0.5,
+			"magazine reload must still reduce priced cadence")
+	end
+end
+
+local configuredGunRps = ACE.GetGunConfiguredRps
+ACE.GetGunConfiguredRps = function(_, limit) return limit / 60 end
+local pricingGun = { MagSize = 1, MagReload = 0, Class = "SBC", ROFLimit = 60 }
+for loaders = 0, 4 do
+	pricingGun.LoaderCount = loaders
+	near(ACE.Points.GunSustainedRps(pricingGun, {}, {}), 1,
+		"gun adapter must not reintroduce loader pricing")
+end
+pricingGun.ROFLimit = 30
+near(ACE.Points.GunSustainedRps(pricingGun, {}, {}), 0.5,
+	"gun adapter must retain the configured rate limit")
+ACE.GetGunConfiguredRps = configuredGunRps
 
 ACE.ArmorTypes = {}
 for _, file in ipairs({ "rha", "cast", "ceramic", "du", "titanium", "aluminum", "era", "rubber", "textolite" }) do
