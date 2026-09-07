@@ -86,8 +86,8 @@ assert(loadstring(pricingSource))()
 local convertRound, configuredRate = ACE.Points.RoundFromBullet, ACE.GetGunConfiguredRps
 ACE.Points.RoundFromBullet = function(round) return round end
 ACE.GetGunConfiguredRps = function(_, _, round) return round.rate end
-local lowRound = { Type = "APFSDS", maxPen = 200, FrArea = 1, rate = 0.2 }
-local highRound = { Type = "THEATFS", maxPen = 1000, FrArea = 1, rate = 0.1 }
+local lowRound = { Type = "APFSDS", maxPen = 200, FrArea = 1, rate = 0.2, ProjLength = 10 }
+local highRound = { Type = "THEATFS", maxPen = 1000, FrArea = 1, rate = 0.1, ProjLength = 10 }
 local function ammo(round, capacity, index)
 	return { BulletData = round, Capacity = capacity, Ammo = capacity,
 		EntIndex = function() return index end }
@@ -105,9 +105,21 @@ assert(mixedReadout.AmmoMix and not mixedReadout.Round,
 	"mixed readout must not label a single round as the billed best round")
 local comma, roundNumber = string.Comma, math.Round
 string.Comma, math.Round = tostring, function(value) return math.floor(value + 0.5) end
-assert(ACE.GetGunFirepowerPricingLine(mixedReadout, true):find("capacity-weighted", 1, true),
+assert(ACE.GetGunFirepowerPricingLine(mixedReadout, true):find("capacity x projectile length", 1, true),
 	"tool explanation must identify the weighted ammo mix")
 string.Comma, math.Round = comma, roundNumber
+highRound.ProjLength = 30
+near(ACE.GetGunFirepowerPoints(mixedGun), 0.5 * lowCost + 0.5 * highCost,
+	"9 short and 3 triple-length rounds must have equal influence")
+lowCrate.Capacity, lowRound.ProjLength = 90, 1
+near(ACE.GetGunFirepowerPoints(mixedGun), 0.5 * lowCost + 0.5 * highCost,
+	"packing ten times as many tenth-length rounds must not dilute the average")
+for _, invalid in ipairs({ 0, -1, "missing" }) do
+	lowRound.ProjLength = tonumber(invalid)
+	near(ACE.GetGunFirepowerPoints(mixedGun), highCost,
+		"missing or nonpositive projectile length must not dilute valid ammunition")
+end
+lowCrate.Capacity, lowRound.ProjLength, highRound.ProjLength = 9, 10, 10
 lowCrate.Ammo, highCrate.Ammo = 0, 0
 near(ACE.GetGunFirepowerPoints(mixedGun), mixedReadout.Points,
 	"firing or resupplying must not change design points")

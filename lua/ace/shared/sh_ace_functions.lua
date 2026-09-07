@@ -1186,15 +1186,18 @@ function ACE.GetRackConfiguredReloadTime(rack, bdata)
 	return reload > 0 and reload or 1
 	end
 
--- Weight each complete gun configuration by full crate capacity, never remaining Ammo.
+-- Weight each complete gun configuration by capacity times converted projectile length,
+-- never remaining Ammo. Short, densely packed rounds must not dominate by count alone.
 local function resolveGunPricingCandidate(gun)
 	if not ACE.IsEnt(gun) then return end
 
 	local best
-	local capacity, weightedPoints, count = 0, 0, 0
+	local capacity, totalWeight, weightedPoints, count = 0, 0, 0, 0
 	local function consider(bdata, crate)
 		local rounds = math.max(tonumber(crate.Capacity) or 0, 0)
-		if rounds <= 0 then return end
+		local length = tonumber(bdata.ProjLength) or 0
+		if rounds <= 0 or length <= 0 then return end
+		local weight = rounds * length
 		local round = ACE.Points.RoundFromBullet(bdata)
 		if not round then return end
 
@@ -1202,7 +1205,8 @@ local function resolveGunPricingCandidate(gun)
 		local cost = ACE.Points.GunCost(rate, ACE.Points.BaseRoundCost(round),
 			ACE.Points.Gate(ACE.Points.GatePen(round)))
 		capacity = capacity + rounds
-		weightedPoints = weightedPoints + rounds * cost
+		totalWeight = totalWeight + weight
+		weightedPoints = weightedPoints + weight * cost
 		count = count + 1
 		best = {
 			Round = round,
@@ -1215,7 +1219,7 @@ local function resolveGunPricingCandidate(gun)
 	end
 
 	if best and count > 1 then
-		best.MixPoints = weightedPoints / capacity
+		best.MixPoints = weightedPoints / totalWeight
 		best.Capacity = capacity
 	end
 	return best
@@ -1337,7 +1341,7 @@ end
 function ACE.GetGunFirepowerPricingLine(readout, menuFormat)
 	if not istable(readout) then return end
 	if readout.AmmoMix then
-		return string.format("Ammo mix: %s rounds, capacity-weighted = %s pts",
+		return string.format("Ammo mix: %s rounds, capacity x projectile length weighted = %s pts",
 			string.Comma(math.Round(readout.Capacity)),
 			string.Comma(math.Round(readout.Points)))
 	end
