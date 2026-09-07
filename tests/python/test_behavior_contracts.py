@@ -84,15 +84,15 @@ class EntityPipelineContractTests(unittest.TestCase):
             functions,
         )
         self.assertIn(
-            "Rack delivery: %s pts + %s base-round pts = %s pts",
+            "Rack delivery: %s pts + %s ready-missile pts = %s pts",
             functions,
         )
         self.assertIn(
-            "%.1f rpm / 60; %s delivery pts + %s base-round pts",
+            "%.1f rpm / 60; %s delivery pts + %s ready-missile pts",
             functions,
         )
         self.assertIn(
-            "FinalScore = ACE.Points.RackCostFromRate(rate, roundScore, baseRoundCost)",
+            "FinalScore = ACE.Points.RackCostFromRate(rate, roundScore, baseRoundCost, rack.MaxMissile)",
             functions,
         )
         for field in (

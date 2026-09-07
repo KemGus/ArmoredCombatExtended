@@ -1239,7 +1239,7 @@ local function resolveRackPricingCandidate(rack)
 					Rate = rate,
 					RoundScore = roundScore,
 					BaseRoundCost = baseRoundCost,
-					FinalScore = ACE.Points.RackCostFromRate(rate, roundScore, baseRoundCost),
+					FinalScore = ACE.Points.RackCostFromRate(rate, roundScore, baseRoundCost, rack.MaxMissile),
 					SourceIndex = crate:EntIndex(),
 				}
 
@@ -1277,14 +1277,13 @@ local function resolveWeaponPricingInputs(ent)
 	local roundScore = threat * baseRoundCost
 	local points = class == "acf_gun"
 		and ACE.Points.GunCost(rate, baseRoundCost, threat)
-		or ACE.Points.RackCostFromRate(rate, roundScore, baseRoundCost)
+		or ACE.Points.RackCostFromRate(rate, roundScore, baseRoundCost, ent.MaxMissile)
 	local model = ACE.PointsModel or {}
 	local firepowerScale = (tonumber(model.kGun) or 0) * (tonumber(model.Scale) or 0)
-	-- RawPoints is the unfloored delivery multiplication. Rack totals add the selected round
-	-- separately through BaseRoundCostPoints, while DeliveryPoints is the actually floored term.
+	-- BaseRoundCostPoints includes every ready tube; DeliveryPoints is the floored delivery term.
 	local rawPoints = rate * roundScore * firepowerScale
 	local baseRoundCostPoints = isRack
-		and baseRoundCost * (tonumber(model.Scale) or 0)
+		and baseRoundCost * math.max(tonumber(ent.MaxMissile) or 1, 1) * (tonumber(model.Scale) or 0)
 		or 0
 	local rateFloor = ACE.Points.RateFloor and ACE.Points.RateFloor() or 0
 	-- Compare against the FLOORED rate's raw product, not the true rate's -- otherwise every
@@ -1342,7 +1341,7 @@ function ACE.GetGunFirepowerPricingLine(readout, menuFormat)
 
 	if not menuFormat then
 		if readout.IsRack then
-			return string.format("Rack delivery: %s pts + %s base-round pts = %s pts",
+			return string.format("Rack delivery: %s pts + %s ready-missile pts = %s pts",
 				string.Comma(math.Round(readout.DeliveryPoints)),
 				string.Comma(math.Round(readout.BaseRoundCostPoints)),
 				string.Comma(math.Round(readout.Points)))
@@ -1357,7 +1356,7 @@ function ACE.GetGunFirepowerPricingLine(readout, menuFormat)
 	end
 
 	if readout.IsRack then
-		return string.format("%.1f rpm / 60; %s delivery pts + %s base-round pts",
+		return string.format("%.1f rpm / 60; %s delivery pts + %s ready-missile pts",
 			readout.Rate * 60,
 			string.Comma(math.Round(readout.DeliveryPoints)),
 			string.Comma(math.Round(readout.BaseRoundCostPoints)))

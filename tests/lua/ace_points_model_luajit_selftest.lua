@@ -132,6 +132,28 @@ local rackExpected = math.max(
 	ACE.Points.RackCostFromRate(rate, ACE.Points.RoundScore(lowRound), ACE.Points.BaseRoundCost(lowRound)),
 	ACE.Points.RackCostFromRate(rate, ACE.Points.RoundScore(highRound), ACE.Points.BaseRoundCost(highRound)))
 near(ACE.GetGunFirepowerPoints(rack), rackExpected, "racks must retain strongest-candidate pricing")
+for _, tubes in ipairs({ 1, 2, 4 }) do
+	rack.MaxMissile = tubes
+	local rackRate = ACE.Points.RackRate(2, tubes)
+	local function expected(round)
+		return (math.max(ACE.PointsModel.kGun * rackRate * ACE.Points.RoundScore(round), 100)
+			+ tubes * ACE.Points.BaseRoundCost(round)) * ACE.PointsModel.Scale
+	end
+	local readout = ACE.GetGunFirepowerReadout(rack)
+	near(readout.Points, math.max(expected(lowRound), expected(highRound)),
+		"rack candidate selection and billing must charge every ready tube")
+	near(readout.BaseRoundCostPoints, tubes * ACE.Points.BaseRoundCost(readout.Round) * ACE.PointsModel.Scale,
+		"readout must expose all ready-missile points")
+	near(readout.DeliveryPoints + readout.BaseRoundCostPoints, readout.Points,
+		"rack readout components must reconcile")
+	rack.CurMissile = 0
+	near(ACE.GetGunFirepowerPoints(rack), readout.Points, "empty tubes retain design points")
+end
+local largeBase = { Type = "AP", maxPen = 10, FrArea = 119 * math.pi * 25, rate = 0.1 }
+local highThreat = { Type = "AP", maxPen = 1000, FrArea = 0, rate = 0.1 }
+rack.MaxMissile, rack.AmmoLink = 4, { ammo(largeBase, 1, 7), ammo(highThreat, 1, 8) }
+assert(ACE.GetGunFirepowerReadout(rack).Round == largeBase,
+	"candidate ordering must include all ready tubes, not just the final billing call")
 ACE.GetRackConfiguredReloadTime = rackReload
 ACE.Points.RoundFromBullet, ACE.GetGunConfiguredRps = convertRound, configuredRate
 assert(loadstring(assert(shared:match("(function ACE.GetSurvivabilityIndex%b().-\nend)"))))()
@@ -204,5 +226,10 @@ assert(math.abs(ACE.Points.RackCost(2, 1, rackScore)
 local rackFloor = ACE.Points.RackCostFromRate(0, 0, rackBaseCost)
 assert(math.abs(rackFloor - (100 + rackBaseCost) * ACE.PointsModel.Scale) < 1e-9,
 	"rack flat floor must apply before the base-round addition")
+near(ACE.Points.RackCostFromRate(0, 0, rackBaseCost, 4), (100 + 4 * rackBaseCost) * ACE.PointsModel.Scale,
+	"ready payload must scale even when delivery hits its minimum")
+near(ACE.Points.RackCost(6, 4, rackScore, rackBaseCost),
+	ACE.Points.RackCostFromRate(ACE.Points.RackRate(6, 4), rackScore, rackBaseCost, 4),
+	"reload-time wrapper must forward tube capacity")
 
 print("ACE points model LuaJIT self-test: PASS")

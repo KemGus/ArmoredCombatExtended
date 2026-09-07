@@ -234,11 +234,18 @@ function ACE.Points.RackRate(reloadTime, maxMissile)
 	return min(1.0 / max(rt, 0.5), mm / RACK_WINDOW)
 end
 
-function ACE.Points.RackCostFromRate(rate, bestScore, baseRoundCost)
+--- Prices rack delivery and one base-round charge per ready tube.
+-- @param rate number Sustained rounds per second.
+-- @param bestScore number Selected round's threat-weighted score.
+-- @param baseRoundCost number Selected round's base cost.
+-- @param maxMissile number Ready tube count, default/minimum 1.
+-- @return number Scaled rack points.
+function ACE.Points.RackCostFromRate(rate, bestScore, baseRoundCost, maxMissile)
 	local pricedRate = max(tonumber(rate) or 0, 1.0 / RACK_WINDOW)
 	local deliveryCost = max(Model.kGun * pricedRate
 		* (tonumber(bestScore) or 0), RACK_FLAT)
-	return (deliveryCost + max(tonumber(baseRoundCost) or 0, 0)) * Model.Scale
+	local readyCost = max(tonumber(baseRoundCost) or 0, 0) * max(tonumber(maxMissile) or 1, 1)
+	return (deliveryCost + readyCost) * Model.Scale
 end
 
 -- Public so readouts can tell a player when the priced-rate floor changed their bill, instead
@@ -247,9 +254,14 @@ function ACE.Points.RateFloor()
 	return 1.0 / RACK_WINDOW
 end
 
--- Tube count caps sustained rack rate over the engagement window.
+--- Prices a rack from its configured reload time and ready capacity.
+-- @param reloadTime number Configured reload time in seconds.
+-- @param maxMissile number Ready tube count.
+-- @param bestScore number Selected round's threat-weighted score.
+-- @param baseRoundCost number Selected round's base cost.
+-- @return number Scaled rack points.
 function ACE.Points.RackCost(reloadTime, maxMissile, bestScore, baseRoundCost)
-	return ACE.Points.RackCostFromRate(ACE.Points.RackRate(reloadTime, maxMissile), bestScore, baseRoundCost)
+	return ACE.Points.RackCostFromRate(ACE.Points.RackRate(reloadTime, maxMissile), bestScore, baseRoundCost, maxMissile)
 end
 
 -- Mounted charges use one tube-window without the rack hardware floor. Stored ammo remains free.
