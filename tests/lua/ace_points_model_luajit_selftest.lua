@@ -60,6 +60,27 @@ assert(ACE.Points.GunCost(10 / 60, 140) > referenceGun, "increasing RPM must sti
 near(ACE.Points.GunCost(1 / 300, 140), ACE.Points.GunCost(1 / 30, 140),
 	"tiny configured ROFLimits must retain the delivery floor")
 
+do
+	local model = ACE.PointsModel
+	local gunScale, rackScale = model.kGun, model.kRack
+	local gun = ACE.Points.GunCost(5 / 60, 140)
+	local rack = ACE.Points.RackCost(2, 4, 140, 140, 2.5)
+	local legacyRack = ACE.Points.RackCost(2, 4, 140, 140)
+	local minimum = ACE.Points.GunCost(0, 0)
+	model.kGun = gunScale * 1.25
+	near(ACE.Points.GunCost(5 / 60, 140), gun * 1.25, "gun scale must raise armed gun prices")
+	near(ACE.Points.GunCost(0, 0), minimum, "gun scale must preserve the empty weapon minimum")
+	near(ACE.Points.RackCost(2, 4, 140, 140, 2.5), rack, "gun tuning must not raise guided racks")
+	near(ACE.Points.RackCost(2, 4, 140, 140), legacyRack, "gun tuning must not raise legacy racks")
+	model.kGun, model.kRack = gunScale, rackScale * 2
+	near(ACE.Points.GunCost(5 / 60, 140), gun, "rack tuning must not change guns")
+	near(ACE.Points.RackCost(2, 4, 140, 140, 2.5), rack * 2, "rack scale must price ready and delivery terms")
+	model.kRack = nil
+	dofile(root .. "/lua/ace/shared/sh_ace_points_model.lua")
+	near(model.kRack, gunScale, "older configuration tables must retain their shared rack scale")
+	model.kRack = rackScale
+end
+
 for _, fuel in ipairs({ "Petrol", "Diesel", "Multifuel", "Electric", "Unknown" }) do
 	near(ACE.Points.EngineCost(1000, fuel), ACE.Points.EngineCost(1000),
 		"equal peak power must cost the same across fuel types")
@@ -126,6 +147,8 @@ local maximum = math.max(lowCost, highCost)
 near(ACE.GetGunFirepowerPoints(mixedGun), maximum,
 	"linked ammunition must bill the most expensive complete configuration")
 local mixedReadout = ACE.GetGunFirepowerReadout(mixedGun)
+near(mixedReadout.FirepowerScale, ACE.PointsModel.kGun * ACE.PointsModel.Scale,
+	"gun readouts must use the gun coefficient")
 assert(mixedReadout.Round == (lowCost > highCost and lowRound or highRound),
 	"readout must identify the selected round with its own cadence")
 assert(loadstring(assert(shared:match("(function ACE.GetRoundLethalityLine%b().-\nend)"))))()
@@ -181,9 +204,12 @@ near(ACE.GetGunFirepowerPoints(rack), rackExpected, "racks must retain strongest
 for _, tubes in ipairs({ 1, 2, 4 }) do
 	rack.MaxMissile = tubes
 	local function expected(round)
-		return tubes * ACE.Points.GunCost(5 / 60, ACE.Points.BaseRoundCost(round))
+		return tubes * math.max(ACE.PointsModel.kRack * ACE.Points.BaseRoundCost(round), 20)
+			* ACE.PointsModel.Scale
 	end
 	local readout = ACE.GetGunFirepowerReadout(rack)
+	near(readout.FirepowerScale, ACE.PointsModel.kRack * ACE.PointsModel.Scale,
+		"rack readouts must use the independent rack coefficient")
 	near(readout.Points, math.max(expected(lowRound), expected(highRound)),
 		"rack candidate selection and billing must charge every ready tube")
 	near(readout.BaseRoundCostPoints, 0.6 * readout.Points,
@@ -201,7 +227,7 @@ assert(ACE.GetGunFirepowerReadout(rack).Round == seeker,
 for _, pen in ipairs({ 0, 1, 100, 840, 2000 }) do
 	local round = { Type = "HEAT", ProjLength = pen }
 	local base = ACE.Points.BaseRoundCost(round, true)
-	local reference = ACE.Points.GunCost(5 / 60, base)
+	local reference = math.max(ACE.PointsModel.kRack * base, 20) * ACE.PointsModel.Scale
 	for name, ratio in pairs({ Dumb = 0.7, Laser = 1.1, Infrared = 2.5, Radar = 2.5, Top_Attack_IR = 3.5 }) do
 		round.guidance = name
 		near(ACE.Points.BaseRoundCost(round, true), base, "rack payload must exclude legacy guidance")
@@ -299,7 +325,7 @@ local rackRate = ACE.Points.RackRate(2, 1)
 local rackScore = ACE.Points.RoundScore(loaded)
 local rackBaseCost = ACE.Points.BaseRoundCost(loaded)
 local rackPricedRate = math.max(rackRate, 1 / 30)
-local rackWithoutRound = math.max(ACE.PointsModel.kGun * rackPricedRate * rackScore, 100)
+local rackWithoutRound = math.max(ACE.PointsModel.kRack * rackPricedRate * rackScore, 100)
 local rackWithRound = ACE.Points.RackCostFromRate(rackRate, rackScore, rackBaseCost)
 local rackExpected = (rackWithoutRound + rackBaseCost) * ACE.PointsModel.Scale
 assert(math.abs(rackWithRound - rackExpected) < 1e-9,

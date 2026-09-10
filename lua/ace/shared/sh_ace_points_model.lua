@@ -15,13 +15,16 @@ ACE.Points = ACE.Points or {}
 
 -- Mutate these fields in place because Model retains this table.
 ACE.PointsModel = ACE.PointsModel or {
-	kGun   = 6.0,            -- firepower scale
+	kGun   = 7.5,            -- gun firepower scale
+	kRack  = 6.0,            -- rack firepower scale
 	kArmor = 0.259845,         -- armor survivability scale
 	kEng   = 1.501,            -- engine power scale
 	Scale  = 0.65,            -- global display scale shared by all point categories
 }
 
 local Model = ACE.PointsModel
+-- Existing configurations used kGun for both weapon classes; preserve their rack scale on reload.
+Model.kRack = Model.kRack or Model.kGun
 
 local max = math.max
 local min = math.min
@@ -35,7 +38,7 @@ local RACK_FLAT   = 100.0
 -- floor (1/RACK_WINDOW): no mounted delivery system prices below one round per window, closing
 -- the slow-alpha and tiny-ROFLimit aliases of the same cheese.
 local RACK_WINDOW = 30.0
--- At the tube/window cap, each tube costs one five-rpm reference gun:
+-- At the tube/window cap, each tube uses the rack's fixed five-rpm reference scale:
 -- 40% delivery value plus 60% ready payload; guidance multiplies the total.
 local RACK_REFERENCE_RPS = 5.0 / 60.0
 local RACK_READY_SHARE = 1.0 - 1.0 / (RACK_WINDOW * RACK_REFERENCE_RPS)
@@ -185,15 +188,15 @@ function ACE.Points.RackCostFromRate(rate, bestScore, baseRoundCost, maxMissile,
 		local scale = Model.Scale * guidance
 		local deliveryShare = 1.0 - RACK_READY_SHARE
 		local rateFraction = pricedRate / (tubes / RACK_WINDOW)
-		local delivery = Model.kGun * deliveryShare * tubes * rateFraction ^ FIRE_RATE_EXP * score
-		local ready = Model.kGun * RACK_READY_SHARE * score
+		local delivery = Model.kRack * deliveryShare * tubes * rateFraction ^ FIRE_RATE_EXP * score
+		local ready = Model.kRack * RACK_READY_SHARE * score
 		local deliveryFloor = GUN_FLAT / (RACK_WINDOW * RACK_REFERENCE_RPS)
 		local readyFloor = GUN_FLAT - deliveryFloor
 		local readyPoints = max(ready, readyFloor) * tubes * scale
 		return max(delivery, deliveryFloor * tubes) * scale + readyPoints, readyPoints,
 			(delivery + ready * tubes) * scale
 	end
-	local deliveryCost = max(Model.kGun * pricedRate
+	local deliveryCost = max(Model.kRack * pricedRate
 		* (tonumber(bestScore) or 0), RACK_FLAT)
 	local readyCost = max(tonumber(baseRoundCost) or 0, 0) * max(tonumber(maxMissile) or 1, 1)
 	return (deliveryCost + readyCost) * Model.Scale

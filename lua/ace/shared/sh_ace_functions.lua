@@ -1268,7 +1268,7 @@ local function resolveWeaponPricingInputs(ent)
 		points, baseRoundCostPoints = ACE.Points.GunCost(rate, baseRoundCost), 0
 	end
 	local model = ACE.PointsModel or {}
-	local firepowerScale = (tonumber(model.kGun) or 0) * (tonumber(model.Scale) or 0)
+	local firepowerScale = (tonumber(isRack and model.kRack or model.kGun) or 0) * (tonumber(model.Scale) or 0)
 	-- BaseRoundCostPoints includes every ready tube; DeliveryPoints is the floored delivery term.
 	local rawPoints = rackRawPoints or ACE.Points.FireRateMul(rate) * roundScore * firepowerScale
 	local rateFloor = ACE.Points.RateFloor and ACE.Points.RateFloor() or 0
