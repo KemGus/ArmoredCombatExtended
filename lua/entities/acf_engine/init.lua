@@ -698,13 +698,13 @@ function ENT:CalcRPM()
 			--print("Before:")
 			--PrintTable(self.ModTorqueCurve)
 
-			applyEngineFuelModifierToCurve(self.ModTorqueCurve, ACF.PerFuelTorqueCurveMul[Tank.FuelType])
+			ACE.ApplyEngineFuelModifierToCurve(self.ModTorqueCurve, ACE.PerFuelTorqueCurveMul[Tank.FuelType])
 
 			--print("After:")
 			--PrintTable(self.ModTorqueCurve)
 
 			
-			self.EfficiencyMod     = self.Efficiency / ACF.PerFuelRelativeEfficiency[Tank.FuelType] --Applies efficiency modifer for different fueltypes on top of the per engine effiency.
+			self.EfficiencyMod     = self.Efficiency / ACE.PerFuelRelativeEfficiency[Tank.FuelType] --Applies efficiency modifer for different fueltypes on top of the per engine effiency.
 
 			--Cache FuelPowerDensity -- Is it worth another variable?
 			--Cache FuelEfficiency
@@ -721,15 +721,14 @@ function ENT:CalcRPM()
 
 		Tank.Fuel = math.max(Tank.Fuel - Consumption,0)
 
-		self.HeatGeneration = Consumption * (1 - self.EfficiencyMod) * ACF.FuelPowerDensity[Tank.FuelType] * 0.4 * 1000 / ACF.FuelRate / DeltaTime --Assume 60% heat lost to air as exhaust hence 0.4
+		self.HeatGeneration = Consumption * (1 - self.EfficiencyMod) * ACE.FuelPowerDensity[Tank.FuelType] * 0.4 * 1000 / ACE.FuelRate / DeltaTime --Assume 60% heat lost to air as exhaust hence 0.4
 		--print("Kj/S " .. self.HeatGeneration)
 
 		if self.HeatGeneration > 0 then --Avoids nan inputs from dividing by deltatime.
-			ACE_AddThermalEnergy(self, self.HeatGeneration * ACF.ThermalTimeScale * DeltaTime) --Have to convert it back to deltatime as the above indicates KJ/S of heat generation used on the display.
+			ACE.AddThermalEnergy(self, self.HeatGeneration * ACE.ThermalTimeScale * DeltaTime) --Have to convert it back to deltatime as the above indicates KJ/S of heat generation used on the display.
 		end
 
 
-		FuelBoost = ACF.TorqueBoost
 		self.HasFuel = true
 		Wire_TriggerOutput(self, "Fuel Use", math.Round(60 * Consumption / DeltaTime,3))
 	else
@@ -743,9 +742,9 @@ function ENT:CalcRPM()
 	end
 
 	--Could stuff this in a spot executed less frequently
-	local Speed = math.min(ACF_GetPhysicalParent(self):GetVelocity():Length() / 17.6,141) --Speed in MPH. Capped to 141mph or ~12x cooling.
+	local Speed = math.min(ACE.GetPhysicalParent(self):GetVelocity():Length() / 17.6,141) --Speed in MPH. Capped to 141mph or ~12x cooling.
 	local CoolingMult = 1 * 2^(Speed/40) --The cooling of radiators doubles every 40mph of speed
-	ACE_AtmosphericHeatDissipation(self, CoolingMult, DeltaTime)
+	ACE.AtmosphericHeatDissipation(self, CoolingMult, DeltaTime)
 
 	ACE.DoContraptionLegalCheck(self)
 

@@ -287,7 +287,7 @@ end
 --Have a thermal transfer coefficient defined
 --Surface area
 
-function ACE_GetThermalMass(Ent)
+function ACE.GetThermalMass(Ent)
 
 	local Mass = Ent.ThermalMass or -1
 
@@ -304,23 +304,23 @@ function ACE_GetThermalMass(Ent)
 	return Mass
 end
 
-function ACE_AddThermalEnergy(Ent, KJ) --Used to add or remove thermal energy
+function ACE.AddThermalEnergy(Ent, KJ) --Used to add or remove thermal energy
 
 	local SpecificHeat = Ent.ACESpecificHeat or 0.9211 --Uses specific heat of aluminum if unavailable
-	local Mass = ACE_GetThermalMass(Ent)
+	local Mass = ACE.GetThermalMass(Ent)
 
 	local DeltaTemp = KJ / SpecificHeat / Mass
 
 	Ent.Heat = (Ent.Heat or ACE.AmbientTemp) + DeltaTemp
 end
 
-function ACE_EqualizeThermalEnergy(Ent1, Ent2) --Instantly balances the thermal energy of 2 objects. Useful for radiators or things one doesn't care for heat transfer rates with.
+function ACE.EqualizeThermalEnergy(Ent1, Ent2) --Instantly balances the thermal energy of 2 objects. Useful for radiators or things one doesn't care for heat transfer rates with.
 
 	local SpecificHeat1 = Ent1.ACESpecificHeat or 0.9211 --Uses specific heat of aluminum if unavailable
 	local SpecificHeat2 = Ent2.ACESpecificHeat or 0.9211
 
-	local TMass1 = ACE_GetThermalMass(Ent1)
-	local TMass2 = ACE_GetThermalMass(Ent2)
+	local TMass1 = ACE.GetThermalMass(Ent1)
+	local TMass2 = ACE.GetThermalMass(Ent2)
 	local TotalMass = TMass1 + TMass2
 
 	local Ratio1 = TMass1/TotalMass
@@ -340,7 +340,7 @@ function ACE_EqualizeThermalEnergy(Ent1, Ent2) --Instantly balances the thermal 
 	Ent2.Heat = FinalTemp
 end
 
-function ACE_AtmosphericHeatDissipation(Ent, CoolingMultiplier, DeltaTime) --Could be optimized by breaking into more functions. The rate doesn't need to be calculated every iteration riiiiiiiigt?
+function ACE.AtmosphericHeatDissipation(Ent, CoolingMultiplier, DeltaTime) --Could be optimized by breaking into more functions. The rate doesn't need to be calculated every iteration riiiiiiiigt?
 	local ThermalTransferCoefficient = Ent.AtmosphericCoefficient or 5 --5 W / M^2 * K, the thermal transfer coefficient of aluminum to air
 	local SurfaceArea = Ent.ThermalSurfaceArea --Area in meters squared
 
@@ -348,9 +348,9 @@ function ACE_AtmosphericHeatDissipation(Ent, CoolingMultiplier, DeltaTime) --Cou
 
 	local TransferRate = ThermalTransferCoefficient * SurfaceArea * TempDif * CoolingMultiplier
 
-	--print(TransferRate * DeltaTime * ACF.ThermalTimeScale)
-	--print(TransferRate * ACF.ThermalTimeScale / DeltaTime / ACF.ThermalTimeScale) --1 Second cooling
-	ACE_AddThermalEnergy(Ent, TransferRate * DeltaTime * ACF.ThermalTimeScale)
+	--print(TransferRate * DeltaTime * ACE.ThermalTimeScale)
+	--print(TransferRate * ACE.ThermalTimeScale / DeltaTime / ACE.ThermalTimeScale) --1 Second cooling
+	ACE.AddThermalEnergy(Ent, TransferRate * DeltaTime * ACE.ThermalTimeScale)
 end
 
 

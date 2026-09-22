@@ -36,7 +36,7 @@ do
 		self.Id               = nil	--model id
 		self.Active           = false
 		self.FanRunning		  = 0
-		self.NextLegalCheck   = ACF.CurTime + math.random(ACF.Legal.Min, ACF.Legal.Max) -- give any spawning issues time to iron themselves out
+		self.NextLegalCheck   = ACE.CurTime + math.random(ACE.Legal.Min, ACE.Legal.Max) -- give any spawning issues time to iron themselves out
 		self.Legal            = true
 		self.LegalIssues      = ""
 
@@ -67,7 +67,7 @@ do
 		self.NextFanLogic = 0
 		self.NextHeatLogic = 0
 		self.LastThink2 = 0 --Used for the core heat logic running less frequently
-		self.NextThink = ACF.CurTime +  1
+		self.NextThink = ACE.CurTime +  1
 
 	end
 
@@ -78,31 +78,31 @@ function ENT:ACF_Activate( Recalc )
 	self.ACF = self.ACF or {}
 
 	local PhysObj = self:GetPhysicsObject()
-	if not self.ACF.Area then
-		self.ACF.Area = PhysObj:GetSurfaceArea() * 6.45
+	if not self.ACE.Area then
+		self.ACE.Area = PhysObj:GetSurfaceArea() * 6.45
 	end
-	if not self.ACF.Volume then
-		self.ACF.Volume = PhysObj:GetVolume() * 1
+	if not self.ACE.Volume then
+		self.ACE.Volume = PhysObj:GetVolume() * 1
 	end
 
-	local Armour = self.EmptyMass * 1000 / self.ACF.Area / 0.78 --So we get the equivalent thickness of that prop in mm if all it's weight was a steel plate
-	local Health = self.ACF.Volume / ACF.Threshold							--Setting the threshold of the prop Area gone
+	local Armour = self.EmptyMass * 1000 / self.ACE.Area / 0.78 --So we get the equivalent thickness of that prop in mm if all it's weight was a steel plate
+	local Health = self.ACE.Volume / ACE.Threshold							--Setting the threshold of the prop Area gone
 
 	local Percent = 1
-	if Recalc and self.ACF.Health and self.ACF.MaxHealth then
-		Percent = self.ACF.Health / self.ACF.MaxHealth
+	if Recalc and self.ACE.Health and self.ACE.MaxHealth then
+		Percent = self.ACE.Health / self.ACE.MaxHealth
 	end
 
-	self.ACF.Health    = Health * Percent
-	self.ACF.MaxHealth = Health
-	self.ACF.Armour    = Armour * (0.5 + Percent / 2)
-	self.ACF.MaxArmour = Armour
-	self.ACF.Type      = nil
-	self.ACF.Mass      = self.Mass
-	self.ACF.Density   = (PhysObj:GetMass() * 1000) / self.ACF.Volume
-	self.ACF.Type      = "Prop"
+	self.ACE.Health    = Health * Percent
+	self.ACE.MaxHealth = Health
+	self.ACE.Armour    = Armour * (0.5 + Percent / 2)
+	self.ACE.MaxArmour = Armour
+	self.ACE.Type      = nil
+	self.ACE.Mass      = self.Mass
+	self.ACE.Density   = (PhysObj:GetMass() * 1000) / self.ACE.Volume
+	self.ACE.Type      = "Prop"
 
-	self.ACF.Material	= not isstring(self.ACF.Material) and ACE.BackCompMat[self.ACF.Material] or self.ACF.Material or "RHA"
+	self.ACE.Material	= not isstring(self.ACE.Material) and ACE.BackCompMat[self.ACE.Material] or self.ACE.Material or "RHA"
 
 	--Forces an update of mass
 	self.LastMass = 1
@@ -138,8 +138,8 @@ do
 	local function ClampScale( Scale )
 		if not isvector( Scale ) then return end
 
-		local MinSize = ACF.CrateMinimumSize
-		local MaxSize = ACF.CrateMaximumSize
+		local MinSize = ACE.CrateMinimumSize
+		local MaxSize = ACE.CrateMaximumSize
 
 		Scale.x = math.Clamp( math.Round(Scale.x, 1), MinSize, MaxSize)
 		Scale.y = math.Clamp( math.Round(Scale.y, 1), MinSize, MaxSize)
@@ -159,9 +159,9 @@ do
 		return Scale
 	end
 
-	function MakeACE_Radiator(Owner, Pos, Angle, Id, Data1)
+	function ACE.MakeRadiator(Owner, Pos, Angle, Id, Data1)
 
-		if IsValid(Owner) and not Owner:CheckLimit("_acf_misc") then return false end
+		if IsValid(Owner) and not Owner:CheckLimit("_ace_misc") then return false end
 
 		local Tank = ents.Create("ace_radiator")
 		if IsValid(Tank) then
@@ -223,10 +223,10 @@ do
 			Tank.LastMass = 1
 			Tank:UpdateRadiator(Id, Data1) 
 
-			Owner:AddCount( "_acf_misc", Tank )
-			Owner:AddCleanup( "acfmenu", Tank )
+			Owner:AddCount( "_ace_misc", Tank )
+			Owner:AddCleanup( "acemenu", Tank )
 
-			--table.insert(ACF.FuelTanks, Tank)
+			--table.insert(ACE.FuelTanks, Tank)
 
 			return Tank
 		end
@@ -236,7 +236,7 @@ do
 end
 
 list.Set( "ACFCvars", "ace_radiator", {"id", "data1"} )
-duplicator.RegisterEntityClass("ace_radiator", MakeACE_Radiator, "Pos", "Angle", "Id", "SizeId")
+duplicator.RegisterEntityClass("ace_radiator", ACE.MakeRadiator, "Pos", "Angle", "Id", "SizeId")
 
 
 local Wall = 0.75 -- wall thickness in inches
@@ -267,7 +267,7 @@ function ENT:UpdateRadiator(_, _)
 	local IVolume = math.max(Volumefunc( Length, Width - (Wall * 2), Height - (Wall * 2)) * 0.7,0) --Assume 2/3rds volume radiator fins, 1/3rd water (roughly 0.7x)
 
 	self.Volume        = IVolume-- total volume of tank (cu in), reduced by wall thickness
-	self.Capacity      = IVolume * ACF.CuIToLiter * ACF.TankVolumeMul * 0.4774 --internal volume available for coolant in liters, with magic realism number
+	self.Capacity      = IVolume * ACE.CuIToLiter * ACE.TankVolumeMul * 0.4774 --internal volume available for coolant in liters, with magic realism number
 	self.EmptyMass     = (Volume - IVolume) * 16.387 * ( 2.6 / 1000 )    -- total wall volume * cu in to cc * density of aluminum (kg/cc)
 	self.Coolant	= pct * self.Capacity
 	self.Mass = self.EmptyMass + self.Coolant --* 1   Conversion Ommited    -- weight of tank + weight of contained water. Water is 1kg/Liter
@@ -275,7 +275,7 @@ function ENT:UpdateRadiator(_, _)
 	self:UpdateRadiatorMass()
 
 	--Calculates the average specific heat of the object
-	self.ACESpecificHeat = (self.EmptyMass * 0.9211 + self.Coolant * 4.184) / self.Mass * ACF.RadiatorHeatCap --0.9211 is the specific heat of aluminum in kj/kg * k, and 4.184 is the specific heat of water in kj/kg * k
+	self.ACESpecificHeat = (self.EmptyMass * 0.9211 + self.Coolant * 4.184) / self.Mass * ACE.RadiatorHeatCap --0.9211 is the specific heat of aluminum in kj/kg * k, and 4.184 is the specific heat of water in kj/kg * k
 
 
 	local x = math.Round(Length, 1) / 10
@@ -310,8 +310,8 @@ function ENT:UpdateRadiator(_, _)
 	local OldHeat = self.Heat
 	--Bit of a hacked together way to measure the thermal dissipation rate at a given temp.
 	self.Heat = 100
-	ACE_AtmosphericHeatDissipation(self, self.AirflowRestrictiveness * ACF.RadiatorEff, 1)
-	local Dissipation = (100 - self.Heat) * HeatCapacity  / ACF.ThermalTimeScale --Gets the heat difference in Deg/C and multiplies it by the Heat capacity of the radiator to determine the KJ dissipated
+	ACE.AtmosphericHeatDissipation(self, self.AirflowRestrictiveness * ACE.RadiatorEff, 1)
+	local Dissipation = (100 - self.Heat) * HeatCapacity  / ACE.ThermalTimeScale --Gets the heat difference in Deg/C and multiplies it by the Heat capacity of the radiator to determine the KJ dissipated
 	text = text .. "\nStationary Cooling:\n" .. math.Round(Dissipation,2) .. " kJ / second @ 100 Deg C.\n"
 
 	text = text .. "\nw/ Active:\n" .. math.Round(Dissipation*3,2) .. " kJ / second @ 100 Deg C."
@@ -366,7 +366,7 @@ function ENT:UpdateOverlayText()
 
 
 	if not self.Legal then
-		text = text .. "\nNot legal, disabled for " .. math.ceil(self.NextLegalCheck - ACF.CurTime) .. "s\nIssues: " .. self.LegalIssues
+		text = text .. "\nNot legal, disabled for " .. math.ceil(self.NextLegalCheck - ACE.CurTime) .. "s\nIssues: " .. self.LegalIssues
 	end
 
 	self:SetOverlayText( text )
@@ -378,9 +378,9 @@ function ENT:UpdateRadiatorMass()
 	self.Mass = self.EmptyMass + self.Coolant -- * 1 --Water weighs 1kg/L
 
 	--reduce superflous engine calls, update fuel tank mass every 5 kgs change or every 10s-15s
-	if math.abs(self.LastMass - self.Mass) > 5 or ACF.CurTime > self.NextMassUpdate then
+	if math.abs(self.LastMass - self.Mass) > 5 or ACE.CurTime > self.NextMassUpdate then
 		self.LastMass = self.Mass
-		self.NextMassUpdate = ACF.CurTime + math.Rand(10, 15)
+		self.NextMassUpdate = ACE.CurTime + math.Rand(10, 15)
 		local phys = self:GetPhysicsObject()
 		if (phys:IsValid()) then
 			phys:SetMass( self.Mass )
@@ -415,7 +415,7 @@ end
 function ENT:Think()
 
 	--Rapid Logic. Runs on tick. Used to not stall out the engines by pulling large chunks of power from the flywheel.
-	local CT = ACF.CurTime
+	local CT = ACE.CurTime
 	local DeltaTime = CT - self.LastThink
 
 	local ECount = #self.Master
@@ -505,8 +505,8 @@ function ENT:Think()
 		--Obligatory legality Check
 		if CT > self.NextLegalCheck then
 			--local minmass = math.floor(self.Mass-6)  -- water is light, may as well save complexity and just check it's above empty mass
-			self.Legal, self.LegalIssues = ACF_CheckLegal(self, self.Model, math.Round(self.EmptyMass,2), nil, true, true) -- mass-6, as mass update is granular to 5 kg
-			self.NextLegalCheck = ACF.Legal.NextCheck(self.legal)
+			self.Legal, self.LegalIssues = ACE.CheckLegal(self, self.Model, math.Round(self.EmptyMass,2), nil, true, true) -- mass-6, as mass update is granular to 5 kg
+			self.NextLegalCheck = ACE.Legal.NextCheck(self.legal)
 			--make sure it's not made spherical
 			if self.EntityMods and self.EntityMods.MakeSphericalCollisions then self.Coolant = 0 end
 			self:UpdateOverlayText()
@@ -519,16 +519,16 @@ function ENT:Think()
 		for Key in pairs(self.Master) do
 			local Ent = self.Master[Key]
 			if IsValid( Ent ) then
-					ACE_EqualizeThermalEnergy(self, Ent)
+					ACE.EqualizeThermalEnergy(self, Ent)
 			end
 		end
 
 		--Do the actual radiator dissipation logic
-		local Speed = math.min(ACF_GetPhysicalParent(self):GetVelocity():Length() / 17.6,141) --Speed in MPH. Capped to 141mph or ~12x cooling.
+		local Speed = math.min(ACE.GetPhysicalParent(self):GetVelocity():Length() / 17.6,141) --Speed in MPH. Capped to 141mph or ~12x cooling.
 
 		if self.Heat > 90 then --Tries to keep the loop at the ideal combustion temperature (~90C-104C). Otherwise uses slower dissipation rate.
 			--Calculate the drive factor if applicable. I/E if we meet power demand. This running slowly doesn't really matter. Mostly it's to make sure underpowered engines don't run huge radiators.
-			if not self.FanRunning then 
+			if self.FanRunning == 0 then 
 				DriveFactor = 0
 			else
 				DriveFactor = math.min(1,math.min(RPMPulled/RPMDemand,1)) --Penalized severely if one of the engines is unable to satisfy the torque demand.
@@ -537,10 +537,10 @@ function ENT:Think()
 			end
 		
 			local CoolingMult = 1 * 2^(Speed/40) --The cooling of radiators doubles every 40mph of speed
-			ACE_AtmosphericHeatDissipation(self, CoolingMult  * self.AirflowRestrictiveness * ACF.RadiatorEff, DeltaTime2)
+			ACE.AtmosphericHeatDissipation(self, CoolingMult  * self.AirflowRestrictiveness * ACE.RadiatorEff, DeltaTime2)
 		else
 			local CoolingMult = 0.1 * 2^(Speed/40) --The cooling of radiators doubles every 40mph of speed
-			ACE_AtmosphericHeatDissipation(self, CoolingMult  * self.AirflowRestrictiveness * ACF.RadiatorEff, DeltaTime2)
+			ACE.AtmosphericHeatDissipation(self, CoolingMult  * self.AirflowRestrictiveness * ACE.RadiatorEff, DeltaTime2)
 		end
 
 		Wire_TriggerOutput( self, "Temperature", self.Heat )

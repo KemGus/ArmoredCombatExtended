@@ -1,13 +1,13 @@
 
 include("shared.lua")
 
-CreateClientConVar("ACF_FuelInfoWhileSeated", 0, true, false)
+CreateClientConVar("ACE_RadiatorInfoWhileSeated", 0, true, false)
 
 -- copied from base_wire_entity: DoNormalDraw's notip arg isn't accessible from ENT:Draw defined there.
 function ENT:Draw()
 
 	local lply = LocalPlayer()
-	local hideBubble = not GetConVar("ACF_FuelInfoWhileSeated"):GetBool() and IsValid(lply) and lply:InVehicle()
+	local hideBubble = not GetConVar("ACE_RadiatorInfoWhileSeated"):GetBool() and IsValid(lply) and lply:InVehicle()
 
 	self.BaseClass.DoNormalDraw(self, false, hideBubble)
 	Wire_Render(self)
@@ -25,53 +25,53 @@ do
 
 	local function CreateIdForCrate()
 
-		   local X = math.Round( acfmenupanel.RadiatorPanelConfig["Crate_Length"], 1 )
-		   local Y = math.Round( acfmenupanel.RadiatorPanelConfig["Crate_Width"], 1 )
-		   local Z = math.Round( acfmenupanel.RadiatorPanelConfig["Crate_Height"], 1)
+		   local X = math.Round( acemenupanel.RadiatorPanelConfig["Crate_Length"], 1 )
+		   local Y = math.Round( acemenupanel.RadiatorPanelConfig["Crate_Width"], 1 )
+		   local Z = math.Round( acemenupanel.RadiatorPanelConfig["Crate_Height"], 1)
 
 		   local Id = X .. ":" .. Y .. ":" .. Z
 
-		   ACFRadiatorGUIUpdate( Table )
-		   acfmenupanel.RadiatorData["Id"] = Id
+		   ACE.RadiatorGUIUpdate( Table )
+		   acemenupanel.RadiatorData["Id"] = Id
 		   RunConsoleCommand( "acfmenu_data1", Id )
 
 	 end
 
-	function ACFRadiatorGUICreate( Table )
-		if not acfmenupanel.CustomDisplay then return end
+	function ACE.RadiatorGUICreate( Table )
+		if not acemenupanel.CustomDisplay then return end
 
-		local MainPanel = acfmenupanel.CustomDisplay
+		local MainPanel = acemenupanel.CustomDisplay
 
-		if not acfmenupanel.RadiatorData then
-			acfmenupanel.RadiatorData          = {}
-			acfmenupanel.RadiatorData.Id       = "10:10:10"
+		if not acemenupanel.RadiatorData then
+			acemenupanel.RadiatorData          = {}
+			acemenupanel.RadiatorData.Id       = "10:10:10"
 		end
 
-		if not acfmenupanel.RadiatorPanelConfig then
+		if not acemenupanel.RadiatorPanelConfig then
 
-			acfmenupanel.RadiatorPanelConfig = {}
-			acfmenupanel.RadiatorPanelConfig["Crate_Length"]  = 1
-			acfmenupanel.RadiatorPanelConfig["Crate_Width"]   = 10
-			acfmenupanel.RadiatorPanelConfig["Crate_Height"]  = 10
-			acfmenupanel.RadiatorPanelConfig["Crate_Shape"] = "Radiator"
+			acemenupanel.RadiatorPanelConfig = {}
+			acemenupanel.RadiatorPanelConfig["Crate_Length"]  = 1
+			acemenupanel.RadiatorPanelConfig["Crate_Width"]   = 10
+			acemenupanel.RadiatorPanelConfig["Crate_Height"]  = 10
+			acemenupanel.RadiatorPanelConfig["Crate_Shape"] = "Radiator"
 
 		 end
 
-		acfmenupanel:CPanelText("Name", Table.name, "DermaDefaultBold")
-		acfmenupanel:CPanelText("Desc", Table.desc)
+		acemenupanel:CPanelText("Name", Table.name, "DermaDefaultBold")
+		acemenupanel:CPanelText("Desc", Table.desc)
 
 		--------------- NEW CONFIG ---------------
 		do
 
 			local CrateNewCat = vgui.Create( "DCollapsibleCategory" )	-- Create a collapsible category
-			acfmenupanel.CustomDisplay:AddItem(CrateNewCat)
+			acemenupanel.CustomDisplay:AddItem(CrateNewCat)
 			CrateNewCat:SetLabel( "Radiator Config" )						-- Set the name ( label )
 			CrateNewCat:SetPos( 25, 50 )		-- Set position
 			CrateNewCat:SetSize( 250, 100 )	-- Set size
-			CrateNewCat:SetExpanded( acfmenupanel.RadiatorPanelConfig["ExpandedCatNew"] )
+			CrateNewCat:SetExpanded( acemenupanel.RadiatorPanelConfig["ExpandedCatNew"] )
 	
 			function CrateNewCat:OnToggle( bool )
-			   acfmenupanel.RadiatorPanelConfig["ExpandedCatNew"] = bool
+			   acemenupanel.RadiatorPanelConfig["ExpandedCatNew"] = bool
 			end
 
 			local CrateNewPanel = vgui.Create( "DPanelList" )
@@ -82,10 +82,10 @@ do
 			CrateNewPanel:AddItem(LengthSlider)
 			CrateNewCat:SetContents( CrateNewPanel )
 
-			local MinCrateSize = ACF.CrateMinimumSize or 1
-			local MaxCrateSize = ACF.CrateMaximumSize
+			local MinCrateSize = ACE.CrateMinimumSize or 1
+			local MaxCrateSize = ACE.CrateMaximumSize
 
-			acfmenupanel:CPanelText("Crate_desc_new", "\nAdjust the dimensions for the radiator. In inches.", nil, CrateNewPanel)
+			acemenupanel:CPanelText("Crate_desc_new", "\nAdjust the dimensions for the radiator. In inches.", nil, CrateNewPanel)
 
 			-- X Slider
 			local LengthSlider = vgui.Create( "DNumSlider" )
@@ -93,11 +93,11 @@ do
 			LengthSlider:SetDark( true )
 			LengthSlider:SetMin( MinCrateSize )
 			LengthSlider:SetMax( MaxCrateSize )
-			LengthSlider:SetValue( acfmenupanel.RadiatorPanelConfig["Crate_Length"] or 10 )
+			LengthSlider:SetValue( acemenupanel.RadiatorPanelConfig["Crate_Length"] or 10 )
 			LengthSlider:SetDecimals( 1 )
 
 			function LengthSlider:OnValueChanged( value )
-				acfmenupanel.RadiatorPanelConfig["Crate_Length"] = value
+				acemenupanel.RadiatorPanelConfig["Crate_Length"] = value
 				CreateIdForCrate()
 			end
 			CrateNewPanel:AddItem(LengthSlider)
@@ -108,11 +108,11 @@ do
 			WidthSlider:SetDark( true )
 			WidthSlider:SetMin( MinCrateSize )
 			WidthSlider:SetMax( MaxCrateSize )
-			WidthSlider:SetValue( acfmenupanel.RadiatorPanelConfig["Crate_Width"] or 10 )
+			WidthSlider:SetValue( acemenupanel.RadiatorPanelConfig["Crate_Width"] or 10 )
 			WidthSlider:SetDecimals( 1 )
 
 			function WidthSlider:OnValueChanged( value )
-			acfmenupanel.RadiatorPanelConfig["Crate_Width"] = value
+			acemenupanel.RadiatorPanelConfig["Crate_Width"] = value
 			CreateIdForCrate()
 			end
 			CrateNewPanel:AddItem(WidthSlider)
@@ -123,11 +123,11 @@ do
 			HeightSlider:SetDark( true )
 			HeightSlider:SetMin( MinCrateSize )
 			HeightSlider:SetMax( MaxCrateSize )
-			HeightSlider:SetValue( acfmenupanel.RadiatorPanelConfig["Crate_Height"] or 10 )
+			HeightSlider:SetValue( acemenupanel.RadiatorPanelConfig["Crate_Height"] or 10 )
 			HeightSlider:SetDecimals( 1 )
 
 			function HeightSlider:OnValueChanged( value )
-			acfmenupanel.RadiatorPanelConfig["Crate_Height"] = value
+			acemenupanel.RadiatorPanelConfig["Crate_Height"] = value
 			CreateIdForCrate()
 			end
 			CrateNewPanel:AddItem(HeightSlider)
@@ -136,19 +136,19 @@ do
 
 		----------- The rest below -----------
 
-		ACFRadiatorGUIUpdate( Table )
+		ACE.RadiatorGUIUpdate( Table )
 
 		MainPanel:PerformLayout()
 
 	end
 
-	function ACFRadiatorGUIUpdate( _ )
+	function ACE.RadiatorGUIUpdate( _ )
 
-		if not acfmenupanel.CustomDisplay then return end
+		if not acemenupanel.CustomDisplay then return end
 
-			local Length = acfmenupanel.RadiatorPanelConfig["Crate_Length"]
-			local Width = acfmenupanel.RadiatorPanelConfig["Crate_Width"]
-			local Height = acfmenupanel.RadiatorPanelConfig["Crate_Height"]
+			local Length = acemenupanel.RadiatorPanelConfig["Crate_Length"]
+			local Width = acemenupanel.RadiatorPanelConfig["Crate_Width"]
+			local Height = acemenupanel.RadiatorPanelConfig["Crate_Height"]
 			local Shape = "Box" --Box
 
 			local ModelData = ACE.ModelData[Shape]
@@ -156,7 +156,7 @@ do
 			local CrateVolume = ModelData.volumefunction( Length, Width, Height)
 			local ContentVolume = math.max(ModelData.volumefunction( Length, Width - (Wall * 2), Height - (Wall * 2)) * 0.7,0) --Assume 2/3rds volume radiator fins, 1/3rd water
 
-			local Capacity  = ContentVolume * ACF.CuIToLiter * ACF.TankVolumeMul * 0.4774  -- internal volume available for fuel in liters, with magic realism number
+			local Capacity  = ContentVolume * ACE.CuIToLiter * ACE.TankVolumeMul * 0.4774  -- internal volume available for fuel in liters, with magic realism number
 			local EmptyMass = (CrateVolume - ContentVolume) * 16.387 * ( 2.6 / 1000 )               -- total wall volume * cu in to cc * density of aluminum (kg/cc)
 			local Mass      = EmptyMass + Capacity --* 1   Conversion Ommited    -- weight of tank + weight of contained water. Water is 1kg/Liter
 
@@ -173,15 +173,15 @@ do
 
 			local AirflowRestrictiveness = 1-(1-(1/Length))^2 --Airflow ratio of the radiator. Difficulty air flowing through it will have cooling anything.
 
-			acfmenupanel:CPanelText("Mass", "Full mass: " .. math.Round(Mass,1) .. " kg, Empty mass: " .. math.Round(EmptyMass,1) .. " kg")
-			acfmenupanel:CPanelText("Cap", "Capacity: " .. math.Round(Capacity,1) .. " liters / " .. math.Round(Capacity * 0.264172,1) .. " gallons")
+			acemenupanel:CPanelText("Mass", "Full mass: " .. math.Round(Mass,1) .. " kg, Empty mass: " .. math.Round(EmptyMass,1) .. " kg")
+			acemenupanel:CPanelText("Cap", "Capacity: " .. math.Round(Capacity,1) .. " liters / " .. math.Round(Capacity * 0.264172,1) .. " gallons")
 
-			acfmenupanel:CPanelText("RestrictedFlow", "Airflow restriction: " .. math.Round(AirflowRestrictiveness * 100,1) .. "%")
+			acemenupanel:CPanelText("RestrictedFlow", "Airflow restriction: " .. math.Round(AirflowRestrictiveness * 100,1) .. "%")
 
-			acfmenupanel:CPanelText("Area", "Total Fin Surface Area: " .. math.Round(TotalSurfaceArea,1) .. " m^2")
+			acemenupanel:CPanelText("Area", "Total Fin Surface Area: " .. math.Round(TotalSurfaceArea,1) .. " m^2")
 			local specificHeat = (EmptyMass * 0.9211 + Capacity * 4.184) / Mass
-			local KJTo100C = Mass * specificHeat * 100 * ACF.RadiatorHeatCap --Heat capacity of the radiator. Joules needed to raise the radiator to 100C.
-			acfmenupanel:CPanelText("ThermalStorage", "" .. math.Round(KJTo100C,1) .. " kilojoules needed to raise the radiator to 100C")
+			local KJTo100C = Mass * specificHeat * 100 * ACE.RadiatorHeatCap --Heat capacity of the radiator. Joules needed to raise the radiator to 100C.
+			acemenupanel:CPanelText("ThermalStorage", "" .. math.Round(KJTo100C,1) .. " kilojoules needed to raise the radiator to 100C")
 
 
 	end

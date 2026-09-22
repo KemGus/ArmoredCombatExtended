@@ -112,8 +112,8 @@ if CLIENT then
 	fueltank_base.guicreate      = function( _, tbl ) ACE.FuelTankGUICreate( tbl )		end or nil
 	fueltank_base.guiupdate      = function( _, tbl ) ACE.FuelTankGUIUpdate( tbl )		end or nil
 
-	radiator_base.guicreate      = function( _, tbl ) ACFRadiatorGUICreate( tbl )		end or nil
-	radiator_base.guiupdate      = function( _, tbl ) ACFRadiatorGUIUpdate( tbl )		end or nil
+	radiator_base.guicreate      = function( _, tbl ) ACE.RadiatorGUICreate( tbl )		end or nil
+	radiator_base.guiupdate      = function( _, tbl ) ACE.RadiatorGUIUpdate( tbl )		end or nil
 
 	radar_base.guicreate         = function( _, Table ) ACE.RadarGUICreate( Table )	end
 	radar_base.guiupdate         = function() return end
@@ -276,7 +276,7 @@ function ACE.DefineFuelTankSize( id, data )
 end
 
 -- fueltank definition
-function ACF_DefineRadiator( id, data )
+function ACE.DefineRadiator( id, data )
 	data.id = id
 	table.Inherit( data, radiator_base )
 	RadiatorTable[ id ] = data

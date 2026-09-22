@@ -373,7 +373,7 @@ ACE.DefineFuelTankSize( "Gas_Pump", {
 
 
 --definition for the fuel tank that shows on menu
-ACF_DefineRadiator( "Basic_Radiator", {
+ACE.DefineRadiator( "Basic_Radiator", {
 	name = "Radiator",
 	desc = "Basic Radiator for cooling engines"
 } )
