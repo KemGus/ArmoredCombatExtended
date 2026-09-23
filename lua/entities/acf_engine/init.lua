@@ -801,6 +801,14 @@ function ENT:MobilityApply()
 		ACE.AddThermalEnergy(self, Desc.HeatJ / 1000 * ACE.ThermalTimeScale)
 	end
 
+	-- Over-revving: the limiter only cuts fuel, so a missed downshift can still drag the engine
+	-- far past redline through the wheels. Past ~110% valves float and hit pistons.
+	local Over = self.FlyRPM / self.LimitRPM - 1.1
+	if Over > 0 and self.ACE and self.ACE.Health then
+		self.ACE.Health = math.max(self.ACE.Health - self.ACE.MaxHealth * Over * Dt, 0)
+		if self.ACE.Health <= 0 and self.Active then self:TriggerInput("Active", 0) end
+	end
+
 	if self.Active and State.Stalled then
 		State.Stalled = false
 		self.Active = false

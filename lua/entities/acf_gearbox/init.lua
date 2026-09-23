@@ -698,6 +698,7 @@ end
 function ENT:MobilityApply()
 	local Mob = self.Mob
 	if not Mob then return end
+	self.InGear = (self.MobRatio or 0) ~= 0
 	local Dt = engine.TickInterval()
 
 	-- Clutch temperature: slip heat in, convection out (~20 s time constant at ambient air).

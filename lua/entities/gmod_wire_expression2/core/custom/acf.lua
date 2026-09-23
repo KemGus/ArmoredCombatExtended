@@ -751,6 +751,42 @@ do
 		return min(this.TotalReqTq, this.MaxTorque) / this.GearRatio
 	end
 
+	-- Returns the speed of an ACF gearbox's input shaft, in RPM
+	[nodiscard]
+	e2function number entity:acfInputRPM()
+		if not isGearbox(this) then return self:throw("Entity is not a valid ACF gearbox", 0) end
+		if restrictInfo(self.player, this) then return 0 end
+
+		return round(((this.Mob and this.Mob.InputW) or 0) * 30 / pi)
+	end
+
+	-- Returns how fast an ACF gearbox's clutch is slipping, in RPM
+	[nodiscard]
+	e2function number entity:acfClutchSlip()
+		if not isGearbox(this) then return self:throw("Entity is not a valid ACF gearbox", 0) end
+		if restrictInfo(self.player, this) then return 0 end
+
+		return round(abs((this.Mob and this.Mob.ClutchSlip) or 0) * 30 / pi)
+	end
+
+	-- Returns the temperature of an ACF gearbox's clutch, in °C
+	[nodiscard]
+	e2function number entity:acfClutchTemp()
+		if not isGearbox(this) then return self:throw("Entity is not a valid ACF gearbox", 0) end
+		if restrictInfo(self.player, this) then return 0 end
+
+		return round(this.ClutchTemp or ACE.AmbientTemp)
+	end
+
+	-- Returns 1 if an ACF engine has stalled
+	[nodiscard]
+	e2function number entity:acfStalled()
+		if not isEngine(this) then return self:throw("Entity is not a valid ACF engine", 0) end
+		if restrictInfo(self.player, this) then return 0 end
+
+		return this.Stalled and 1 or 0
+	end
+
 	-- Sets the gear ratio of a CVT, set to 0 to use automatic calculation
 	e2function void entity:acfCVTRatio(number ratio)
 		if not isGearbox(this) then return self:throw("Entity is not a valid ACF gearbox") end

@@ -1654,6 +1654,54 @@ do
 		return min(this.TotalReqTq, this.MaxTorque) / this.GearRatio
 	end
 
+	--- Returns the speed of an ACF gearbox's input shaft
+	-- @server
+	-- @return number Input shaft speed in RPM
+	function ents_methods:acfInputRPM()
+		local this = getent(self)
+
+		if not isGearbox(this) then return 0 end
+		if restrictInfo(this) then return 0 end
+
+		return round(((this.Mob and this.Mob.InputW) or 0) * 30 / math.pi)
+	end
+
+	--- Returns how fast an ACF gearbox's clutch is slipping
+	-- @server
+	-- @return number Slip speed in RPM
+	function ents_methods:acfClutchSlip()
+		local this = getent(self)
+
+		if not isGearbox(this) then return 0 end
+		if restrictInfo(this) then return 0 end
+
+		return round(math.abs((this.Mob and this.Mob.ClutchSlip) or 0) * 30 / math.pi)
+	end
+
+	--- Returns the temperature of an ACF gearbox's clutch
+	-- @server
+	-- @return number Clutch temperature in degrees C
+	function ents_methods:acfClutchTemp()
+		local this = getent(self)
+
+		if not isGearbox(this) then return 0 end
+		if restrictInfo(this) then return 0 end
+
+		return round(this.ClutchTemp or ACE.AmbientTemp)
+	end
+
+	--- Returns whether an ACF engine has stalled
+	-- @server
+	-- @return boolean True if stalled
+	function ents_methods:acfStalled()
+		local this = getent(self)
+
+		if not isEngine(this) then return false end
+		if restrictInfo(this) then return false end
+
+		return this.Stalled == true
+	end
+
 	--- Sets the gear ratio of a CVT, set to 0 to use built-in algorithm
 	-- @server
 	-- @param number ratio The ratio to set
