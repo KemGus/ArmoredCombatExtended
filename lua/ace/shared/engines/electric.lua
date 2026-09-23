@@ -65,6 +65,8 @@ ACE.DefineEngine( "Electric-Tiny-NoBatt", {
 	weight = 58, --35
 	torque = 189, --30
 	flywheelmass = 0.05,
+	-- Nissan LEAF motor (280 N*m class) rotor inertia, Gao et al. 2019 (ORNL), table 1
+	inertia = 0.03,
 	idlerpm = 0, --40
 	limitrpm = 11300,
 	iselec = true,

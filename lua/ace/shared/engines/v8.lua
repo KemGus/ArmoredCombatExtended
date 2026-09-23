@@ -44,8 +44,14 @@ ACE.DefineEngine( "18.0-V8", {
 	weight = 850,
 	torque = 2187,
 	flywheelmass = 2.8,
+	-- Ford GAA: 1,100 cu in (18.03 L), bore 5.4 in, stroke 6 in, 8 cyl (TM 9-1731B, 1945)
+	displacement = 18.03,
+	cylinders = 8,
+	stroke = 0.1524,
+	-- TM 9-1731B fig. 10, 1,000-2,800 rpm (tools/mobility_torque_curves.py "ford_gaa")
+	torquecurve = {0.908, 0.927, 0.945, 0.961, 0.974, 0.984, 0.991, 0.997, 1.0, 0.994, 0.979, 0.956, 0.926},
 	idlerpm = 600,
-	limitrpm = 3800,
+	limitrpm = 2800, -- end of the published full-load curve
 } )
 
 -- Diesel
