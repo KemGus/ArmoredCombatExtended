@@ -58,11 +58,12 @@ function ACE.CalcCurve(Points, Pos)
 end
 
 --BEWARE OF FEEDING THE ORIGINAL TABLES INTO THE FUNCTION THIS FUNCTION IS DESTRUCTIVE. Maybe I should just use returns instead but inefficiency.
+--Kept for compatibility: ACE's own curves are no longer reshaped by fuel (see ACE.GetEngineTorqueCurve).
 function ACE.ApplyEngineFuelModifierToCurve(EngineCurve, FuelCurve)
 	local MaxValue = 0
 	for Key in pairs(EngineCurve) do
 		local CurveValue = EngineCurve[Key]
-		local Mult = FuelCurve[Key]
+		local Mult = FuelCurve[Key] or 1
 
 		CurveValue = 1 - (1 - CurveValue * Mult)
 
@@ -90,12 +91,9 @@ function ACE.CalcEnginePerformanceData(curve, maxTq, idle, redline, fueltype)
 	local powerTable = {} --Power at each point on the curve for use in powerband calc
 	local res = 32 --Iterations for use in calculating the curve, higher is more accurate
 
-	local ModifiedCurve = table.Copy(curve) --We love accidentally modifying the original engine torque which modifies the torque for all engines :)))))))))
-	local Fuel = fueltype or "Petrol"
-	if Fuel == "Multifuel" then
-		Fuel = "Diesel"
-	end
-	ACE.ApplyEngineFuelModifierToCurve(ModifiedCurve, ACE.PerFuelTorqueCurveMul[Fuel])
+	-- The curve already matches the engine's combustion type (ACE.GetEngineTorqueCurve), so
+	-- fueltype no longer reshapes it; the argument is kept for existing callers.
+	local ModifiedCurve = curve
 
 	--Calculate peak torque/power RPM
 	for i = 0, res do

@@ -230,6 +230,12 @@ ACE.DefineEngine( "AGT 1500 Large Turbine", {
 	weight = 1250,
 	torque = 6780,
 	flywheelmass = 20,
+	-- Power turbine rotor 0.141 kg*m2 at 22,500 rpm through the 7.5:1 output reduction
+	-- (Forecast International, AGT1500, 2008): 0.141 * 7.5^2 = 7.93 kg*m2 at the output.
+	inertia = 7.93,
+	-- Straight line through 5,355 N*m @ 1,000 rpm and 3,754 N*m @ 3,000 rpm (Gas Turbine World;
+	-- Forecast International), idle 830 to 3,000 rpm (tools/mobility_torque_curves.py).
+	torquecurve = {1.0, 0.974, 0.947, 0.921, 0.895, 0.868, 0.842, 0.815, 0.789, 0.763, 0.736, 0.71, 0.684},
 	idlerpm = 830,
 	limitrpm = 3000,
 	iselec = true,

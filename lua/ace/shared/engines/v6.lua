@@ -24,6 +24,10 @@ ACE.DefineEngine( "6.2-V6", {
 	weight = 360,
 	torque = 708,
 	flywheelmass = 0.45,
+	-- Detroit Diesel 6V-71: 6 x 71 cu in = 6.98 L, bore 4.25 in, stroke 5 in (Detroit Diesel Series 71)
+	displacement = 6.98,
+	cylinders = 6,
+	stroke = 0.127,
 	idlerpm = 800,
 	limitrpm = 5000,
 } )

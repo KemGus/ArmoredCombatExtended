@@ -121,41 +121,119 @@ ACE.EngineHPMult = { --health multiplier for engines
 }
 
 
-ACE.PerFuelTorqueCurveMul = { --Efficiency multipliers when using various fuels
-	Diesel = {1,1.64,1.43,1.12,0.9,0.89,0.93},
-	Petrol = {1,1,1,1,1,1,1},
-	Electric = {1,1,1,1,1,1,1}
+-- Kept for addons that still read it. Fuel no longer reshapes a curve: an engine's curve
+-- comes from its combustion type (see ACE.GetEngineTorqueCurve), so every entry is empty and
+-- ACE.ApplyEngineFuelModifierToCurve treats a missing multiplier as 1.
+ACE.PerFuelTorqueCurveMul = {
+	Diesel = {},
+	Petrol = {},
+	Electric = {}
 }
 
---Use this to help design torque curves https://gist.github.com/CheezusChrust/7ccce5f5196d3adc95ab9573009f735a
-ACE.GenericTorqueCurves = { --Default curves for engines that don't have one defined
+--[[
+	Generic wide-open-throttle torque curves: brake torque / peak torque, sampled evenly from
+	idle (first point) to the engine's limit RPM (last point). Every curve is a real engine's
+	published or measured full-load curve, resampled by tools/mobility_torque_curves.py; the
+	engine, the data and the citation for each are in docs/mobility-sources.md.
 
-	GenericPetrol = {0.3, 0.55, 0.7, 0.85, 1, 0.9, 0.7},
-	GenericDiesel = {0.3, 0.55, 0.7, 0.85, 1, 0.9, 0.7}, --Needed for legacy and extra engines. It's set the same as petrol because the diesel engines are modified to a diesel torque curve by the fueltype curve. True values = {0.3, 0.97, 1, 0.95, 0.9, 0.8, 0.65}
-
-	Single = {0.4, 0.65, 0.96, 1.0, 0.93, 0.8, 0.71},
-	I2 = {0.4, 0.65, 0.96, 1.0, 0.93, 0.8, 0.71}, --Inlines are similar to V-Block engines except with excellent low end torque and a generally more stable powerband. Made up for by being less energy dense.
-	I3 = {0.4, 0.62, 0.88, 1.0, 0.95, 0.82, 0.73},
-	I4 = {0.4, 0.52, 0.74, 0.95, 1.0, 0.85, 0.75},
-	I5 = {0.4, 0.49, 0.65, 0.82, 1, 0.92, 0.7},
-	I6 = {0.4, 0.48, 0.6, 0.76, 0.95, 1.0, 0.875},
-
-	B4 = {0.3, 0.48, 0.76, 1, 0.94, 0.74, 0.67}, --Boxer types have a wide torquey band with a narrow peak they produce peak power at.
-	B6 = {0.35, 0.49, 0.67, 0.87, 1, 0.85, 0.73},
-
-	V2 = {0.3, 0.65, 0.95, 1.0, 0.91, 0.8, 0.68},
-	V4 = {0.3, 0.65, 0.95, 1.0, 0.91, 0.8, 0.68}, --Excellent low end torque and torque over a wide range. But the least peak HP
-	V6 = {0.35, 0.6, 0.84, 1.0, 0.95, 0.81, 0.7}, --Good torque over a wide range but less high range power
-	V8 = {0.35, 0.52, 0.72, 0.92, 1.0, 0.85, 0.72}, --Good torque at the upper mid range and a relatively wide range. Results in good horsepower.
-	V10 = {0.35, 0.49, 0.65, 0.82, 1, 0.92, 0.66}, --A wide but narrower torque band than the V8. Geared slightly more towards peak horsepower.
-	V12 = {0.3, 0.4, 0.55, 0.72, 0.9, 1.0, 0.875}, --Trades instantaneous torque for higher RPM torque. Best for peak horsepower in the upper range.
-
-	Turbine = {1, 0.9, 0.8, 0.6, 0.4, 0.2, 0.1},
-	GroundTurbine = {1, 0.59, 0.58, 0.65, 0.72, 0.66, 0.57}, --Turbine with internal reduction gearing producing instantaneous torque. Reduced from true values because of the fueltype curve. True Values = {1, 0.97, 0.84, 0.73, 0.65, 0.59, 0.529}
-	Wankel = {0.35, 0.7, 0.85, 0.95, 1, 0.9, 0.7},
-	Radial = {0.4, 0.5, 0.65, 0.75, 0.95, 1, 0.5},
-
-	Racing = {0.3, 0.4, 0.55, 0.72, 0.9, 1.0, 0.875}, --Significantly power dense engines designed for peak power output at the cost of longevity.
-
-	Electric = {1, 0.99, 0.95, 0.6, 0.2}
+	Where no data exists for a layout, the layout uses the closest engine class that has data
+	(noted per line). Cylinder layout by itself barely changes a full-load curve; bore/stroke,
+	valve timing and charging do.
+]]
+local Curve = {
+	-- EPA ALPHA package, 2014 Mazda 2.0 L SKYACTIV-G: naturally aspirated DOHC car I4, measured.
+	SkyactivI4 = {0.564, 0.714, 0.789, 0.925, 0.929, 0.993, 0.971, 1.0, 0.989, 0.966, 0.942, 0.889, 0.65},
+	-- EPA ALPHA package, 2014 Chevrolet 4.3 L LV3: naturally aspirated pushrod truck V6 (GM curve).
+	LV3V6 = {0.559, 0.728, 0.775, 0.832, 0.897, 0.925, 0.933, 0.967, 1.0, 0.991, 0.973, 0.954, 0.888},
+	-- TM 9-1731B fig. 10, Ford GAA 18.0 L V8 tank engine (1,000-2,800 rpm).
+	GAA = {0.908, 0.927, 0.945, 0.961, 0.974, 0.984, 0.991, 0.997, 1.0, 0.994, 0.979, 0.956, 0.926},
+	-- RENK AVDS-1790-2CAU data sheet: turbocharged air-cooled V12 tank diesel.
+	AVDS = {0.41, 0.497, 0.585, 0.672, 0.759, 0.847, 0.923, 0.969, 0.994, 1.0, 0.984, 0.967, 0.94},
+	-- VECTO generic 325 kW 12.7 L heavy truck diesel.
+	Vecto325 = {0.557, 0.668, 0.778, 0.889, 1.0, 1.0, 1.0, 1.0, 1.0, 0.952, 0.903, 0.855, 0.807},
+	-- VECTO generic 175 kW 6.9 L medium truck diesel.
+	Vecto175 = {0.5, 0.611, 0.721, 0.83, 0.918, 0.98, 1.0, 1.0, 1.0, 0.996, 0.96, 0.923, 0.882},
+	-- EPA ALPHA package, 2015 BMW 3.0 L N57: turbocharged car diesel, measured (1,000-4,620 rpm).
+	N57 = {0.539, 0.858, 0.956, 0.969, 0.991, 1.0, 0.995, 0.966, 0.928, 0.846, 0.767, 0.663, 0.544},
+	-- Kubota D1105 data sheet: naturally aspirated small industrial diesel (1,600-3,000 rpm).
+	D1105 = {0.951, 0.969, 0.983, 0.991, 0.997, 1.0, 0.988, 0.972, 0.949, 0.923, 0.892, 0.858, 0.824},
+	-- Free power turbine at full gas-generator output: straight line through the AGT1500's
+	-- 5,355 N·m @ 1,000 rpm and 3,754 N·m @ 3,000 rpm, idle at 14% (aero) / 20% (ground) of top speed.
+	AeroTurbine = {1.0, 0.97, 0.941, 0.911, 0.882, 0.852, 0.823, 0.793, 0.763, 0.734, 0.704, 0.675, 0.645},
+	GroundTurbine = {1.0, 0.972, 0.944, 0.915, 0.887, 0.859, 0.831, 0.803, 0.774, 0.746, 0.718, 0.69, 0.661},
+	-- 2012 Nissan LEAF motor (80 kW, 280 N·m, 10,400 rpm): constant torque to 26% of top speed, then constant power.
+	PMMotor = {1.0, 1.0, 1.0, 1.0, 0.787, 0.63, 0.525, 0.45, 0.394, 0.35, 0.315, 0.286, 0.262},
 }
+ACE.MobilityReferenceCurves = Curve
+
+-- Spark-ignition (petrol) and non-reciprocating engines, by enginetype.
+ACE.GenericTorqueCurves = {
+	GenericPetrol = Curve.LV3V6,
+
+	Single = Curve.SkyactivI4, -- no public motorcycle full-load data; closest measured NA petrol engine
+	I2 = Curve.SkyactivI4,     -- same
+	I3 = Curve.SkyactivI4,
+	I4 = Curve.SkyactivI4,
+	I5 = Curve.LV3V6,
+	I6 = Curve.LV3V6,
+
+	B4 = Curve.SkyactivI4,
+	B6 = Curve.LV3V6,
+
+	V2 = Curve.SkyactivI4,     -- no public motorcycle full-load data
+	V4 = Curve.SkyactivI4,
+	V6 = Curve.LV3V6,
+	V8 = Curve.LV3V6,          -- the LV3 is the V6 of GM's Gen V small-block V8 family
+	V10 = Curve.LV3V6,
+	V12 = Curve.LV3V6,
+
+	Turbine = Curve.AeroTurbine,
+	GroundTurbine = Curve.GroundTurbine,
+	Wankel = Curve.SkyactivI4, -- no public rotary full-load data
+	Radial = Curve.GAA,        -- WWII tank petrol engine class (R975 and GAA both powered the M4)
+
+	Racing = Curve.SkyactivI4, -- no public racing-engine full-load data
+
+	Electric = Curve.PMMotor,
+
+	GenericDiesel = Curve.AVDS, -- legacy key; diesels normally resolve through ACE.GenericDieselTorqueCurves
+}
+
+-- Compression-ignition engines (Diesel and Multifuel fuel), by enginetype.
+ACE.GenericDieselTorqueCurves = {
+	GenericDiesel = Curve.AVDS,
+
+	I2 = Curve.D1105,
+	I3 = Curve.D1105,
+	I4 = Curve.N57,
+	I5 = Curve.Vecto175,
+	I6 = Curve.Vecto325,
+
+	B4 = Curve.AVDS,
+	B6 = Curve.AVDS,
+
+	V4 = Curve.N57,
+	V6 = Curve.Vecto175,
+	V8 = Curve.Vecto175,
+	V10 = Curve.AVDS,
+	V12 = Curve.AVDS,
+
+	Radial = Curve.AVDS,
+}
+
+local NotReciprocating = { Turbine = true, GroundTurbine = true, Electric = true }
+
+--- Returns the wide-open-throttle torque curve of an engine definition.
+-- An explicit `torquecurve` wins; otherwise the generic curve for its enginetype, taken from
+-- the diesel table when the engine burns Diesel or Multifuel.
+-- @param Def Engine definition (fields torquecurve, enginetype, fuel).
+-- @return Curve points, 0..1 over idle..limit RPM. Do not modify the returned table.
+function ACE.GetEngineTorqueCurve(Def)
+	if Def.torquecurve then return Def.torquecurve end
+	local Type = Def.enginetype or "GenericPetrol"
+	local Fuel = Def.fuel or "Petrol"
+	if (Fuel == "Diesel" or Fuel == "Multifuel") and not NotReciprocating[Type] then
+		return ACE.GenericDieselTorqueCurves[Type] or ACE.GenericDieselTorqueCurves.GenericDiesel
+	end
+	return ACE.GenericTorqueCurves[Type] or ACE.GenericTorqueCurves.GenericPetrol
+end

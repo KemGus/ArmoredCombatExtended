@@ -38,13 +38,7 @@ do -- Torque / power graph
 			return function( RPM ) return Mobility.EngineCurveSample( Data.def, RPM ) or 0 end
 		end
 
-		local Curve = table.Copy( Data.curve or ACE.GenericTorqueCurves.GenericPetrol )
-		local Fuel = Data.fuel == "Multifuel" and "Diesel" or Data.fuel
-		local FuelCurve = ACE.PerFuelTorqueCurveMul[Fuel or "Petrol"]
-
-		if FuelCurve then
-			ACE.ApplyEngineFuelModifierToCurve( Curve, FuelCurve )
-		end
+		local Curve = Data.curve or ACE.GenericTorqueCurves.GenericPetrol
 
 		return function( RPM )
 			local Perc = math.Remap( RPM, Data.idle, Data.limit, 0, 1 )
@@ -170,7 +164,7 @@ function ACE.EngineGUI_Update( Table )
 	end
 
 	ACE.PlotEngineCurves( acemenupanel.CData.EngineGraph, {
-		curve  = Table.torquecurve or ACE.GenericTorqueCurves[Table.enginetype],
+		curve  = ACE.GetEngineTorqueCurve(Table),
 		torque = Table.torque,
 		idle   = Table.idlerpm,
 		limit  = Table.limitrpm,

@@ -106,7 +106,11 @@ ACE.DefineEngine( "21.0-V12", {
 	weight = 1800,
 	torque = 5340,
 	flywheelmass = 7,
-	idlerpm = 400,
+	-- AVDS-1790: 29.3 L, 146 x 146 mm, 12 cyl (RENK America AVDS-1790 data sheet)
+	displacement = 29.3,
+	cylinders = 12,
+	stroke = 0.146,
+	idlerpm = 700, -- TM 9-2815-220-24: idles at 675-725 rpm
 	limitrpm = 2500,
 } )
 
@@ -136,8 +140,13 @@ ACE.DefineEngine( "16.5-V12", {
 	weight = 1050,
 	torque = 1650,
 	flywheelmass = 2,
+	-- V-2-34: 38.88 L, bore 150 mm, stroke 180 mm (left bank; 186.7 mm right), 12 cyl
+	-- (T-34-85 technical manual, via ru.wikipedia "V-2")
+	displacement = 38.88,
+	cylinders = 12,
+	stroke = 0.18,
 	idlerpm = 675,
-	limitrpm = 3500,
+	limitrpm = 1800, -- V-2-34: 500 hp at 1,800 rpm, 2,050 rpm maximum
 } )
 
 ACE.DefineEngine( "24.8-V12", {
@@ -150,6 +159,10 @@ ACE.DefineEngine( "24.8-V12", {
 	enginetype = "GenericDiesel",
 	weight = 2100,
 	torque = 5400,
+	-- AVDS-1790: 29.3 L, 146 x 146 mm, 12 cyl (RENK America AVDS-1790 data sheet)
+	displacement = 29.3,
+	cylinders = 12,
+	stroke = 0.146,
 	flywheelmass = 7,
 	idlerpm = 500,
 	limitrpm = 2800,
@@ -165,6 +178,10 @@ ACE.DefineEngine( "27.0-V12", {
 	enginetype = "GenericDiesel",
 	weight = 3150,
 	torque = 6630,
+	-- AVDS-1790: 29.3 L, 146 x 146 mm, 12 cyl (RENK America AVDS-1790 data sheet)
+	displacement = 29.3,
+	cylinders = 12,
+	stroke = 0.146,
 	flywheelmass = 6.6,
 	idlerpm = 500,
 	limitrpm = 2800,
