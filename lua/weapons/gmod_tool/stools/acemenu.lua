@@ -121,6 +121,30 @@ function TOOL:LeftClick( trace )
 
 end
 
+if SERVER then
+	util.AddNetworkString("ACE_MenuLinkSelection")
+end
+
+-- Sends the owner the entities currently selected for linking, so their client can preview the link.
+local function SendLinkSelection(tool)
+	local ply = tool:GetOwner()
+	if not IsValid(ply) then return end
+
+	local list = {}
+	for ent in pairs(tool.SelectedEntities) do
+		if IsValid(ent) and #list < 255 then
+			list[#list + 1] = ent
+		end
+	end
+
+	net.Start("ACE_MenuLinkSelection")
+	net.WriteUInt(#list, 8)
+	for _, ent in ipairs(list) do
+		net.WriteEntity(ent)
+	end
+	net.Send(ply)
+end
+
 function TOOL:SelectEntity(ent)
 	if CLIENT then return end
 
@@ -131,6 +155,8 @@ function TOOL:SelectEntity(ent)
 		ent:SetColor(self.SelectedEntities[ent])
 		self.SelectedEntities[ent] = nil
 	end
+
+	SendLinkSelection(self)
 end
 
 function TOOL:DeselectAll()
@@ -143,6 +169,8 @@ function TOOL:DeselectAll()
 
 		self.SelectedEntities[ent] = nil
 	end
+
+	SendLinkSelection(self)
 end
 
 local function linkEnts(e1, e2, unlink)
