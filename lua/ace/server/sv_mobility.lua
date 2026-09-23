@@ -39,7 +39,7 @@ end
 ------------------------------------------------------------------------ engines
 
 --- Builds (or returns the cached) physical spec for an engine entity.
--- Rebuilt when the fuel in use changes, because fuel reshapes the torque curve.
+-- Rebuilt when the fuel in use changes (the fallback definition below records it).
 -- @param Engine acf_engine entity.
 -- @param FuelType Fuel currently being burned.
 function M.EngineSpec(Engine, FuelType)
@@ -47,9 +47,7 @@ function M.EngineSpec(Engine, FuelType)
 	if Engine.MobSpec and Engine.MobSpecKey == Key then return Engine.MobSpec end
 
 	local Def = ACE.Weapons.Engines[Engine.Id]
-	local Curve = table.Copy(Engine.TorqueCurve)
-	local Mul = ACE.PerFuelTorqueCurveMul and ACE.PerFuelTorqueCurveMul[Key == "Multifuel" and "Diesel" or Key]
-	if Mul then ACE.ApplyEngineFuelModifierToCurve(Curve, Mul) end
+	local Curve = Engine.TorqueCurve
 
 	local Spec = EngineModel.Build(Def or {
 		torque = Engine.BaseTorque, idlerpm = Engine.IdleRPM, limitrpm = Engine.LimitRPM,

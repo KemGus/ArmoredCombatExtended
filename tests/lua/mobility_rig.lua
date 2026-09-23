@@ -38,7 +38,7 @@ return function(Root)
 	-- Assisted (bool), Tick (s), Substeps.
 	function Rig.New(Opts)
 		local Def = Opts.EngineDef
-		local Curve = Def.torquecurve or ACE.GenericTorqueCurves[Def.enginetype] or ACE.GenericTorqueCurves.GenericPetrol
+		local Curve = ACE.GetEngineTorqueCurve(Def)
 		local Spec = M.Engine.Build(Def, Curve)
 		local State = M.Engine.NewState(Spec)
 

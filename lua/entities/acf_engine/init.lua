@@ -127,7 +127,7 @@ do
 		Engine.EngineType       = Lookup.enginetype or "GenericPetrol"
 		Engine.Efficiency     = 1-(ACE.Efficiency[Engine.EngineType] or ACE.Efficiency["GenericPetrol"])  * (1 + (Engine.peakkw * 1.34/2000)*0.1) -- Energy not transformed into kinetic energy and instead into thermal
 		Engine.EfficiencyMod	= Engine.Efficiency
-		Engine.TorqueCurve	= Lookup.torquecurve or ACE.GenericTorqueCurves[Engine.EngineType]
+		Engine.TorqueCurve	= ACE.GetEngineTorqueCurve(Lookup)
 		Engine.ModTorqueCurve      = table.Copy(Engine.TorqueCurve)
 		Engine.RequiresDriver   = false
 		Engine.SoundPath        = Lookup.sound
