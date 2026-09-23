@@ -137,7 +137,7 @@ do -- Gear chart (vehicle speed vs engine RPM)
 	end
 
 	-- Adds the chart and its inputs to the gearbox menu, and redraws it whenever a slider moves.
-	function CreateGearChart( Table )
+	CreateGearChart = function( Table )
 
 		local CData = acemenupanel.CData
 		if IsValid( CData.GearChart ) then return end
