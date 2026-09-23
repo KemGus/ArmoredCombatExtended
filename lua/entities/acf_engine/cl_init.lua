@@ -20,6 +20,116 @@ function ENT:Draw()
 
 end
 
+do -- Torque / power graph
+
+	local KwToHp       = 1.34
+	local TorqueColor  = Color(200, 50, 50)
+	local PowerColor   = Color(40, 90, 210)
+	local IdleColor    = Color(120, 120, 120)
+	local RedlineColor = Color(230, 0, 0)
+	local BandColor    = Color(255, 200, 0, 45)
+
+	-- Returns a function RPM -> torque in Nm for the given engine data.
+	-- This is the only place that knows the torque model; swap it when the model changes.
+	local function MakeTorqueSampler( Data )
+
+		local Mobility = ACE.Mobility
+		if Mobility and Mobility.EngineCurveSample and Data.def then
+			return function( RPM ) return Mobility.EngineCurveSample( Data.def, RPM ) or 0 end
+		end
+
+		local Curve = table.Copy( Data.curve or ACE.GenericTorqueCurves.GenericPetrol )
+		local Fuel = Data.fuel == "Multifuel" and "Diesel" or Data.fuel
+		local FuelCurve = ACE.PerFuelTorqueCurveMul[Fuel or "Petrol"]
+
+		if FuelCurve then
+			ACE.ApplyEngineFuelModifierToCurve( Curve, FuelCurve )
+		end
+
+		return function( RPM )
+			local Perc = math.Remap( RPM, Data.idle, Data.limit, 0, 1 )
+			return Data.torque * ACE.CalcCurve( Curve, Perc )
+		end
+	end
+
+	local function PowerKW( Torque, RPM )
+		return Torque * RPM / 9548.8
+	end
+
+	-- Peak torque, peak power and the powerband (within 10% of peak power), measured on the sampler.
+	local function Analyse( Data, Sample )
+		local Steps = 200
+		local Result = { peakTq = 0, peakTqRPM = Data.idle, peakKw = 0, peakKwRPM = Data.idle }
+		local Powers = {}
+
+		for I = 0, Steps do
+			local RPM = Data.idle + ( Data.limit - Data.idle ) * I / Steps
+			local Tq = Sample( RPM )
+			local Kw = PowerKW( Tq, RPM )
+
+			Powers[I] = Kw
+
+			if Tq > Result.peakTq then
+				Result.peakTq, Result.peakTqRPM = Tq, RPM
+			end
+
+			if Kw > Result.peakKw then
+				Result.peakKw, Result.peakKwRPM = Kw, RPM
+			end
+		end
+
+		for I = 0, Steps do
+			if Powers[I] >= Result.peakKw * 0.9 then
+				local RPM = Data.idle + ( Data.limit - Data.idle ) * I / Steps
+
+				Result.bandMin = Result.bandMin or RPM
+				Result.bandMax = RPM
+			end
+		end
+
+		return Result
+	end
+
+	--- Fills an ACE_Graph with an engine's torque and power curves.
+	-- @param Graph Panel The ACE_Graph to draw into; it is cleared first.
+	-- @param Data table { curve = table, torque = number (Nm), idle = number, limit = number, fuel = string, def = table (optional engine definition) }.
+	function ACE.PlotEngineCurves( Graph, Data )
+
+		if not IsValid( Graph ) or not Data or not Data.idle or not Data.limit or Data.limit <= Data.idle then return end
+
+		local Sample = MakeTorqueSampler( Data )
+		local Info = Analyse( Data, Sample )
+		local PeakHp = Info.peakKw * KwToHp
+
+		Graph:Clear()
+		Graph:SetXRange( 0, math.ceil( Data.limit * 1.05 / 100 ) * 100 )
+		Graph:SetYRange( 0, math.max( Info.peakTq, PeakHp, 1 ) * 1.15 )
+		Graph:SetXLabel( "RPM" )
+		Graph:SetYLabel( "Nm / hp" )
+		Graph:SetXFormat( function( RPM ) return math.Round( RPM ) .. " RPM" end )
+
+		if Info.bandMin and Info.bandMax then
+			Graph:PlotBand( "Powerband", Info.bandMin, Info.bandMax, BandColor )
+		end
+
+		Graph:PlotLimitLine( "Idle", true, Data.idle, IdleColor )
+		Graph:PlotLimitLine( "Redline", true, Data.limit, RedlineColor )
+
+		Graph:PlotLimitFunction( "Torque", Data.idle, Data.limit, TorqueColor, Sample, function( Tq )
+			return math.Round( Tq ) .. " Nm / " .. math.Round( Tq * 0.73 ) .. " ft-lb"
+		end )
+
+		Graph:PlotLimitFunction( "Power", Data.idle, Data.limit, PowerColor, function( RPM )
+			return PowerKW( Sample( RPM ), RPM ) * KwToHp
+		end, function( Hp )
+			return math.Round( Hp ) .. " hp / " .. math.Round( Hp / KwToHp ) .. " kW"
+		end )
+
+		Graph:PlotPoint( math.Round( Info.peakTq ) .. " Nm", Info.peakTqRPM, Info.peakTq, TorqueColor )
+		Graph:PlotPoint( math.Round( PeakHp ) .. " hp / " .. math.Round( Info.peakKw ) .. " kW", Info.peakKwRPM, PeakHp, PowerColor )
+	end
+end
+
 function ACE.EngineGUI_Update( Table )
 
 	acemenupanel:CPanelText("Name", Table.name, "DermaDefaultBold")
@@ -52,6 +162,21 @@ function ACE.EngineGUI_Update( Table )
 
 	acemenupanel:CPanelText("RPM", "Idle: " .. Table.idlerpm .. " RPM\nPowerband : " .. (math.Round(pbmin / 10) * 10) .. "-" .. (math.Round(pbmax / 10) * 10) .. " RPM\nRedline : " .. Table.limitrpm .. " RPM")
 	acemenupanel:CPanelText("Weight", "Weight: " .. Table.weight .. " kg")
+
+	if not IsValid( acemenupanel.CData.EngineGraph ) then
+		acemenupanel.CData.EngineGraph = vgui.Create( "ACE_Graph" )
+		acemenupanel.CData.EngineGraph:SetTall( math.max( acemenupanel:GetWide() * 0.6, 160 ) )
+		acemenupanel.CustomDisplay:AddItem( acemenupanel.CData.EngineGraph )
+	end
+
+	ACE.PlotEngineCurves( acemenupanel.CData.EngineGraph, {
+		curve  = Table.torquecurve or ACE.GenericTorqueCurves[Table.enginetype],
+		torque = Table.torque,
+		idle   = Table.idlerpm,
+		limit  = Table.limitrpm,
+		fuel   = Table.fuel,
+		def    = Table,
+	} )
 
 
 	acemenupanel:CPanelText("FuelType", "\nFuel Type: " .. Table.fuel)

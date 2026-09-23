@@ -19,6 +19,188 @@ function ENT:Draw()
 
 end
 
+CreateClientConVar("ace_gearchart_wheel_diameter", 30, true, false, "Wheel diameter in inches used by the gearbox menu's gear chart.")
+CreateClientConVar("ace_gearchart_rpm", 5000, true, false, "Engine RPM used as the shift point by the gearbox menu's gear chart.")
+
+local CreateGearChart
+
+do -- Gear chart (vehicle speed vs engine RPM)
+
+	-- ACE gear values are currently output/input speed multipliers (0..1), and so is the final drive.
+	-- Set this to true once gears are stored as real reduction ratios (>1 = reduction, real = 1 / old).
+	local GEARS_ARE_REDUCTION_RATIOS = false
+
+	-- Wheel RPM per engine RPM for one gear value and the final drive.
+	local function ratioOf( GearValue, Final )
+		GearValue = math.abs( tonumber( GearValue ) or 0 )
+		Final = math.abs( tonumber( Final ) or 0 )
+
+		if GEARS_ARE_REDUCTION_RATIOS then
+			if GearValue == 0 or Final == 0 then return 0 end
+
+			return 1 / ( GearValue * Final )
+		end
+
+		return GearValue * Final
+	end
+
+	-- km/h at the wheel for an engine RPM, overall ratio and wheel diameter in inches.
+	local function SpeedKmh( RPM, Ratio, Diameter )
+		return RPM * Ratio * math.pi * Diameter * 60 * 0.0000254
+	end
+
+	local GearColors = {
+		Color(200, 50, 50), Color(220, 130, 20), Color(170, 160, 0), Color(40, 150, 40),
+		Color(20, 150, 170), Color(40, 90, 210), Color(130, 60, 200), Color(200, 60, 150),
+	}
+	local PathColor = Color(25, 25, 25)
+
+	-- Reads the gear sliders currently in the menu. Returns an array of { gear = N, value = V } and the final drive.
+	local function ReadGears( GearCount )
+		local CData = acemenupanel and acemenupanel.CData
+		if not CData then return {}, 0 end
+
+		local Gears = {}
+
+		for I = 1, GearCount do
+			local Slider = CData[I]
+
+			if IsValid( Slider ) then
+				Gears[#Gears + 1] = { gear = I, value = Slider:GetValue() }
+			end
+		end
+
+		local Final = IsValid( CData[10] ) and CData[10]:GetValue() or 1
+
+		return Gears, Final
+	end
+
+	--- Fills an ACE_Graph with a gear chart: engine RPM against road speed for every gear.
+	-- @param Graph Panel The ACE_Graph to draw into; it is cleared first.
+	-- @param Gears table Array of { gear = number, value = number } using the stored gear format.
+	-- @param Final number Final drive value in the stored gear format.
+	-- @param Diameter number Wheel diameter in inches.
+	-- @param ShiftRPM number Engine RPM each gear is run up to before the next one.
+	function ACE.PlotGearChart( Graph, Gears, Final, Diameter, ShiftRPM )
+
+		if not IsValid( Graph ) then return end
+
+		Graph:Clear()
+		Graph:SetLegendVisible( false )
+		Graph:SetXLabel( "km/h" )
+		Graph:SetYLabel( "Engine RPM" )
+		Graph:SetXFormat( function( Kmh ) return math.Round( Kmh, 1 ) .. " km/h / " .. math.Round( Kmh * 0.621371, 1 ) .. " mph" end )
+
+		Diameter = math.max( tonumber( Diameter ) or 30, 1 )
+		ShiftRPM = math.max( tonumber( ShiftRPM ) or 5000, 100 )
+
+		local Lines = {}
+
+		for _, Gear in ipairs( Gears ) do
+			local Ratio = ratioOf( Gear.value, Final )
+
+			if Ratio > 0 then
+				Lines[#Lines + 1] = { gear = Gear.gear, top = SpeedKmh( ShiftRPM, Ratio, Diameter ) }
+			end
+		end
+
+		table.sort( Lines, function( A, B ) return A.top < B.top end )
+
+		local TopSpeed = Lines[#Lines] and Lines[#Lines].top or 100
+
+		Graph:SetXRange( 0, TopSpeed * 1.05 )
+		Graph:SetYRange( 0, ShiftRPM * 1.1 )
+		Graph:PlotLimitLine( "Shift", false, ShiftRPM, Color(230, 0, 0) )
+
+		local RPMFormat = function( RPM ) return math.Round( RPM ) .. " RPM" end
+		local Path = { { x = 0, y = 0 } }
+
+		for I, Line in ipairs( Lines ) do
+			local Col = GearColors[( I - 1 ) % #GearColors + 1]
+
+			Graph:PlotTable( "Gear " .. Line.gear, { { x = 0, y = 0 }, { x = Line.top, y = ShiftRPM } }, Col, RPMFormat )
+			Graph:PlotPoint( tostring( Line.gear ), Line.top, ShiftRPM, Col )
+
+			-- Sawtooth: run this gear up to the shift RPM, then drop to the next gear's RPM at the same speed
+			Path[#Path + 1] = { x = Line.top, y = ShiftRPM }
+
+			local Next = Lines[I + 1]
+
+			if Next and Next.top > 0 then
+				Path[#Path + 1] = { x = Line.top, y = ShiftRPM * Line.top / Next.top }
+			end
+		end
+
+		if #Lines > 1 then
+			Graph:PlotTable( "Shift path", Path, PathColor, RPMFormat )
+		end
+	end
+
+	-- Adds the chart and its inputs to the gearbox menu, and redraws it whenever a slider moves.
+	function CreateGearChart( Table )
+
+		local CData = acemenupanel.CData
+		if IsValid( CData.GearChart ) then return end
+
+		local Inputs = vgui.Create( "DPanel" )
+		Inputs:SetPaintBackground( false )
+		Inputs:SetTall( 20 )
+
+		local function AddInput( Label, ConVarName, Tooltip )
+			local Text = Inputs:Add( "DLabel" )
+			Text:Dock( LEFT )
+			Text:SetDark( true )
+			Text:SetText( Label )
+			Text:SizeToContentsX( 6 )
+
+			local Wang = Inputs:Add( "DNumberWang" )
+			Wang:Dock( LEFT )
+			Wang:SetWide( 60 )
+			Wang:SetDecimals( 1 )
+			Wang:SetMinMax( 1, 50000 )
+			Wang:SetConVar( ConVarName )
+			Wang:SetTooltip( Tooltip )
+
+			return Wang
+		end
+
+		AddInput( "Wheel diameter (in):", "ace_gearchart_wheel_diameter", "For tracked vehicles use the drive wheel diameter." )
+		AddInput( "  Shift RPM:", "ace_gearchart_rpm", "Engine RPM each gear is run up to." )
+
+		CData.GearChartInputs = Inputs
+		acemenupanel.CustomDisplay:AddItem( Inputs )
+
+		local Graph = vgui.Create( "ACE_Graph" )
+		Graph:SetTall( math.max( acemenupanel:GetWide() * 0.55, 150 ) )
+		CData.GearChart = Graph
+		acemenupanel.CustomDisplay:AddItem( Graph )
+
+		local GearCount = Table.gears or 0
+		local LastKey
+		local NextCheck = 0
+
+		Graph.Think = function( Self )
+			local Now = RealTime()
+			if Now < NextCheck then return end
+			NextCheck = Now + 0.2
+
+			local Gears, Final = ReadGears( GearCount )
+			local Diameter = GetConVar( "ace_gearchart_wheel_diameter" ):GetFloat()
+			local ShiftRPM = GetConVar( "ace_gearchart_rpm" ):GetFloat()
+			local Key = Final .. "|" .. Diameter .. "|" .. ShiftRPM
+
+			for _, Gear in ipairs( Gears ) do
+				Key = Key .. "|" .. Gear.value
+			end
+
+			if Key == LastKey then return end
+			LastKey = Key
+
+			ACE.PlotGearChart( Self, Gears, Final, Diameter, ShiftRPM )
+		end
+	end
+end
+
 function ACE.GearboxGUICreate( Table )
 
 	if not acemenupanel.Serialize then
@@ -110,6 +292,10 @@ function ACE.GearboxGUICreate( Table )
 	acemenupanel:CPanelText("Desc", Table.desc)
 	acemenupanel:CPanelText("MaxTorque", "Clutch Maximum Torque Rating : " .. Table.maxtq .. "n-m / " .. math.Round(Table.maxtq * 0.73) .. "ft-lb")
 	acemenupanel:CPanelText("Weight", "Weight : " .. Table.weight .. "kg\n")
+
+	if not Table.cvt then
+		CreateGearChart( Table )
+	end
 
 	if Table.auto then
 		acemenupanel:CPanelText( "ShiftPointGen", "Shift Point Generator:", "DermaDefaultBold" )
