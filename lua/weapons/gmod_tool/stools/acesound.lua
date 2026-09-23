@@ -64,15 +64,24 @@ ACE.SoundToolSupport = ACE.SoundToolSupport or {
 		SetSound = function(ent, soundData)
 			ent.SoundPath = soundData.Sound
 			ent.SoundPitch = soundData.Pitch
+
+			if ACE.EngineSound and ACE.EngineSound.Refresh then
+				ACE.EngineSound.Refresh(ent)
+			end
 		end,
 
 		ResetSound = function(ent)
 
 			local Id = ent.Id
-			local pitch = EngineTable[Id]["pitch"] or 1
+			local pitch = EngineTable[Id]["pitch"] or 100
 			local sound = EngineTable[Id]["sound"] or ""
 
 			local soundData = { Sound = sound, Pitch = pitch }
+
+			-- Resetting also drops any sound banks
+			if ACE.EngineSound and ACE.EngineSound.SetBanks then
+				ACE.EngineSound.SetBanks(ent, nil)
+			end
 
 			local setSound = ACE.SoundToolSupport["acf_engine"].SetSound
 			setSound( ent, soundData )
@@ -285,6 +294,12 @@ function TOOL:LeftClick( trace )
 
 	local sound = self:GetOwner():GetInfo("wire_soundemitter_sound")
 	local pitch = self:GetClientInfo("pitch")
+
+	-- A single replacement sound takes over from any sound banks on the engine
+	if trace.Entity:GetClass() == "acf_engine" and ACE.EngineSound and ACE.EngineSound.SetBanks then
+		ACE.EngineSound.SetBanks(trace.Entity, nil)
+	end
+
 	ReplaceSound( self:GetOwner(), trace.Entity, {sound, pitch, true} )
 	return true
 end
@@ -414,6 +429,24 @@ if CLIENT then
 
 		panel:NumSlider( "#tool.acesound.pitch", "acesound_pitch", 10, 255, 0 )
 		panel:ControlHelp( "#tool.acesound.pitchdesc" )
+
+		local BanksButton = vgui.Create("DButton")
+		BanksButton:SetText("Edit sound banks of the engine you're looking at")
+		BanksButton:SetWide(wide)
+		BanksButton:SetTall(20)
+		BanksButton:SetIcon( "icon16/sound_add.png" )
+		BanksButton.DoClick = function()
+			local ent = LocalPlayer():GetEyeTrace().Entity
+
+			if not IsValid(ent) or ent:GetClass() ~= "acf_engine" then
+				notification.AddLegacy("Look at an ACE engine first.", NOTIFY_ERROR, 4)
+				return
+			end
+
+			ACE.EngineSound.RequestEditor(ent)
+		end
+		panel:AddItem(BanksButton)
+		panel:ControlHelp( "Engines can crossfade several recordings by RPM (sound banks). A bank can play at an entity wired to the engine's Exhaust input." )
 	end
 
 	--[[

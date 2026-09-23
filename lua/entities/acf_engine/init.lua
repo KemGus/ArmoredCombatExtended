@@ -13,6 +13,7 @@ do
 	local EngineWireDescs = {
 		--Inputs
 		["Throttle"]    = "Controls the amount of fuel which will be displaced to the engine.\n Increasing it will also increase RPM, Power and fuel consumption. Values go from 0-100.",
+		["Exhaust"]     = "Entity that sound banks marked 'Play at exhaust' play from.",
 
 		--Outputs
 		["RPM"]         = "Returns the current RPM.",
@@ -60,7 +61,7 @@ do
 
 		self.LastDamageTime = CurTime()
 
-		self.Inputs = Wire_CreateInputs( self, { "Active", "Throttle (" .. EngineWireDescs["Throttle"] .. ")" } ) --use fuel input?
+		self.Inputs = WireLib.CreateSpecialInputs( self, { "Active", "Throttle (" .. EngineWireDescs["Throttle"] .. ")", "Exhaust (" .. EngineWireDescs["Exhaust"] .. ")" }, { "NORMAL", "NORMAL", "ENTITY" } ) --use fuel input?
 		self.Outputs = WireLib.CreateSpecialOutputs( self,  { "RPM (" .. EngineWireDescs["RPM"] .. ")", "Torque (" .. EngineWireDescs["Torque"] .. ")", "Power (" .. EngineWireDescs["Power"] .. ")", "Fuel Use (" .. EngineWireDescs["Fuel Use"] .. ")", "Total Fuel" , "Entity", "Mass", "Physical Mass" , "EngineHeat (" .. EngineWireDescs["EngineHeat"] .. ")"},
 														{ "NORMAL","NORMAL","NORMAL", "NORMAL", "NORMAL", "ENTITY", "NORMAL", "NORMAL", "NORMAL" } )
 
@@ -376,6 +377,11 @@ end
 
 function ENT:TriggerInput( iname, value )
 
+	if iname == "Exhaust" then
+		ACE.EngineSound.SetExhaust( self, value )
+		return
+	end
+
 	if (iname == "Throttle") then
 		self.Throttle = math.Clamp(value,0,100) / 100
 	elseif (iname == "Active") then
@@ -404,17 +410,7 @@ function ENT:TriggerInput( iname, value )
 			--RequiresDriver
 			if (HasFuel or ACE.EnginesRequireFuel == 0) and HasDriver then
 				self.Active = true
-				if self.SoundPath ~= "" then
-
-					--stupid workaround for the engine sound. THANK YOU garry
-					filter = RecipientFilter(true)
-					filter:AddAllPlayers()
-
-					self.Sound = CreateSound(self, self.SoundPath , filter)
-					self.Sound:SetSoundLevel( self.MaxDB ) --Has to be adjusted before being played sadly. No dynamic DB levels.
-					self.Sound:PlayEx(0.5,100)
-					--print("Engine DB: " .. SoundStrength * self.MaxDB)
-				end
+				ACE.EngineSound.Start( self )
 				self:ACFInit()
 			else
 
@@ -443,10 +439,7 @@ function ENT:TriggerInput( iname, value )
 			self.FlyRPM = 0
 			self.RPM = {}
 			self.RPM[1] = self.IdleRPM
-			if self.Sound then
-				self.Sound:Stop()
-			end
-			self.Sound = nil
+			ACE.EngineSound.Stop( self )
 			Wire_TriggerOutput( self, "RPM", 0 )
 			Wire_TriggerOutput( self, "Torque", 0 )
 			Wire_TriggerOutput( self, "Power", 0 )
@@ -837,14 +830,7 @@ function ENT:CalcRPM()
 	Wire_TriggerOutput(self, "Power", math.Round(Power))
 	Wire_TriggerOutput(self, "RPM", math.Round(self.FlyRPM))
 
-	if self.Sound then
-		self.Sound:ChangePitch( math.min( 20 + (SmoothRPM * (self.SoundPitch / 100)) / 50, 255 ), 0 )
-		local SoundStrength = 0.25 + (0.1 + 0.9 * ((SmoothRPM / self.LimitRPM) ^ 1.5)) * self.Throttle / 1.5
-
-		self.Sound:ChangeVolume( SoundStrength, 0 )
-		--self.Sound:SetSoundLevel( SoundStrength * self.MaxDB, 0 ) --Will not work after being played.
-
-	end
+	ACE.EngineSound.Update( self, self.FlyRPM, self.Throttle )
 
 	return RPM
 end
@@ -1290,7 +1276,5 @@ do
 	end
 end
 function ENT:OnRemove()
-	if self.Sound then
-		self.Sound:Stop()
-	end
+	ACE.EngineSound.Stop( self )
 end
