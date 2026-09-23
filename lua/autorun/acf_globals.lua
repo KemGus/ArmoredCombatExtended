@@ -446,6 +446,7 @@ if SERVER then
     include("ace/server/sv_acfballistics.lua")
     include("ace/server/sv_contraption.lua")
     include("ace/server/sv_heat.lua")
+    include("ace/server/sv_mobility.lua")
     include("ace/server/sv_crewseat_base.lua")
     include("ace/server/sv_legality.lua")
     include("ace/server/sv_acfpermission.lua")

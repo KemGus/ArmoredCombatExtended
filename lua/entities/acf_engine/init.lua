@@ -20,7 +20,8 @@ do
 		["Torque"]      = "Returns the current Torque.",
 		["Power"]       = "Returns the current power of this engine.",
 		["Fuel Use"]    = "Gives the actual fuel consumption of the engine.",
-		["EngineHeat"]  = "Returns the engine's temperature."
+		["EngineHeat"]  = "Returns the engine's temperature.",
+		["Stalled"]     = "1 when the engine has stalled. Cycle Active to crank it again."
 	}
 
 	function ENT:Initialize()
@@ -62,8 +63,8 @@ do
 		self.LastDamageTime = CurTime()
 
 		self.Inputs = WireLib.CreateSpecialInputs( self, { "Active", "Throttle (" .. EngineWireDescs["Throttle"] .. ")", "Exhaust (" .. EngineWireDescs["Exhaust"] .. ")" }, { "NORMAL", "NORMAL", "ENTITY" } ) --use fuel input?
-		self.Outputs = WireLib.CreateSpecialOutputs( self,  { "RPM (" .. EngineWireDescs["RPM"] .. ")", "Torque (" .. EngineWireDescs["Torque"] .. ")", "Power (" .. EngineWireDescs["Power"] .. ")", "Fuel Use (" .. EngineWireDescs["Fuel Use"] .. ")", "Total Fuel" , "Entity", "Mass", "Physical Mass" , "EngineHeat (" .. EngineWireDescs["EngineHeat"] .. ")"},
-														{ "NORMAL","NORMAL","NORMAL", "NORMAL", "NORMAL", "ENTITY", "NORMAL", "NORMAL", "NORMAL" } )
+		self.Outputs = WireLib.CreateSpecialOutputs( self,  { "RPM (" .. EngineWireDescs["RPM"] .. ")", "Torque (" .. EngineWireDescs["Torque"] .. ")", "Power (" .. EngineWireDescs["Power"] .. ")", "Fuel Use (" .. EngineWireDescs["Fuel Use"] .. ")", "Total Fuel" , "Entity", "Mass", "Physical Mass" , "EngineHeat (" .. EngineWireDescs["EngineHeat"] .. ")", "Stalled (" .. EngineWireDescs["Stalled"] .. ")"},
+														{ "NORMAL","NORMAL","NORMAL", "NORMAL", "NORMAL", "ENTITY", "NORMAL", "NORMAL", "NORMAL", "NORMAL" } )
 
 		Wire_TriggerOutput( self, "Entity", self )
 		Wire_TriggerOutput(self, "EngineHeat", self.Heat)
@@ -436,11 +437,8 @@ function ENT:TriggerInput( iname, value )
 			ACE.DoContraptionLegalCheck(self)
 		elseif (value <= 0 and self.Active) then
 			self.Active = false
-			self.FlyRPM = 0
-			self.RPM = {}
-			self.RPM[1] = self.IdleRPM
+			if self.MobState then ACE.Mobility.Engine.Stop(self.MobState) end
 			ACE.EngineSound.Stop( self )
-			Wire_TriggerOutput( self, "RPM", 0 )
 			Wire_TriggerOutput( self, "Torque", 0 )
 			Wire_TriggerOutput( self, "Power", 0 )
 			Wire_TriggerOutput( self, "Fuel Use", 0 )
@@ -566,6 +564,13 @@ function ENT:Think()
 		self:CalcRPM()
 	end
 
+	-- The drivetrain keeps running with the engine off so brakes, engine braking and a stopped
+	-- engine holding the car in gear all still work.
+	if next(self.GearLink) then
+		self.MobDt = math.Clamp(CurTime() - self.LastThink, engine.TickInterval() * 0.5, 0.1)
+		ACE.Mobility.Tick(self, self.MobDt)
+	end
+
 	self.LastThink = ACE.CurTime
 	self:NextThink( ACE.CurTime )
 	return true
@@ -628,6 +633,7 @@ function ENT:CalcMassRatio()
 	--local Tmass = PhysMass + Mass
 
 	self.MassRatio = PhysMass / Mass
+	self.PhysMass = PhysMass
 	--self.MassRatio = 1 / (Tmass/10000)
 	--self.MassRatio = (PhysMass ^ 0.9225) / Mass
 
@@ -641,8 +647,10 @@ function ENT:ACFInit()
 	self:CalcMassRatio()
 
 	self.LastThink = CurTime()
-	self.Torque = self.PeakTorque
-	self.FlyRPM = self.IdleRPM * 1.5
+	self.Stalled = false
+	Wire_TriggerOutput(self, "Stalled", 0)
+	ACE.Mobility.EngineSpec(self, self.FuelType)
+	ACE.Mobility.Engine.Start(self.MobState)
 
 end
 
@@ -664,142 +672,58 @@ local function IsValidfueltank( Tank )
 	return IsValid(Tank) and Tank.Fuel > 0 and Tank.Active and Tank.Legal
 end
 
--- Literally, the engine main core. Here the RPMs, Torque and important stuff is calculated here.
+-- Per-tick checks that decide whether the engine may run: fuel, driver, legality, heat and
+-- damage. Torque and RPM come from the drivetrain solve in ace/server/sv_mobility.lua.
 function ENT:CalcRPM()
 
-	local DeltaTime = CurTime() - self.LastThink
+	local DeltaTime = math.min(CurTime() - self.LastThink, 0.1)
 
-	------------------------ Fuel check section ------------------------
-
-	--First, find the first active fuel tank on among the linked fuels.
+	-- First active fuel tank among the linked ones.
 	local Tank
 	for _, FuelTank in ipairs(self.FuelLink) do
 		if IsValidfueltank( FuelTank ) then
 			Tank = FuelTank
-			break --return Tank
+			break
 		end
 	end
+	self.MobTank = Tank
 
-	-- Calculate fuel usage. First condition is used if the fuel is optional and has bonus, 2nd is used for mandatory fuel requirement.
-	-- Concern: why is the fuel usage returning 0 when RPMs hit redline? Maybe the engine hits the redline and torque becomes 0 = no fuel usage??
 	if IsValid(Tank) then
-		local Consumption
-
-		if Tank.FuelType != self.LastFuel then --Fueltype changed. Recalculate fuel specific modifiers.
-
-			self.ModTorqueCurve = table.Copy(self.TorqueCurve) --Resets the variable to the base before modifying it for fueltype.
-			--print("Before:")
-			--PrintTable(self.ModTorqueCurve)
-
-			ACE.ApplyEngineFuelModifierToCurve(self.ModTorqueCurve, ACE.PerFuelTorqueCurveMul[Tank.FuelType])
-
-			--print("After:")
-			--PrintTable(self.ModTorqueCurve)
-
-			
-			self.EfficiencyMod     = self.Efficiency / ACE.PerFuelRelativeEfficiency[Tank.FuelType] --Applies efficiency modifer for different fueltypes on top of the per engine effiency.
-
-			--Cache FuelPowerDensity -- Is it worth another variable?
-			--Cache FuelEfficiency
-
-			self.LastFuel = Tank.FuelType
-		end
-
-		if self.FuelType == "Electric" then
-			Consumption = (self.Torque * self.FlyRPM / 9548.8) * self.FuelUse * DeltaTime
-		else
-			local Load = 0.3 + self.Throttle * 0.7 -- the heck are these magic numbers?
-			Consumption = Load * self.FuelUse * (self.FlyRPM / self.PeakKwRPM) * DeltaTime / ACE.FuelDensity[Tank.FuelType]
-		end
-
-		Tank.Fuel = math.max(Tank.Fuel - Consumption,0)
-
-		self.HeatGeneration = Consumption * (1 - self.EfficiencyMod) * ACE.FuelPowerDensity[Tank.FuelType] * 0.4 * 1000 / ACE.FuelRate / DeltaTime --Assume 60% heat lost to air as exhaust hence 0.4
-		--print("Kj/S " .. self.HeatGeneration)
-
-		if self.HeatGeneration > 0 then --Avoids nan inputs from dividing by deltatime.
-			ACE.AddThermalEnergy(self, self.HeatGeneration * ACE.ThermalTimeScale * DeltaTime) --Have to convert it back to deltatime as the above indicates KJ/S of heat generation used on the display.
-		end
-
-
 		self.HasFuel = true
-		Wire_TriggerOutput(self, "Fuel Use", math.Round(60 * Consumption / DeltaTime,3))
 	else
+		self.HasFuel = false
 		Wire_TriggerOutput(self, "Fuel Use", 0)
 
 		if ACE.EnginesRequireFuel == 1 then
 			self:TriggerInput( "Active", 0 ) --shut off if no fuel and requires it
-			return 0
+			return
 		end
-		self.HasFuel = false
 	end
 
-	--Could stuff this in a spot executed less frequently
-	local Speed = math.min(ACE.GetPhysicalParent(self):GetVelocity():Length() / 17.6,141) --Speed in MPH. Capped to 141mph or ~12x cooling.
-	local CoolingMult = 1 * 2^(Speed/40) --The cooling of radiators doubles every 40mph of speed
+	-- Air cooling improves with speed: it doubles every 40 mph.
+	local Speed = math.min(ACE.GetPhysicalParent(self):GetVelocity():Length() / 17.6, 141)
+	local CoolingMult = 2 ^ (Speed / 40)
 	ACE.AtmosphericHeatDissipation(self, CoolingMult, DeltaTime)
 
 	ACE.DoContraptionLegalCheck(self)
 
-	if self.RequiresDriver and not (self.HasDriver or self.HasSeatDriver)  then
+	if self.RequiresDriver and not (self.HasDriver or self.HasSeatDriver) then
 		self:TriggerInput( "Active", 0 ) --shut off if no driver and requires it
-		return 0
+		return
 	end
 
-	------------------------ Torque & RPM calculation ------------------------
-
-	--adjusting performance based on damage
-	-- TorqueMult is a mutipler that affects the final Torque an engine can offer at its max.
-	-- PeakTorque is the final possible torque to get.
+	-- Damage lowers the torque an engine can make; a driver boosts it. TorqueScale sets how
+	-- quickly damage bites for this engine type.
 	local DriverBoost = self.HasDriver and ACE.DriverTorqueBoost or 1 --Seat drivers dont give hp boost.
 	self.TorqueMult = math.Clamp(((1 - self.TorqueScale) / 0.5) * ((self.ACE.Health / self.ACE.MaxHealth) - 1) + 1, self.TorqueScale, 1)
 	self.PeakTorque = self.BaseTorque * self.TorqueMult * DriverBoost
-
-	-- Calculate the current torque from flywheel RPM.
-	local perc = math.Remap(self.FlyRPM, self.IdleRPM, self.LimitRPM, 0, 1)
-	self.Torque = self.Throttle * ACE.CalcCurve(self.ModTorqueCurve, perc) * self.PeakTorque * (self.FlyRPM < self.LimitRPM and 1 or 0)
-
-	-- Let's accelerate the flywheel based on that torque.
-	-- Calculate drag
-	local Drag
-	if self.iselec then
-		Drag = self.PeakTorque * (math.max( self.FlyRPM - self.IdleRPM, 0) / self.FlywheelOverride) * (1 - self.Throttle) / self.Inertia
-	else
-		Drag = self.PeakTorque * (math.max( self.FlyRPM - self.IdleRPM, 0) / self.PeakMaxRPM) * ( 1 - self.Throttle) / self.Inertia
-	end
-	self.FlyRPM = math.Clamp( self.FlyRPM + self.Torque / self.Inertia - Drag, 0 , self.LimitRPM )
-
-	-- The gearboxes don't think on their own, it's the engine that calls them, to ensure consistent execution order
-	local Boxes = table.Count( self.GearLink )
-	local TotalReqTq = 0
-	-- Get the requirements for torque for the gearboxes (Max clutch rating minus any wheels currently spinning faster than the Flywheel)
-	for _, Link in pairs( self.GearLink ) do
-		if not Link.Ent.Legal then continue end
-
-		Link.ReqTq = Link.Ent:Calc( self.FlyRPM, self.Inertia )
-		TotalReqTq = TotalReqTq + Link.ReqTq
-	end
-
-	-- This is the presently available torque from the engine
-	local TorqueDiff = math.max( self.FlyRPM - self.IdleRPM, 0 ) * self.Inertia
-
-	-- Calculate the ratio of total requested torque versus what's avaliable
-	local AvailRatio = math.min( TorqueDiff / TotalReqTq / Boxes, 1 )
-
-	-- Split the torque fairly between the gearboxes who need it
-	for _, Link in pairs( self.GearLink ) do
-		if not Link.Ent.Legal then continue end
-
-		Link.Ent:Act( Link.ReqTq * AvailRatio * self.MassRatio, DeltaTime, self.MassRatio )
-	end
-	self.FlyRPM = self.FlyRPM - math.min( TorqueDiff, TotalReqTq ) / self.Inertia
 
 	local HealthRatio = self.ACE.Health / self.ACE.MaxHealth
 	if HealthRatio < 0.995 then
 		if HealthRatio > 0.025 then
 			local PhysObj = self:GetPhysicsObject()
 			local Mass = PhysObj:GetMass()
-			HitRes = ACE.Damage(self, {
+			ACE.Damage(self, {
 				Kinetic = (1 + math.max(Mass / 2, 20) / 2.5) * 5 * self.Throttle / 100,
 				Momentum = 0,
 				Penetration = (1 + math.max(Mass / 2, 20) / 2.5) * 5 * self.Throttle / 100
@@ -814,25 +738,85 @@ function ENT:CalcRPM()
 			self:TriggerInput("Active", 0)
 		end
 	end
+end
 
-	-- Then we calc a smoothed RPM value for the sound effects. For some reason this thing exists.
-	table.remove( self.RPM, 10 )
-	table.insert( self.RPM, 1, self.FlyRPM )
+-- Builds this engine's part of the drivetrain description. Called by ACE.Mobility.Tick.
+function ENT:MobilityDesc(Ctx)
+	local Tank = self.Active and self.MobTank or nil
+	local Spec = ACE.Mobility.EngineSpec(self, IsValid(Tank) and Tank.FuelType or nil)
 
-	local SmoothRPM = 0
-	for _, RPM in pairs( self.RPM ) do
-		SmoothRPM = SmoothRPM + (RPM or 0)
+	local Gearboxes = {}
+	local Assisted = false
+	for _, Link in pairs(self.GearLink) do
+		local Box = Link.Ent
+		if IsValid(Box) and Box.Legal then
+			Gearboxes[#Gearboxes + 1] = ACE.Mobility.GearboxDesc(Box, Ctx)
+			Assisted = Assisted or ACE.Mobility.IsAssisted(Box)
+		end
 	end
-	SmoothRPM = SmoothRPM / 10
 
-	local Power = self.Torque * SmoothRPM / 9548.8
+	local Running = self.Active and self.Legal
+
+	local Desc = self.MobDesc or {}
+	self.MobDesc = Desc
+	Desc.Spec, Desc.State = Spec, self.MobState
+	Desc.Throttle = Running and self.Throttle or 0
+	Desc.HasFuel = Running and (IsValid(Tank) or ACE.EnginesRequireFuel == 0)
+	Desc.NoStall = Assisted
+	-- Mass parented onto a contraption has no weight in Source's physics, so engines lose torque
+	-- in proportion to it (MassRatio). This is a balance rule kept from the old drivetrain.
+	Desc.TorqueMul = (self.PeakTorque / self.BaseTorque) * (self.MassRatio or 1)
+	Desc.Gearboxes = Gearboxes
+	-- Belt-driven accessories such as a radiator fan.
+	Desc.AccessoryTorque = self.AccessoryTorque or 0
+	self.AccessoryTorque = 0
+	return Desc
+end
+
+-- Reads back the solve: fuel burned, heat made, RPM and torque outputs, and stalls.
+function ENT:MobilityApply()
+	local Desc = self.MobDesc
+	local State = self.MobState
+	if not Desc or not State then return end
+
+	local RPM = State.W * 30 / math.pi
+	self.FlyRPM = math.max(RPM, 0)
+	self.Torque = Desc.AvgTorque or 0
+
+	local Dt = self.MobDt or engine.TickInterval()
+	local Tank = self.MobTank
+	if self.Active and IsValid(Tank) and (Desc.FuelKg or 0) > 0 then
+		local Used
+		if self.FuelType == "Electric" then
+			Used = Desc.FuelKg / 3.6e6 -- electric "fuel" is energy: J to kWh
+		else
+			Used = Desc.FuelKg / (ACE.FuelDensity[Tank.FuelType] or 0.745) -- kg to litres
+		end
+		Tank.Fuel = math.max(Tank.Fuel - Used, 0)
+		Wire_TriggerOutput(self, "Fuel Use", math.Round(60 * Used / Dt, 3))
+	end
+
+	if (Desc.HeatJ or 0) > 0 then
+		self.HeatGeneration = Desc.HeatJ / 1000 / Dt -- kJ/s, shown in the menu
+		ACE.AddThermalEnergy(self, Desc.HeatJ / 1000 * ACE.ThermalTimeScale)
+	end
+
+	if self.Active and State.Stalled then
+		State.Stalled = false
+		self.Active = false
+		self.Stalled = true
+		Wire_TriggerOutput(self, "Stalled", 1)
+		ACE.EngineSound.Stop( self )
+	end
+
+	local Power = self.Torque * self.FlyRPM / 9548.8
 	Wire_TriggerOutput(self, "Torque", math.Round(self.Torque))
 	Wire_TriggerOutput(self, "Power", math.Round(Power))
 	Wire_TriggerOutput(self, "RPM", math.Round(self.FlyRPM))
 
-	ACE.EngineSound.Update( self, self.FlyRPM, self.Throttle )
-
-	return RPM
+	if self.Active then
+		ACE.EngineSound.Update( self, self.FlyRPM, self.Throttle )
+	end
 end
 
 -------------------------- Periodic Link Engine checks --------------------------

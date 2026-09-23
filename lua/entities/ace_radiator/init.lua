@@ -414,15 +414,10 @@ end
 
 function ENT:Think()
 
-	--Rapid Logic. Runs on tick. Used to not stall out the engines by pulling large chunks of power from the flywheel.
 	local CT = ACE.CurTime
-	local DeltaTime = CT - self.LastThink
 
 	local ECount = #self.Master
-	local PerEngineTorqueDemand = self.ActiveTorqueDemand / ECount * DeltaTime
 	local DriveFactor = 0 --Active fan drive factor. Ability for engines to meet fan's torque demands.
-	local RPMPulled = 1--Actual RPM Pulled from the crankshaft.
-	local RPMDemand = 1--Requested RPM pulled from the crankshaft. Used to see if we meet energy demands.
 
 	for Key in pairs(self.Master) do
 		local Ent = self.Master[Key]
@@ -430,12 +425,9 @@ function ENT:Think()
 			--Active cooling. Saps a certain amount of power from the engine to drive the cooling fans
 			--Activates only if needed to keep the radiator below the coolant overheating temperature.
 			if self.Active then -- and self.Heat > 21
-				RPMDemand = PerEngineTorqueDemand / Ent.Inertia
-				local NewRPM = math.max(Ent.FlyRPM - RPMDemand, Ent.IdleRPM)
-				RPMPulled = Ent.FlyRPM - NewRPM
-				Ent.FlyRPM = NewRPM
+				-- The fan is a load on the crank; the drivetrain solve takes it from the engine.
+				Ent.AccessoryTorque = (Ent.AccessoryTorque or 0) + self.ActiveTorqueDemand / ECount
 
-				--DriveFactor = math.min(DriveFactor,math.min(RPMPulled/RPMDemand,1)) --Penalized severely if one of the engines is unable to satisfy the torque demand.
 				self.FanRunning = 1
 			else
 				self.FanRunning = 0
@@ -531,7 +523,7 @@ function ENT:Think()
 			if self.FanRunning == 0 then 
 				DriveFactor = 0
 			else
-				DriveFactor = math.min(1,math.min(RPMPulled/RPMDemand,1)) --Penalized severely if one of the engines is unable to satisfy the torque demand.
+				DriveFactor = 1
 				Speed = Speed + 64 * DriveFactor * self.FanSpeed --Add the radiator cooling fan speed. Enough for 3x base cooling when active.
 				--print(Speed)
 			end

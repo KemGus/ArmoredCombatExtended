@@ -4,7 +4,8 @@
 	plain tables.
 
 	Description:
-	  Engine  = { Spec, State, Throttle, NoStall, HasFuel, Gearboxes = { Gearbox... } }
+	  Engine  = { Spec, State, Throttle, NoStall, HasFuel, TorqueMul, AccessoryTorque,
+	              Gearboxes = { Gearbox... } }
 	  Gearbox = {
 	    Key,                -- unique per gearbox
 	    Ratio,              -- signed reduction (input/output speed); 0 = neutral
@@ -17,6 +18,7 @@
 	    Diff,               -- "open" | "lsd" | "locked"
 	    LSDPreload, LSDRamp,-- Salisbury limited-slip: bias = preload + ramp·|input torque|
 	    Steer, SteerRatio,  -- double differential steering input (-1..1) and ratio
+	    DriveCap,           -- torque the engaged gear's clutch pack can carry while shifting (nil = rigid)
 	    Efficiency,         -- mesh efficiency of the engaged path (0..1)
 	    SpinLoss,           -- constant churning/bearing drag at the input, N·m
 	    Brake = {[0]=, [1]=},    -- brake torque per side at the wheels, N·m
@@ -83,17 +85,33 @@ end
 
 local buildGearbox
 
--- Couples an upstream velocity (Body·1) to a gearbox's input body.
-local function couple(Sys, Up, UpCoef, Gearbox, Cap)
-	local In = Solver.Body(max(Gearbox.InputJ or 0.02, 1e-4), 0)
-	In.W = Gearbox.InputW or Up.W * UpCoef
-	In.Gearbox = Gearbox
-	Sys.Bodies[#Sys.Bodies + 1] = In
-	Sys.GearboxBodies[Gearbox.Key] = In
-	Gearbox.Body = In
-	Gearbox.Input = addConstraint(Sys, { Up, In }, { UpCoef, -1 }, Cap, 0, "clutch")
-	buildGearbox(Sys, Gearbox)
-	return In
+-- Couples a crank to a gearbox's input body through the gearbox's clutch or converter.
+-- A gearbox driven by several engines gets one coupling per engine.
+local function couple(Sys, Crank, Gearbox)
+	local In = Sys.GearboxBodies[Gearbox.Key]
+	local Fresh = not In
+	if Fresh then
+		In = Solver.Body(max(Gearbox.InputJ or 0.02, 1e-4), Gearbox.InputW or Crank.W)
+		In.Gearbox = Gearbox
+		Sys.Bodies[#Sys.Bodies + 1] = In
+		Sys.GearboxBodies[Gearbox.Key] = In
+		Gearbox.Body = In
+		Gearbox.Inputs = {}
+	end
+
+	local C
+	if Gearbox.Converter then
+		-- The converter is a torque source between crank and turbine; only its lock-up clutch is
+		-- a constraint.
+		C = addConstraint(Sys, { Crank, In }, { 1, -1 }, Gearbox.LockupCap or 0, 0, "lockup")
+		Sys.Converters[#Sys.Converters + 1] = { Gearbox = Gearbox, Crank = Crank }
+	else
+		C = addConstraint(Sys, { Crank, In }, { 1, -1 }, (not Gearbox.Dual) and Gearbox.ClutchCap or nil, 0, "clutch")
+	end
+	Gearbox.Inputs[#Gearbox.Inputs + 1] = C
+	Gearbox.Input = Gearbox.Inputs[1]
+
+	if Fresh then buildGearbox(Sys, Gearbox) end
 end
 
 buildGearbox = function(Sys, Gearbox)
@@ -135,6 +153,7 @@ buildGearbox = function(Sys, Gearbox)
 					if Out.Gearbox and Out.Gearbox.ClutchCap then
 						OutCap = OutCap and min(OutCap, Out.Gearbox.ClutchCap) or Out.Gearbox.ClutchCap
 					end
+					if Gearbox.DriveCap then OutCap = OutCap and min(OutCap, Gearbox.DriveCap) or Gearbox.DriveCap end
 					Gearbox.Drive[#Gearbox.Drive + 1] = addConstraint(Sys, { In, outputBody(Sys, Out) }, { 1, -R }, OutCap, 0, "gear")
 				end
 			end
@@ -142,7 +161,7 @@ buildGearbox = function(Sys, Gearbox)
 			-- Differential between the first output on each side; extra outputs on a side
 			-- are rigidly tied to that side's first output.
 			local L, Rt = outputBody(Sys, Sides[0][1]), outputBody(Sys, Sides[1][1])
-			Gearbox.Drive[1] = addConstraint(Sys, { In, L, Rt }, { 1, -R / 2, -R / 2 }, nil, 0, "diff")
+			Gearbox.Drive[1] = addConstraint(Sys, { In, L, Rt }, { 1, -R / 2, -R / 2 }, Gearbox.DriveCap, 0, "diff")
 			for S = 0, 1 do
 				local First = outputBody(Sys, Sides[S][1])
 				for I = 2, #Sides[S] do
@@ -178,39 +197,34 @@ buildGearbox = function(Sys, Gearbox)
 	Sys.Gearboxes[#Sys.Gearboxes + 1] = Gearbox
 end
 
---- Builds a solver system for one engine and everything downstream of it.
--- @param Engine Engine description (see file header).
+--- Builds a solver system for one or more engines and everything downstream of them.
+-- @param Group An engine description, or { Engines = { engine descriptions } } when engines
+-- share gearboxes.
 -- @return System table for Drivetrain.Step.
-function Drivetrain.Build(Engine)
+function Drivetrain.Build(Group)
+	local Engines = Group.Engines or { Group }
 	local Sys = {
-		Engine = Engine,
+		Engines = Engines,
+		Engine = Engines[1],
 		Bodies = {},
 		Constraints = {},
 		Wheels = {},
 		WheelBodies = {},
 		GearboxBodies = {},
 		Gearboxes = {},
+		Converters = {},
+		Cranks = {},
 	}
-	local Crank = Solver.Body(Engine.Spec.Inertia, Engine.State.W)
-	Sys.Crank = Crank
-	Sys.Bodies[1] = Crank
-
-	for _, Gearbox in ipairs(Engine.Gearboxes or {}) do
-		if Gearbox.Converter then
-			-- The converter is a torque source between crank and input; only its lock-up
-			-- clutch is a constraint.
-			local In = Solver.Body(max(Gearbox.InputJ or 0.05, 1e-4), Gearbox.InputW or Crank.W)
-			In.Gearbox = Gearbox
-			Sys.Bodies[#Sys.Bodies + 1] = In
-			Sys.GearboxBodies[Gearbox.Key] = In
-			Gearbox.Body = In
-			Gearbox.Input = addConstraint(Sys, { Crank, In }, { 1, -1 }, Gearbox.LockupCap or 0, 0, "lockup")
-			buildGearbox(Sys, Gearbox)
-		else
-			couple(Sys, Crank, 1, Gearbox, Gearbox.Dual and nil or Gearbox.ClutchCap)
+	for I, Engine in ipairs(Engines) do
+		local Crank = Solver.Body(Engine.Spec.Inertia, Engine.State.W)
+		Crank.Engine = Engine
+		Sys.Cranks[I] = Crank
+		Sys.Bodies[#Sys.Bodies + 1] = Crank
+		for _, Gearbox in ipairs(Engine.Gearboxes or {}) do
+			couple(Sys, Crank, Gearbox)
 		end
 	end
-
+	Sys.Crank = Sys.Cranks[1]
 	return Sys
 end
 
@@ -241,28 +255,32 @@ end
 function Drivetrain.Step(Sys, Dt, Substeps, Iterations)
 	Substeps = Substeps or 8
 	local H = Dt / Substeps
-	local Engine = Sys.Engine
-	local State = Engine.State
-	local Crank = Sys.Crank
-	local Opts = { NoStall = Engine.NoStall, HasFuel = Engine.HasFuel }
 
 	Solver.Reset(Sys.Constraints)
 
-	local FuelKg, HeatJ, TorqueSum = 0, 0, 0
-	local ClutchHeat = {}
+	for _, Crank in ipairs(Sys.Cranks) do
+		local Engine = Crank.Engine
+		Engine.FuelKg, Engine.HeatJ, Engine.TorqueSum = 0, 0, 0
+		Crank.Opts = { NoStall = Engine.NoStall, HasFuel = Engine.HasFuel }
+	end
+	for _, Gearbox in ipairs(Sys.Gearboxes) do Gearbox.ClutchHeatJ = 0 end
 
 	for _ = 1, Substeps do
-		State.W = Crank.W
-		local Drive, Loss = EngineModel.Step(State, Engine.Throttle or 0, H, Opts)
-		Crank.Torque = Crank.Torque + Drive
-		Solver.Drag(Crank, Loss, H)
-		FuelKg = FuelKg + State.FuelRate * H
-		HeatJ = HeatJ + State.HeatRate * H
-		TorqueSum = TorqueSum + State.Torque
+		for _, Crank in ipairs(Sys.Cranks) do
+			local Engine = Crank.Engine
+			local State = Engine.State
+			State.W = Crank.W
+			local Drive, Loss = EngineModel.Step(State, Engine.Throttle or 0, H, Crank.Opts)
+			Crank.Torque = Crank.Torque + Drive * (Engine.TorqueMul or 1)
+			Solver.Drag(Crank, Loss + (Engine.AccessoryTorque or 0), H)
+			Engine.FuelKg = Engine.FuelKg + State.FuelRate * H
+			Engine.HeatJ = Engine.HeatJ + State.HeatRate * H
+			Engine.TorqueSum = Engine.TorqueSum + State.Torque
+		end
+
+		for _, Conv in ipairs(Sys.Converters) do converterStep(Conv.Gearbox, Conv.Crank, H) end
 
 		for _, Gearbox in ipairs(Sys.Gearboxes) do
-			if Gearbox.Converter then converterStep(Gearbox, Crank, H) end
-
 			-- Losses at the input shaft: churning plus mesh inefficiency on last substep's load.
 			local Out = 0
 			for _, C in ipairs(Gearbox.Drive) do Out = Out + abs(C.Acc) end
@@ -287,20 +305,19 @@ function Drivetrain.Step(Sys, Dt, Substeps, Iterations)
 		Solver.Step(Sys.Bodies, Sys.Constraints, H, Iterations or 6)
 
 		for _, Gearbox in ipairs(Sys.Gearboxes) do
-			local C = Gearbox.Input
-			if C then
+			for _, C in ipairs(Gearbox.Inputs or {}) do
 				-- Clutch slip heat: transmitted torque × slip speed (Shigley §16-8).
-				local Up, Down = C.Bodies[1], C.Bodies[2]
-				local Slip = abs(Up.W * C.Coefs[1] + Down.W * C.Coefs[2])
-				ClutchHeat[Gearbox] = (ClutchHeat[Gearbox] or 0) + abs(C.Acc) * Slip
+				local Slip = abs(C.Bodies[1].W * C.Coefs[1] + C.Bodies[2].W * C.Coefs[2])
+				Gearbox.ClutchHeatJ = Gearbox.ClutchHeatJ + abs(C.Acc) * Slip
 			end
 		end
 	end
 
-	State.W = Crank.W
-	Engine.FuelKg = FuelKg
-	Engine.HeatJ = HeatJ
-	Engine.AvgTorque = TorqueSum / Substeps
+	for _, Crank in ipairs(Sys.Cranks) do
+		local Engine = Crank.Engine
+		Engine.State.W = Crank.W
+		Engine.AvgTorque = Engine.TorqueSum / Substeps
+	end
 
 	for _, B in ipairs(Sys.Wheels) do
 		local GB = B.GroundBody
@@ -315,11 +332,9 @@ function Drivetrain.Step(Sys, Dt, Substeps, Iterations)
 		local Out = 0
 		for _, C in ipairs(Gearbox.Drive) do Out = Out + C.Acc end
 		Gearbox.OutputTorque = Out / H * (Gearbox.Ratio or 0)
-		Gearbox.ClutchHeatJ = ClutchHeat[Gearbox] or 0
 		local C = Gearbox.Input
 		if C then
-			local Up = C.Bodies[1]
-			Gearbox.ClutchSlip = Up.W * C.Coefs[1] + Gearbox.Body.W * C.Coefs[2]
+			Gearbox.ClutchSlip = C.Bodies[1].W * C.Coefs[1] + Gearbox.Body.W * C.Coefs[2]
 		end
 	end
 end
