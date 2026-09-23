@@ -168,8 +168,8 @@ ACE.DefineEngine( "3.0-V12", {
 	limitrpm = 15000
 } )
 
-ACE.DefineEngine( "25.0-V12", {
-	name = "25.0L V12 Petrol",
+ACE.DefineEngine( "25.0-V12-Racing", {
+	name = "25.0L V12 Racing Petrol",
 	desc = "Aero-grade V-12 bored out by a racing nutjob. Has an absurd RPM despite its massive bore. Don't get cooked by the ludicrous heat output.",
 	model = "models/engines/v12l.mdl",
 	sound = "acf_engines/v12_petrollarge.wav",

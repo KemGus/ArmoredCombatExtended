@@ -429,7 +429,6 @@ do
 		"gearboxes",
 		"guidances",
 		"fueltanks",
-		"radiators",
 		"fuses",
 		"sounds",
 		"tools",

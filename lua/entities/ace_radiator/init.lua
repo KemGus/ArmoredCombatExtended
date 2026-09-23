@@ -75,7 +75,7 @@ end
 
 function ENT:ACF_Activate( Recalc )
 
-	self.ACF = self.ACF or {}
+	ACE.GetEntityState(self, true)
 
 	local PhysObj = self:GetPhysicsObject()
 	if not self.ACE.Area then
