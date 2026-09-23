@@ -7,8 +7,11 @@
 	- J. B. Heywood, Internal Combustion Engine Fundamentals, 2nd ed., McGraw-Hill 2018.
 	  Ch. 2 (mean effective pressure, T = mep·Vd/(2π·nR)), ch. 13 (friction, pumping),
 	  ch. 12 (energy balance), App. D (fuel heating values).
-	- Chen & Flynn, SAE 650733 (1965): FMEP = A + B·pmax + C·Sf + D·Sf², Sf = ω·S/2.
-	  Gasoline constants from the x-engineer.org worked example (2.0 L I4).
+	- Chen & Flynn, SAE 650733 (1965): FMEP = A + B·pmax + C·Sp + D·Sp², Sp = mean piston
+	  speed. Constants fitted to measured motoring torque: EPA ALPHA engine packages (SI) and
+	  the VECTO generic engines' motoring curves (diesel).
+	- Inertia: VECTO DeclarationData.Engine (diesel), EPA ALPHA engine packages (SI),
+	  Gao et al. 2019 (motors), Forecast International AGT1500 (turbines).
 ]]
 
 ACE = ACE or {}
@@ -53,13 +56,24 @@ end
 Engine.SampleCurve = sampleCurve
 
 --[[
-	Per-kind constants.
-	FMEP (Chen-Flynn): A [bar], B [-], C [bar·s/m], D [bar·s²/m²].
+	Per-kind constants. Every value and its source is listed in docs/mobility-sources.md.
+	FMEP (Chen-Flynn): A [bar], B [-], C [bar·s/m], D [bar·s²/m²], with Sp the mean piston
+	  speed 2·S·N [m/s]. Motoring MEP (fuel cut, closed throttle) = A + B·PmaxIdle + PumpClosed
+	  + C·Sp + D·Sp². That sum was least-squares fitted to measured motoring torque:
+	  SI: EPA ALPHA packages (Mazda 2.0 SKYACTIV-G, Chevrolet 2.5 LCV, Toyota 2.5 A25A, Honda
+	  1.5 L15B7, GM 4.3 LV3), 19 points, rms error 12%: 0.953 + 0.0462·Sp + 0.0021·Sp².
+	  Diesel: VECTO generic 12.7 L and 6.9 L motoring curves plus the EPA BMW N57, 12 points,
+	  rms error 22% (the two VECTO engines differ by about that much): 0.905 + 0.0136·Sp²;
+	  a free linear term fitted negative, so C is 0.
+	  The constant is split with B = 0.005 (Chen-Flynn load term, 0.004-0.006 in the
+	  literature) and the pumping value below; A is what remains.
 	PumpClosed: pumping MEP with the throttle shut [bar]; PumpOpen at wide-open throttle.
 	  SI engines idle at ~0.3 bar manifold pressure, so closed-throttle pumping is ~0.7-0.8 bar
 	  (Heywood 13.2). Diesels are unthrottled: pumping stays near the WOT value, which is why
 	  diesels have weak engine braking.
-	Pmax: peak cylinder pressure at no load / full load [bar] (Heywood 9.2, 10.2).
+	PmaxIdle: motoring peak pressure from polytropic compression p·rc^n (SI: 0.3 bar manifold,
+	  rc 10, n 1.3 -> 6 bar; diesel: 1 bar, rc 16, n 1.35 -> 42 bar). PmaxFull: typical
+	  full-load peak pressure (Heywood 9.2, 10.2).
 	EtaIndicated: gross indicated fuel conversion efficiency (Heywood 5.7): SI ~0.36, DI diesel ~0.45.
 	CoolantFrac: share of fuel energy rejected to coolant (Heywood 12.1, table 12.1).
 	IdleAuthority: most air/fuel the idle governor may add. A petrol idle-air valve or
@@ -69,32 +83,35 @@ Engine.SampleCurve = sampleCurve
 ]]
 Engine.Kinds = {
 	si = {
-		A = 0.3, B = 0.006, C = 0.05, D = 0.00085,
+		A = 0.173, B = 0.005, C = 0.0462, D = 0.0021,
 		PumpClosed = 0.75, PumpOpen = 0.15,
-		PmaxIdle = 15, PmaxFull = 60,
-		EtaIndicated = 0.36, CoolantFrac = 0.28, LHV = 43.4e6,
+		PmaxIdle = 6, PmaxFull = 60,
+		EtaIndicated = 0.36, CoolantFrac = 0.28, LHV = 43.3e6,
 		Strokes = 4, StallFrac = 0.35, IdleAuthority = 0.45,
 	},
 	diesel = {
-		A = 0.4, B = 0.005, C = 0.05, D = 0.00085,
+		A = 0.445, B = 0.005, C = 0, D = 0.0136,
 		PumpClosed = 0.25, PumpOpen = 0.2,
-		PmaxIdle = 40, PmaxFull = 150,
+		PmaxIdle = 42, PmaxFull = 150,
 		EtaIndicated = 0.45, CoolantFrac = 0.25, LHV = 42.6e6,
 		Strokes = 4, StallFrac = 0.4, IdleAuthority = 1, DroopGovernor = true,
 	},
 	rotary = {
 		-- A Wankel fires once per rotor per crank revolution; treated as a 4-stroke of
 		-- twice the chamber displacement, the usual convention for comparisons.
-		A = 0.45, B = 0.006, C = 0.06, D = 0.001,
+		-- No published rotary motoring data was found: friction uses the SI fit.
+		A = 0.173, B = 0.005, C = 0.0462, D = 0.0021,
 		PumpClosed = 0.75, PumpOpen = 0.15,
-		PmaxIdle = 12, PmaxFull = 55,
-		EtaIndicated = 0.30, CoolantFrac = 0.30, LHV = 43.4e6,
+		PmaxIdle = 6, PmaxFull = 55,
+		EtaIndicated = 0.30, CoolantFrac = 0.30, LHV = 43.3e6,
 		Strokes = 4, StallFrac = 0.35, IdleAuthority = 0.45,
 	},
 	turbine = {
 		-- Free power turbine: the output shaft is not the gas generator, it can sit at 0 RPM
 		-- under load without stalling (Abrams-style creep). Losses are bearings/windage only.
-		EtaIndicated = 0.25, CoolantFrac = 0.02, LHV = 42.8e6,
+		-- Efficiency: AGT1500 full-power SFC 0.30 kg/kWh (Forecast International 2008) on
+		-- 42.8 MJ/kg fuel: 3.6 / (0.30 * 42.8) = 0.28.
+		EtaIndicated = 0.28, CoolantFrac = 0.02, LHV = 42.8e6,
 		SpoolTime = 1.2, IdleSpool = 0.12,
 	},
 	electric = {
@@ -105,7 +122,7 @@ Engine.Kinds = {
 local CylindersByCategory = {
 	Single = 1, I2 = 2, I3 = 3, I4 = 4, I5 = 5, I6 = 6,
 	V2 = 2, V4 = 4, V6 = 6, V8 = 8, V10 = 10, V12 = 12,
-	B4 = 4, B6 = 6, Radial = 9, Rotary = 2,
+	B4 = 4, B6 = 6, Radial = 7, Rotary = 2, -- ACE radials are all seven-cylinder ("R7")
 }
 
 local function kindOf(Def)
@@ -132,21 +149,28 @@ function Engine.Displacement(Def)
 end
 
 --[[
-	Rotating inertia of crank + flywheel + clutch when a definition has no measured value.
-	Fitted to published figures: 1.6 L I4 ≈ 0.12 kg·m², 5.7 L V8 ≈ 0.35, 12 L truck diesel
-	≈ 1.9 (with its heavy flywheel), 38.9 L V-2/AVDS-class ≈ 5.5. Diesels carry heavier
-	flywheels (×1.6) to smooth fewer, stronger firing pulses. Sources in docs/mobility-sources.md.
+	Rotating inertia of crank + flywheel + clutch when a definition has no measured value [kg·m²].
+	Diesel: the EU VECTO declaration formula (DeclarationData.Engine.EngineInertia, manual
+	  gearbox, so the clutch is included): up to 3.2 L 0.4·V; 3.2-5 L 0.989·V - 1.885; above
+	  5 L 1.3 (clutch) + 0.41 + 0.27·V, V in litres. VECTO's own generic engines: 12.74 L ->
+	  5.15, 6.87 L -> 3.57.
+	Petrol and rotary: least-squares line through the EPA ALPHA engine inertias for 1.04 L
+	  (0.075), 2.5 L (0.095) and 2.69 L (0.13): 0.046 + 0.026·V. Beyond ~3 L this is an
+	  extrapolation; no published figure for large petrol engines was found.
 ]]
 local function estimateInertia(DispL, Kind)
-	local J = 0.075 * DispL ^ 1.15
-	if Kind == "diesel" then J = J * 1.6 end
-	if Kind == "rotary" then J = J * 0.7 end
-	return J
+	if Kind == "diesel" then
+		if DispL <= 3.2 then return 0.4 * DispL end
+		if DispL <= 5 then return 0.989 * DispL - 1.885 end
+		return 1.71 + 0.27 * DispL
+	end
+	return 0.046 + 0.026 * DispL
 end
 
 --- Builds the physical description of an engine from its ACE definition.
--- @param Def Engine definition (fields torque, idlerpm, limitrpm, fuel, enginetype, category, name, torquecurve).
--- @param Curve Torque curve points (0..1) already adjusted for fuel type.
+-- @param Def Engine definition (fields torque, idlerpm, limitrpm, fuel, enginetype, category,
+-- name; optional displacement [L], cylinders, stroke [m], inertia [kg·m²]).
+-- @param Curve Torque curve points (0..1), normally ACE.GetEngineTorqueCurve(Def).
 -- @return Spec table consumed by the other Engine functions.
 function Engine.Build(Def, Curve)
 	local Kind = kindOf(Def)
@@ -184,8 +208,16 @@ function Engine.Build(Def, Curve)
 	end
 
 	Spec.Inertia = Def.inertia or estimateInertia(DispL, Kind)
-	if Kind == "electric" then Spec.Inertia = Def.inertia or 0.02 * (Def.torque / 100) ^ 0.8 end
-	if Kind == "turbine" then Spec.Inertia = Def.inertia or 0.5 * (Def.torque / 1000) ^ 0.8 end
+	-- Motor rotors: power fit through Gao et al. 2019 (ORNL), table 1: 280 N·m -> 0.03,
+	-- 700 -> 0.06, 874 -> 0.08 kg·m².
+	if Kind == "electric" then Spec.Inertia = Def.inertia or 0.03 * (Def.torque / 280) ^ 0.86 end
+	-- Free power turbine seen at the output shaft. AGT1500: power turbine rotor 0.141 kg·m²
+	-- at 22,500 rpm through a 7.5:1 reduction = 7.93 kg·m² at 3,000 rpm, peak torque
+	-- 5,355 N·m (Forecast International; Gas Turbine World). Other turbines keep the same
+	-- stored energy per unit of power: J scales with torque and inversely with output speed.
+	if Kind == "turbine" then
+		Spec.Inertia = Def.inertia or 7.93 * (Def.torque / 5355) * (3000 / max(Def.limitrpm, 1))
+	end
 
 	-- Torque at wide-open throttle straight off the definition's curve.
 	Spec.BrakeWOT = function(W)
@@ -212,9 +244,9 @@ function Engine.FrictionTorque(Spec, W, Load)
 		local Frac = 0.01 + 0.01 * min(abs(W) / max(Spec.LimitW, 1), 1.5)
 		return Spec.PeakTorque * Frac
 	end
-	local Sf = abs(W) * Spec.Stroke / 2
+	local Sp = abs(W) * Spec.Stroke / pi -- mean piston speed, 2·S·N
 	local Pmax = K.PmaxIdle + (K.PmaxFull - K.PmaxIdle) * Load
-	local Fmep = K.A + K.B * Pmax + K.C * Sf + K.D * Sf * Sf
+	local Fmep = K.A + K.B * Pmax + K.C * Sp + K.D * Sp * Sp
 	return Fmep * BarToPa * Spec.MepToTorque
 end
 
