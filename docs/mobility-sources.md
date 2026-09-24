@@ -105,6 +105,31 @@ Digitised charts were read from rendered PDF pages. Expect about ±1% error on t
   eco-driving cycles", *Energy* 172 (2019) 823-839, doi:10.1016/j.energy.2019.02.017,
   https://www.osti.gov/servlets/purl/1494893 . Table 1: motor maximum torque 280 / 700 / 874 N·m
   with rotor inertia 0.03 / 0.06 / 0.08 kg·m².
+- **[Burress 2013]** T. Burress, *Benchmarking State-of-the-Art Technologies*, ORNL, DOE Vehicle
+  Technologies AMR 2013 (APE006). https://www.energy.gov/sites/prod/files/2014/03/f13/ape006_burress_2013_o.pdf
+  2012 LEAF: 280 N·m / 80 kW verified, 10,390 rpm speed rating, final drive 7.94; motor peak
+  efficiency above 97% between 5,000 and 9,000 rpm; inverter above 99%; combined motor+inverter
+  above 96% at best, with a wide region above 90%; 80 kW continuous at 7,000 rpm.
+- **[EM61]** Nissan EM61 ratings as published by Nissan, quoted in "Nissan EM motor",
+  en.wikipedia.org, https://en.wikipedia.org/wiki/Nissan_EM_motor : 280 N·m at 0-2,730 rpm,
+  80 kW at 2,730-9,800 rpm, 10,390 rpm maximum.
+- **[e-Pedal]** Nissan, "e-Pedal" press release, https://global.nissannews.com/en/releases/e-pedal :
+  releasing the accelerator decelerates the (2018) LEAF "at up to 0.2 g".
+- **[Koloch 2025]** J. Koloch et al., "From Cell to Pack: Empirical Analysis of the Correlations
+  Between Cell Properties and Battery Pack Characteristics of Electric Vehicles", *World Electr.
+  Veh. J.* 16 (2025) 484, doi:10.3390/wevj16090484. Pack level: NMC 140-180 Wh/kg, NCA 150-174,
+  LFP 125-145; pack volumetric 110-305 Wh/L depending on cell format.
+
+### Gas turbines (vehicle)
+
+- **[GS M1]** GlobalSecurity.org, *M1 Abrams Main Battle Tank - Specifications*,
+  https://www.globalsecurity.org/military/systems/ground/m1-specs.htm : 10 gal/h at basic idle,
+  30+ gal/h at tactical idle, 60 gal/h cross-country; 0-20 mph in 7 s (M1). A secondary source;
+  no Army TM figure was found.
+- **[14 CFR 33.73]** US Code of Federal Regulations, *Power or thrust response*,
+  https://www.ecfr.gov/current/title-14/chapter-I/subchapter-C/part-33/subpart-E/section-33.73 :
+  a certified turbine engine must go from ≤15% to 95% rated power in not over 5 s. Used only as an
+  upper bound on spool-up time.
 
 ### Torque converter, gears, clutch, tyres (cited by the code; not re-verified in this pass)
 
@@ -129,7 +154,20 @@ peak. ACE samples them with Catmull-Rom (`ACE.CalcCurve`, `Engine.SampleCurve`).
 | `N57` | BMW N57 3.0 L turbo diesel | [EPA-N57], measured | 1,001-4,620 rpm | Idle is 550 rpm, but boost builds between 1,000 and 1,250 rpm and a straight line below that is meaningless. The curve starts at the first measured point |
 | `D1105` | Kubota D1105 1.1 L NA IDI diesel | [Kubota D1105] chart, digitised | 1,600-3,000 rpm | Checked against the table (71.5 N·m @ 2,200; 18.5 kW @ 3,000). Idle not published |
 | `AeroTurbine`, `GroundTurbine`, AGT1500 def | free power turbine | [GTW] + [FI AGT1500] | idle at 14% / 20% / 830 of 3,000 rpm | Straight line through 5,355 N·m @ 1,000 and 3,754 N·m @ 3,000 rpm. That torque falls linearly with speed at fixed gas-generator output is the standard free-turbine approximation. It is **estimated** for turbines other than the AGT1500 |
-| `PMMotor` | 2012 Nissan LEAF motor | [ORNL-2013], [Gao 2019] | 0-10,400 rpm | Constant 280 N·m to 80 kW / 280 N·m = 2,729 rpm, then constant power. The constant-power shape is the textbook PM-motor envelope and is **estimated**, not a measured map |
+| `PMMotor` | 2012 Nissan LEAF motor | [ORNL-2013], [Gao 2019], [EM61], [Burress 2013] | 0-10,400 rpm | Constant 280 N·m to 80 kW / 280 N·m = 2,729 rpm, then constant power. Nissan rates 80 kW from 2,730 to 9,800 rpm [EM61] and ORNL measured the rating [Burress 2013], so the shape is **sourced** to 9,800 rpm. The last 6% to 10,390 rpm is held at constant power (no data on field-weakening falloff there) |
+
+Sampling rules in `Engine.Build` (engine_model.lua):
+
+- The Catmull-Rom spline overshoots at a flat-to-falling knee (1.6% above peak on `PMMotor`), so
+  every sample is clipped to the curve's peak. Curves are normalised to peak, so this only removes
+  the overshoot.
+- Below idle a piston engine holds its first point. A **free power turbine** instead extends its
+  first segment linearly to 0 rpm output (stall), where its torque is highest: the AGT1500 line
+  gives 6,155 N·m at stall against 3,754 N·m at 3,000 rpm, a stall ratio of 1.64. Motors are
+  defined from 0 rpm already.
+- Motors and turbines give no drive torque past `limitrpm` (inverter speed limit, power-turbine
+  overspeed governor). The menu graph (`ACE.Mobility.EngineCurveSample`) shows the same
+  envelope, and plots turbines from 0 rpm.
 
 Layout → curve. Petrol comes from `ACE.GenericTorqueCurves`, and Diesel/Multifuel reciprocating
 engines from `ACE.GenericDieselTorqueCurves`. `ACE.GetEngineTorqueCurve(Def)` picks the table.
@@ -175,14 +213,21 @@ Definitions with their own `inertia`: AGT1500 7.93 ([FI AGT1500]), Electric-Tiny
 | PumpClosed / PumpOpen diesel | 0.25 / 0.2 bar | **Estimated** (unthrottled). The total motoring MEP is fitted |
 | EtaIndicated SI / diesel / rotary | 0.36 / 0.45 / 0.30 | [Heywood] 5.7 typical, **not re-verified**. Rotary is **estimated** |
 | EtaIndicated turbine | 0.28 (was 0.25) | **Sourced**: [FI AGT1500] 0.30 kg/kWh at full power, 3.6/(0.30·42.8) = 0.28 |
-| EtaIndicated electric | 0.9 | **Estimated** |
-| CoolantFrac | 0.28 / 0.25 / 0.30 / 0.02 / 0.08 | [Heywood] table 12.1 for SI and diesel, **not re-verified**. The others are **estimated** |
+| EtaIndicated electric | removed (was a flat 0.9) | Replaced by the motor loss model below |
+| Motor losses CopperLoss·t² + InverterLoss·t (battery side), IronLoss·w² (shaft drag), ×Prated | 0.03 / 0.065 / 0.037 | **Fitted** by non-negative least squares to seven points read as the shape of the [Burress 2013] LEAF combined map (peak 96%, ≥90% over most of the envelope, ~90% at the peak-torque corner, ~80-85% at 10% torque and 10% speed). Result: peak 95.5%, 91% at the corner, 94.6% at full power and top speed. The seven points are a reading of the summary, not digitised contours, so treat as **estimated to ±2 points of efficiency** |
+| Motor bearing drag | 0.2% of peak torque | **Estimated** |
+| Lift-off regen RegenFrac | 0.4 of the torque envelope | **Derived** from [e-Pedal] 0.2 g on the 2018 LEAF: 0.2·9.81·1,700 kg·0.323 m (215/50R17) / 8.19 final drive = 131 N·m = 41% of its 320 N·m. The 1,700 kg (with driver) and the 2018 LEAF's final drive and tyre size are from Nissan's spec sheet as commonly quoted, **not re-checked** |
+| Regen pedal band / low-speed fade | 5% pedal / 5% of top speed | **Estimated**. The fade speed is where the fitted losses equal the recovered power at regen torque, so below it regen would drain the battery. Real EVs blend in friction brakes there |
+| Regen charge limit | 0 when every linked battery is full, otherwise none | Behaviour. No C-rate limit is modelled: charge acceptance data per pack size was not found |
+| CoolantFrac | 0.28 / 0.25 / 0.30 / 0.02 (SI / diesel / rotary / turbine) | [Heywood] table 12.1 for SI and diesel, **not re-verified**. The others are **estimated**. Motors put all of their losses (copper, inverter, core, bearings) into the engine's heat instead |
 | LHV petrol (SI, rotary) | 43.3 MJ/kg (was 43.4) | **Sourced**: [EPA-TNGA] EPA test gasoline 43.31 MJ/kg |
 | LHV diesel / turbine fuel | 42.6 / 42.8 MJ/kg | [Heywood] App. D, **not re-verified** |
 | StallFrac, IdleAuthority | 0.35 / 0.45 SI, 0.4 / 1 diesel | **Estimated** (control behaviour, not physical data) |
 | Droop governor band | +6% above limit | **Estimated** |
-| SpoolTime, IdleSpool (turbine) | 1.2 s, 0.12 | **Estimated**. [FI AGT1500] gives the gas-producer inertia (0.074 kg·m²), but no spool-up time |
-| Turbine / motor friction | 1-2% of peak torque | **Estimated** |
+| IdleSpool (turbine) | 0.09 (was 0.12) | **Derived**: [GS M1] 10 gal/h basic idle = 30 kg/h JP-8 (0.80 kg/L), against 0.30 kg/kWh × 1,119 kW = 336 kg/h at full power [FI AGT1500]: 9%. The same fraction is used for every ACE turbine (**estimated** for the others) |
+| Turbine fuel flow | IdleSpool..1 × full-power flow, full flow = peak power / (EtaIndicated · LHV) | Fuel follows the gas generator, not the output shaft, so a stalled output at full throttle burns full-power fuel. Linear in spool between the two sourced points is **estimated**. Peak power is now the curve's real maximum; the old formula used PeakTorque × LimitW / 2, which on the AGT1500 was 27% below the curve's power and so under-burned by the same amount |
+| SpoolTime (turbine) | 1.2 s | **Estimated**, bounded by [14 CFR 33.73]: idle (9%) to 95% power takes 2.9 × 1.2 = 3.5 s, inside the 5 s allowed. [FI AGT1500] gives the gas-producer inertia (0.074 kg·m²) but no spool-up time. The discrete update uses 1 − exp(−Δt/τ), exact for any step, so it is tickrate independent (tested at 16-528 Hz) |
+| Turbine friction | 1-2% of peak torque | **Estimated** |
 | Idle governor gains | Ki 2.5, Kp 1.5; start integrator 0.15 / 0.2; fast-idle authority 0.6 | **Estimated** (controller tuning) |
 | Start: catch speed / cranking time | 130 rpm / 3 s | [Heywood] 7.6 cranking 150-300 rpm, **not re-verified**. The 3 s is **estimated** |
 | Starter: free speed / stall torque | 450 rpm / 4 × motoring torque at 0 rpm | **Estimated** |
@@ -190,6 +235,26 @@ Definitions with their own `inertia`: AGT1500 7.93 ([FI AGT1500]), Electric-Tiny
 | Unknown displacement BMEP | 10 bar SI / 16 bar diesel | [Heywood] 2.7 typical, **not re-verified** |
 | Bore = stroke when no stroke given | square engine | **Estimated** |
 | CylindersByCategory Radial | 7 (was 9) | Matches ACE's own "R7" radial definitions |
+
+## Batteries (acf_fueltank with Electric fuel)
+
+ACE's battery is a **Li-ion (NMC-class) traction pack**, energy counted in kWh; the engine
+draws battery power in watts (`State.FuelRate`, negative while regenerating) and
+`ENT:MobilityApply` converts joules to kWh.
+
+| Quantity | ACE value | Check against [Koloch 2025] |
+|---|---|---|
+| `ACE.LiIonED` | 0.27 kWh per litre of fill | Fill is 0.4774 of the box volume, so 129 Wh per litre of box: inside the 110-305 Wh/L pack range, at its low end |
+| `ACE.FuelDensity.Electric` | 1.35 kg per litre of fill | 200 Wh/kg of fill. With the 1 mm steel walls a 20 in cube is 16.7 kWh in 96 kg = 174 Wh/kg, inside the 140-180 Wh/kg NMC pack range. Small boxes come out lower, very large ones approach 200 |
+
+Both constants were left unchanged: they already describe a modern Li-ion pack. A lead-acid
+battery (30-40 Wh/kg) would need a separate fuel type.
+
+When every linked battery is empty the engine switches off (`ACE.EnginesRequireFuel`), like an
+EV at 0% charge; regen cannot recover a flat pack because the motor is off. Regen charges the
+first linked battery with room left (`ENT:GetChargeTank`); with all of them full it is disabled.
+Not modelled: pack power limits (a small battery can feed any motor), battery internal
+resistance loss, and charge-rate limits on regen.
 
 ## torque_converter.lua
 

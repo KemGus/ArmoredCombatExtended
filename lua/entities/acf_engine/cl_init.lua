@@ -53,11 +53,12 @@ do -- Torque / power graph
 	-- Peak torque, peak power and the powerband (within 10% of peak power), measured on the sampler.
 	local function Analyse( Data, Sample )
 		local Steps = 200
-		local Result = { peakTq = 0, peakTqRPM = Data.idle, peakKw = 0, peakKwRPM = Data.idle }
+		local From = Data.from or Data.idle
+		local Result = { peakTq = 0, peakTqRPM = From, peakKw = 0, peakKwRPM = From }
 		local Powers = {}
 
 		for I = 0, Steps do
-			local RPM = Data.idle + ( Data.limit - Data.idle ) * I / Steps
+			local RPM = From + ( Data.limit - From ) * I / Steps
 			local Tq = Sample( RPM )
 			local Kw = PowerKW( Tq, RPM )
 
@@ -74,7 +75,7 @@ do -- Torque / power graph
 
 		for I = 0, Steps do
 			if Powers[I] >= Result.peakKw * 0.9 then
-				local RPM = Data.idle + ( Data.limit - Data.idle ) * I / Steps
+				local RPM = From + ( Data.limit - From ) * I / Steps
 
 				Result.bandMin = Result.bandMin or RPM
 				Result.bandMax = RPM
@@ -86,7 +87,7 @@ do -- Torque / power graph
 
 	--- Fills an ACE_Graph with an engine's torque and power curves.
 	-- @param Graph Panel The ACE_Graph to draw into; it is cleared first.
-	-- @param Data table { curve = table, torque = number (Nm), idle = number, limit = number, fuel = string, def = table (optional engine definition) }.
+	-- @param Data table { curve = table, torque = number (Nm), idle = number, limit = number, fuel = string, def = table (optional engine definition), from = number (optional first RPM plotted, default idle) }.
 	function ACE.PlotEngineCurves( Graph, Data )
 
 		if not IsValid( Graph ) or not Data or not Data.idle or not Data.limit or Data.limit <= Data.idle then return end
@@ -109,11 +110,12 @@ do -- Torque / power graph
 		Graph:PlotLimitLine( "Idle", true, Data.idle, IdleColor )
 		Graph:PlotLimitLine( "Redline", true, Data.limit, RedlineColor )
 
-		Graph:PlotLimitFunction( "Torque", Data.idle, Data.limit, TorqueColor, Sample, function( Tq )
+		local From = Data.from or Data.idle
+		Graph:PlotLimitFunction( "Torque", From, Data.limit, TorqueColor, Sample, function( Tq )
 			return math.Round( Tq ) .. " Nm / " .. math.Round( Tq * 0.73 ) .. " ft-lb"
 		end )
 
-		Graph:PlotLimitFunction( "Power", Data.idle, Data.limit, PowerColor, function( RPM )
+		Graph:PlotLimitFunction( "Power", From, Data.limit, PowerColor, function( RPM )
 			return PowerKW( Sample( RPM ), RPM ) * KwToHp
 		end, function( Hp )
 			return math.Round( Hp ) .. " hp / " .. math.Round( Hp / KwToHp ) .. " kW"
@@ -170,15 +172,29 @@ function ACE.EngineGUI_Update( Table )
 		limit  = Table.limitrpm,
 		fuel   = Table.fuel,
 		def    = Table,
+		-- A free power turbine's output shaft works down to stall, where its torque peaks.
+		from   = ( Table.enginetype == "Turbine" or Table.enginetype == "GroundTurbine" ) and 0 or nil,
 	} )
 
 
 	acemenupanel:CPanelText("FuelType", "\nFuel Type: " .. Table.fuel)
 
-	if Table.fuel == "Electric" then
-		local engineEfficiency = ACE.Efficiency[Table.enginetype] * (1 + (peakkw * 1.34/2000)*0.1)
-		local cons = ACE.ElecRate * peakkw / engineEfficiency
-		acemenupanel:CPanelText("FuelCons", "Peak energy use: " .. math.Round(cons,1) .. " kW / " .. math.Round(0.06 * cons,1) .. " MJ/min")
+	local EngineModel = ACE.Mobility and ACE.Mobility.Engine
+	local Spec = EngineModel and EngineModel.Build( Table, ACE.GetEngineTorqueCurve( Table ) )
+
+	if Table.fuel == "Electric" and Spec then
+		-- Battery power at peak power: shaft power plus the motor and inverter losses there.
+		local Torque = Spec.RatedPower / Spec.RatedW
+		local Kw = ( Spec.RatedPower + EngineModel.MotorLoss( Spec, Torque ) ) / 1000
+		acemenupanel:CPanelText("FuelCons", "Battery draw at peak power: " .. math.Round(Kw, 1) .. " kW / " .. math.Round(Kw / 60, 2) .. " kWh/min\nRegenerates when the throttle is released")
+	elseif Spec and Spec.Kind == "turbine" then
+		-- A turbine burns fuel for its gas generator whatever the output shaft does.
+		local Full = EngineModel.TurbineFuelRate( Spec, 1 ) * 60
+		local Idle = EngineModel.TurbineFuelRate( Spec, Spec.K.IdleSpool ) * 60
+		for _, Fuel in ipairs( { "Petrol", "Diesel" } ) do
+			local Density = ACE.FuelDensity[Fuel]
+			acemenupanel:CPanelText("FuelCons" .. Fuel, Fuel .. " use: " .. math.Round(Full / Density, 2) .. " liters/min at full power, " .. math.Round(Idle / Density, 2) .. " at idle")
+		end
 	elseif Table.fuel == "Multifuel" then
 		local engineEfficiency = ACE.Efficiency[Table.enginetype] * (1 + (peakkw * 1.34/2000)*0.1)
 		local petrolcons = ACE.FuelRate * engineEfficiency * peakkw / (60 * ACE.FuelDensity.Petrol) * ACE.PerFuelRelativeEfficiency.Petrol

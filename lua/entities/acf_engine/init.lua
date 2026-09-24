@@ -667,6 +667,17 @@ function ENT:GetMaxFuel()
 	return TFuel
 end
 
+--- Returns the first linked battery that can take charge from regenerative braking.
+-- @return An active, legal Electric acf_fueltank below its capacity, or nil.
+function ENT:GetChargeTank()
+	for _, Tank in ipairs(self.FuelLink) do
+		if IsValid(Tank) and Tank.Active and Tank.Legal and Tank.FuelType == "Electric"
+			and Tank.Fuel < Tank.Capacity then
+			return Tank
+		end
+	end
+end
+
 -- Checks if the fuel tank is valid, has fuel, is active and was not marked as illegal.
 local function IsValidfueltank( Tank )
 	return IsValid(Tank) and Tank.Fuel > 0 and Tank.Active and Tank.Legal
@@ -767,6 +778,13 @@ function ENT:MobilityDesc(Ctx)
 	-- in proportion to it (MassRatio). This is a balance rule kept from the old drivetrain.
 	Desc.TorqueMul = (self.PeakTorque / self.BaseTorque) * (self.MassRatio or 1)
 	Desc.Gearboxes = Gearboxes
+	if self.FuelType == "Electric" and self.MobState then
+		-- Regenerative braking needs somewhere to put the charge: none once every linked battery
+		-- is full.
+		local ChargeTank = self:GetChargeTank()
+		self.MobChargeTank = ChargeTank
+		self.MobState.RegenLimitW = not IsValid(ChargeTank) and 0 or nil
+	end
 	-- Belt-driven accessories such as a radiator fan.
 	Desc.AccessoryTorque = self.AccessoryTorque or 0
 	self.AccessoryTorque = 0
@@ -785,15 +803,24 @@ function ENT:MobilityApply()
 
 	local Dt = self.MobDt or engine.TickInterval()
 	local Tank = self.MobTank
-	if self.Active and IsValid(Tank) and (Desc.FuelKg or 0) > 0 then
+	local FuelKg = Desc.FuelKg or 0
+	if self.Active and IsValid(Tank) and FuelKg > 0 then
 		local Used
 		if self.FuelType == "Electric" then
-			Used = Desc.FuelKg / 3.6e6 -- electric "fuel" is energy: J to kWh
+			Used = FuelKg / 3.6e6 -- electric "fuel" is energy: J to kWh
 		else
-			Used = Desc.FuelKg / (ACE.FuelDensity[Tank.FuelType] or 0.745) -- kg to litres
+			Used = FuelKg / (ACE.FuelDensity[Tank.FuelType] or 0.745) -- kg to litres
 		end
 		Tank.Fuel = math.max(Tank.Fuel - Used, 0)
 		Wire_TriggerOutput(self, "Fuel Use", math.Round(60 * Used / Dt, 3))
+	elseif self.Active and FuelKg < 0 and self.FuelType == "Electric" then
+		-- Regenerative braking: the motor returned energy, which charges a battery with room.
+		local ChargeTank = self.MobChargeTank
+		local Charged = -FuelKg / 3.6e6
+		if IsValid(ChargeTank) then
+			ChargeTank.Fuel = math.min(ChargeTank.Fuel + Charged, ChargeTank.Capacity)
+		end
+		Wire_TriggerOutput(self, "Fuel Use", -math.Round(60 * Charged / Dt, 3))
 	end
 
 	if (Desc.HeatJ or 0) > 0 then

@@ -12,6 +12,8 @@
 	  the VECTO generic engines' motoring curves (diesel).
 	- Inertia: VECTO DeclarationData.Engine (diesel), EPA ALPHA engine packages (SI),
 	  Gao et al. 2019 (motors), Forecast International AGT1500 (turbines).
+	- Motors: Burress, ORNL 2013 (2012 LEAF motor/inverter efficiency), Nissan e-Pedal (regen).
+	- Turbines: GlobalSecurity M1 specifications (idle fuel flow), 14 CFR 33.73 (spool-up bound).
 ]]
 
 ACE = ACE or {}
@@ -111,11 +113,31 @@ Engine.Kinds = {
 		-- under load without stalling (Abrams-style creep). Losses are bearings/windage only.
 		-- Efficiency: AGT1500 full-power SFC 0.30 kg/kWh (Forecast International 2008) on
 		-- 42.8 MJ/kg fuel: 3.6 / (0.30 * 42.8) = 0.28.
+		-- IdleSpool: gas-generator idle as a fraction of full-power fuel flow. The M1 burns
+		-- 10 US gal/h at basic idle (GlobalSecurity, M1 specifications) = 30 kg/h of JP-8, and
+		-- 0.30 kg/kWh x 1,119 kW = 336 kg/h at full power, so idle is 9% of full flow.
+		-- SpoolTime: first-order time constant of the gas generator. 1.2 s takes idle to 95%
+		-- power in 3.5 s, inside the 5 s that 14 CFR 33.73 allows a certified turbine engine
+		-- (no AGT1500 figure was found).
 		EtaIndicated = 0.28, CoolantFrac = 0.02, LHV = 42.8e6,
-		SpoolTime = 1.2, IdleSpool = 0.12,
+		SpoolTime = 1.2, IdleSpool = 0.09,
 	},
 	electric = {
-		EtaIndicated = 0.9, CoolantFrac = 0.08,
+		-- Motor + inverter losses as a fraction of rated power (Prated = peak power), with
+		-- t = |torque| / peak torque and w = |speed| / max speed:
+		--   CopperLoss·t² (stator I²R), InverterLoss·t (switch conduction, roughly ∝ current),
+		--   IronLoss·w² (core loss and windage, felt as shaft drag).
+		-- Least-squares fitted to the ORNL 2012 LEAF motor+inverter map (Burress 2013: combined
+		-- peak above 96%, a wide region above 90%, lower at low speed and torque). The fit
+		-- peaks at 95.5% and gives 91% at the peak-torque corner.
+		CopperLoss = 0.03, InverterLoss = 0.065, IronLoss = 0.037, BearingFrac = 0.002,
+		-- Lift-off regeneration as a fraction of the motor's torque envelope. Nissan's e-Pedal
+		-- decelerates the 2018 LEAF at up to 0.2 g: 0.2·9.81·1,700 kg·0.323 m / 8.19 final drive
+		-- = 131 N·m at the motor, 41% of its 320 N·m.
+		RegenFrac = 0.4,
+		-- Pedal travel over which lift-off regen fades out, and the speed (fraction of max) below
+		-- which it fades to zero: at 5% of top speed the fitted losses eat all the recovered power.
+		RegenPedal = 0.05, RegenFadeFrac = 0.05,
 	},
 }
 
@@ -219,18 +241,81 @@ function Engine.Build(Def, Curve)
 		Spec.Inertia = Def.inertia or 7.93 * (Def.torque / 5355) * (3000 / max(Def.limitrpm, 1))
 	end
 
+	local Count = Curve and #Curve or 0
+	local Span = max(Spec.LimitRPM - Spec.IdleRPM, 1)
 	-- Torque at wide-open throttle straight off the definition's curve.
 	Spec.BrakeWOT = function(W)
 		local RPM = W / RPMToRad
-		local Perc = (RPM - Spec.IdleRPM) / (Spec.LimitRPM - Spec.IdleRPM)
-		-- Below idle the curve is undefined; per-cycle torque stays roughly at its idle value
-		-- (volumetric efficiency is high at low speed), so hold the first point.
-		local Tq = sampleCurve(Curve, Perc) * Spec.PeakTorque
-		return max(Tq, 0)
+		local Perc = (RPM - Spec.IdleRPM) / Span
+		local Frac
+		if Perc < 0 and Kind == "turbine" and Count >= 2 then
+			-- A free power turbine keeps gaining torque down to output stall: torque falls about
+			-- linearly with output speed at fixed gas-generator power, so extend the curve's
+			-- first segment down to 0 rpm.
+			Frac = Curve[1] + (Curve[1] - Curve[2]) * -Perc * (Count - 1)
+		else
+			-- Below idle a piston engine's curve is undefined; per-cycle torque stays roughly at
+			-- its idle value (volumetric efficiency is high at low speed), so hold the first point.
+			-- Curves are normalised to peak: clip the spline's overshoot at flat-to-falling knees.
+			Frac = min(sampleCurve(Curve, Perc), 1)
+		end
+		return max(Frac * Spec.PeakTorque, 0)
 	end
+
+	-- Peak power over the curve and the speed it occurs at.
+	local Best, BestW = 0, Spec.LimitW
+	for I = 1, 64 do
+		local W = Spec.LimitW * I / 64
+		local P = Spec.BrakeWOT(W) * W
+		if P > Best then Best, BestW = P, W end
+	end
+	Spec.RatedPower = Best
+	Spec.RatedW = BestW
 
 	return Spec
 end
+
+--- Electrical-side loss of a motor and its inverter (copper and switching), in watts.
+-- Core loss and windage are not included: they act as shaft drag (Engine.FrictionTorque).
+-- @param Spec Electric engine spec.
+-- @param Torque Electromagnetic torque in N·m (either sign).
+-- @return Loss in W.
+function Engine.MotorLoss(Spec, Torque)
+	local K = Spec.K
+	local T = abs(Torque) / Spec.PeakTorque
+	return Spec.RatedPower * (K.CopperLoss * T * T + K.InverterLoss * T)
+end
+
+--- Fuel mass flow of a turbine at a given gas-generator state.
+-- The gas generator burns fuel for the power it makes whatever the output shaft does, so a
+-- stalled power turbine at full throttle burns full-power fuel.
+-- @param Spec Turbine engine spec.
+-- @param Spool Gas-generator power fraction 0..1.
+-- @return Fuel flow in kg/s.
+function Engine.TurbineFuelRate(Spec, Spool)
+	local K = Spec.K
+	return Spool * Spec.RatedPower / K.EtaIndicated / K.LHV
+end
+
+local SampleSpecs = setmetatable({}, { __mode = "k" })
+
+--- Brake torque at wide-open throttle for an engine definition, as the drivetrain sees it.
+-- Used by the engine menu graph. Specs are cached per definition table.
+-- @param Def Engine definition.
+-- @param RPM Crank (output shaft) speed in rpm.
+-- @return Torque in N·m; 0 past the limit for motors and turbines, which cut drive there.
+function Engine.CurveSample(Def, RPM)
+	local Spec = SampleSpecs[Def]
+	if not Spec then
+		local Curve = ACE.GetEngineTorqueCurve and ACE.GetEngineTorqueCurve(Def) or Def.torquecurve
+		Spec = Engine.Build(Def, Curve)
+		SampleSpecs[Def] = Spec
+	end
+	local W = RPM * RPMToRad
+	if (Spec.Kind == "electric" or Spec.Kind == "turbine") and W > Spec.LimitW then return 0 end
+	return Spec.BrakeWOT(max(W, 0))
+end
+ACE.Mobility.EngineCurveSample = Engine.CurveSample
 
 --- Friction torque (rubbing + accessories) at a given speed and load, Chen-Flynn.
 -- @param Spec Engine spec.
@@ -239,8 +324,13 @@ end
 -- @return Friction torque in N·m (positive, opposes rotation).
 function Engine.FrictionTorque(Spec, W, Load)
 	local K = Spec.K
+	if K.IronLoss then
+		-- Motors: bearing drag plus core loss and windage, IronLoss·Prated·w² as a torque.
+		local Lw = max(Spec.LimitW, 1)
+		return Spec.PeakTorque * K.BearingFrac + K.IronLoss * Spec.RatedPower * abs(W) / (Lw * Lw)
+	end
 	if not K.A then
-		-- Turbines and motors: bearings and windage, about 1-2% of peak torque at speed.
+		-- Turbines: bearings and windage, about 1-2% of peak torque at speed.
 		local Frac = 0.01 + 0.01 * min(abs(W) / max(Spec.LimitW, 1), 1.5)
 		return Spec.PeakTorque * Frac
 	end
@@ -335,29 +425,58 @@ function Engine.Step(State, Throttle, Dt, Opts)
 	local NoStall = Opts and Opts.NoStall
 
 	if Spec.Kind == "electric" then
-		local Load = State.Running and HasFuel and clamp(Throttle, 0, 1) or 0
-		local Drive = Load * Spec.BrakeWOT(abs(W))
-		local Loss = Engine.FrictionTorque(Spec, W, Load)
-		State.Load = Load
-		State.Torque = Drive - Loss * (W >= 0 and 1 or -1)
-		local Pmech = max(Drive * W, 0)
-		State.FuelRate = Pmech / K.EtaIndicated -- electric "fuel" is energy: W
-		State.HeatRate = State.FuelRate - Pmech + Loss * abs(W)
-		return Drive, Loss
+		-- A motor has no idle, no stall and no starter: at 0 rpm it gives full torque.
+		local On = State.Running and HasFuel
+		local Pedal = clamp(Throttle, 0, 1)
+		local Speed = abs(W)
+		local Envelope = Spec.BrakeWOT(Speed)
+		-- The inverter stops driving past the rated top speed.
+		local Drive = (On and Speed <= Spec.LimitW) and Pedal * Envelope or 0
+
+		-- Lift-off regeneration: the motor brakes as a generator and charges the battery. It is
+		-- applied as drag, so it slows the crank but can never spin it backwards.
+		local Regen = 0
+		if On then
+			local Lift = clamp(1 - Pedal / K.RegenPedal, 0, 1)
+			local Fade = clamp(Speed / (K.RegenFadeFrac * Spec.LimitW), 0, 1)
+			Regen = K.RegenFrac * Envelope * Lift * Fade
+			-- A full (or refusing) battery takes no charge: State.RegenLimitW is the most
+			-- charging power it accepts, set by the entity; nil means no limit.
+			local Limit = State.RegenLimitW
+			if Limit and Regen > 0 then
+				local Charge = Regen * Speed - Engine.MotorLoss(Spec, Regen)
+				if Charge > Limit then Regen = Regen * max(Limit, 0) / Charge end
+			end
+		end
+
+		local Friction = Engine.FrictionTorque(Spec, W, 0)
+		local Sign = W >= 0 and 1 or -1
+		-- Electromagnetic torque: drive minus regen (regen always opposes rotation).
+		local Tem = Drive - Regen * Sign
+		local Copper = Engine.MotorLoss(Spec, Tem)
+
+		State.Load = Pedal
+		State.Regen = Regen
+		State.Torque = Drive - (Friction + Regen) * Sign
+		-- Electric "fuel" is energy: battery power in W, negative while regenerating.
+		State.FuelRate = Tem * W + Copper
+		State.HeatRate = Copper + Friction * Speed
+		return Drive, Friction + Regen
 	end
 
 	if Spec.Kind == "turbine" then
+		-- The output shaft is a free power turbine: nothing to stall, no idle governor on it.
 		local Target = (State.Running and HasFuel) and (K.IdleSpool + (1 - K.IdleSpool) * clamp(Throttle, 0, 1)) or 0
-		-- Gas generator spool lag: first order, time constant SpoolTime.
+		-- Gas generator spool lag: first order, time constant SpoolTime. The exact discrete
+		-- form, so the response is the same at any tickrate or substep count.
 		State.Spool = State.Spool + (Target - State.Spool) * (1 - exp(-Dt / K.SpoolTime))
 		local Over = W > Spec.LimitW
 		local Drive = Over and 0 or State.Spool * Spec.BrakeWOT(max(W, 0))
 		local Loss = Engine.FrictionTorque(Spec, W, State.Spool)
 		State.Load = State.Spool
 		State.Torque = Drive - Loss * (W >= 0 and 1 or -1)
-		local Pfuel = (State.Spool * Spec.PeakTorque * Spec.LimitW * 0.5) / K.EtaIndicated
-		State.FuelRate = Pfuel / K.LHV
-		State.HeatRate = Pfuel * K.CoolantFrac
+		State.FuelRate = Engine.TurbineFuelRate(Spec, State.Spool)
+		State.HeatRate = State.FuelRate * K.LHV * K.CoolantFrac
 		return Drive, Loss
 	end
 
