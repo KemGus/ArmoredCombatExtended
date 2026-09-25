@@ -809,6 +809,14 @@ local function solveGroup(Ctx, EngineDescs, Roots, PhysMass, TotalMass, Dt)
 			local Room = max(MaxW - abs(W.W), 0) * (W.J or 0)
 			if abs(Imp) > Room then Imp = Imp > 0 and Room or -Room end
 		end
+		--[[
+			Nor may one step change its spin by more than the cap the other way. A driven prop can
+			be far lighter than what it moves (a thin solid-axle cylinder with the wheels
+			ballsocketed to it): the vehicle's share of road impulse went into its own inertia,
+			spun it to 187,000 deg/s, and the physics engine deleted it with its constraints.
+		]]
+		local Lim = MaxW * (W.J or 0)
+		if abs(Imp) > Lim then Imp = Imp > 0 and Lim or -Lim end
 		W.AppliedDW = 0
 		if Imp ~= 0 and Imp == Imp and ApplyConVar:GetBool() and IsValid(W.Phys) then
 			W.AppliedDW = Imp / max(W.J or 1, 1e-3)

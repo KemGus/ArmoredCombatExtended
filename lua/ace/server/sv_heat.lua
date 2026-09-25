@@ -10,6 +10,200 @@
 ------How much the distance affects Heat detection for IR seeker? Higher => Less Heat detected at distant targets - Def: 1
 	ACE.HeatDistanceLoss = 0.5
 
+--[[-------------------------------------------------------------------------------------
+	Global heat settings. Each one is a server convar (the server-wide default, set from the
+	console or server.cfg) that a map can override. Map overrides are set by admins from the
+	ACE menu (Server settings > Heat) and saved to data/ace/heat/<map>.txt, the same way the
+	default damage permission mode is saved per map in data/ace/permissions/.
+
+	ace_heat_timescale is how many times faster than real time heat moves. Engine coolant runs
+	at exactly this; the older, game-tuned heat models (gun barrels, clutches, missile radars,
+	idle radiators) keep their tuning at the default and speed up or slow down in proportion.
+]]---------------------------------------------------------------------------------------
+do
+	local MapHeatDir = "ace/heat/"
+	local DefaultTimeScale = 2
+
+	-- Order here is the order the menu lists them in.
+	ACE.HeatSettings = {
+		{ Name = "ace_heat_timescale", Default = DefaultTimeScale, Min = 0.1, Max = 60,
+			Help = "How many times faster than real time everything that heats up (engines, radiators, guns, clutches, radars) heats and cools. 1 is real time." },
+		{ Name = "ace_engine_builtin_cooling", Default = 0.5, Min = 0, Max = 4,
+			Help = "Cooling every engine has without a radiator entity, as a share of its full-power heat. 0 - none, 1 - enough for full power." },
+		{ Name = "ace_engine_overheat_damage", Default = 1, Min = 0, Max = 1,
+			Help = "1 - overheated engines lose health, 0 - they only lose power." },
+	}
+
+	local ByName = {}
+	for _, Setting in ipairs(ACE.HeatSettings) do
+		Setting.CVar = CreateConVar(Setting.Name, Setting.Default, FCVAR_ARCHIVE, Setting.Help, Setting.Min, Setting.Max)
+		ByName[Setting.Name] = Setting
+	end
+
+	local MapOverrides = {}
+
+	--- Returns the value of a global heat setting on this map: the map's saved value if it has
+	-- one, otherwise the server convar.
+	-- @param Name string Convar name, one of ACE.HeatSettings.
+	-- @return number
+	function ACE.GetHeatSetting(Name)
+		local Value = MapOverrides[Name]
+		if Value ~= nil then return Value end
+		return ByName[Name].CVar:GetFloat()
+	end
+
+	--- Returns how much faster than its default tuning heat moves right now: 1 at the default
+	-- ace_heat_timescale. For heat models tuned by hand rather than in real time.
+	-- @return number
+	function ACE.GetHeatRate()
+		return ACE.ThermalTimeScale / DefaultTimeScale
+	end
+
+	-- ACE.ThermalTimeScale is read every think, so it holds the live value instead of a lookup.
+	local function applyHeatSettings()
+		ACE.ThermalTimeScale = ACE.GetHeatSetting("ace_heat_timescale")
+	end
+
+	local function getMapHeatFile()
+		local MapName = string.gsub(game.GetMap(), "[^%a%d-_]", "_")
+		return MapHeatDir .. MapName .. ".txt"
+	end
+
+	local function saveMapHeatSettings()
+		local Path = getMapHeatFile()
+		if next(MapOverrides) == nil then
+			if file.Exists(Path, "DATA") then file.Delete(Path) end
+			return
+		end
+
+		file.CreateDir(MapHeatDir)
+		file.Write(Path, util.TableToJSON(MapOverrides, true))
+	end
+
+	local function loadMapHeatSettings()
+		MapOverrides = {}
+
+		local Saved = util.JSONToTable(file.Read(getMapHeatFile(), "DATA") or "")
+		if istable(Saved) then
+			for Name, Value in pairs(Saved) do
+				local Setting = ByName[Name]
+				if Setting and isnumber(Value) then
+					MapOverrides[Name] = math.Clamp(Value, Setting.Min, Setting.Max)
+				end
+			end
+		end
+
+		if next(MapOverrides) ~= nil then
+			print("[ACE | INFO]- Loaded heat settings for " .. game.GetMap() .. " from data/" .. getMapHeatFile())
+		end
+
+		applyHeatSettings()
+	end
+
+	-- The convars stay live as the server default: a console change applies at once unless
+	-- this map overrides that setting.
+	for _, Setting in ipairs(ACE.HeatSettings) do
+		cvars.AddChangeCallback(Setting.Name, applyHeatSettings, "ACE_HeatSettings")
+	end
+
+	loadMapHeatSettings()
+
+	--- Sends the heat settings (value on this map, server default, whether the map overrides it)
+	-- to a player's ACE menu.
+	-- @param Ply Player
+	function ACE.SendHeatSettings(Ply)
+		local State = {}
+		for I, Setting in ipairs(ACE.HeatSettings) do
+			State[I] = {
+				Name = Setting.Name,
+				Value = ACE.GetHeatSetting(Setting.Name),
+				ServerDefault = Setting.CVar:GetFloat(),
+				MapSaved = MapOverrides[Setting.Name] ~= nil,
+			}
+		end
+
+		net.Start("ACE_HeatSettings")
+			net.WriteString(game.GetMap())
+			net.WriteTable(State)
+		net.Send(Ply)
+	end
+
+	local function resendHeatSettings()
+		for _, Ply in ipairs(player.GetAll()) do
+			if Ply:IsAdmin() then ACE.SendHeatSettings(Ply) end
+		end
+	end
+
+	local function tellAdmins(Text)
+		for _, Ply in ipairs(player.GetAll()) do
+			if Ply:IsAdmin() then ACE.SendMsg(Ply, Color(255, 0, 0), Text) end
+		end
+	end
+
+	net.Receive("ACE_HeatSettings", function(_, Ply)
+		if not IsValid(Ply) or not Ply:IsAdmin() then return end
+		ACE.SendHeatSettings(Ply)
+	end)
+
+	local function msgtoconsole(_, Msg) print(Msg) end
+
+	concommand.Add("ACE_SetMapHeatSetting", function(Ply, _, Args)
+		local ValidPly = IsValid(Ply)
+		local PrintMsg = ValidPly and function(Hud, Msg) Ply:PrintMessage(Hud, Msg) end or msgtoconsole
+
+		local Setting = ByName[string.lower(Args[1] or "")]
+		local Value = tonumber(Args[2] or "")
+		if not Setting or not Value then
+			local Names = {}
+			for _, S in ipairs(ACE.HeatSettings) do Names[#Names + 1] = S.Name end
+			PrintMsg(HUD_PRINTCONSOLE,
+				" - Set a heat setting for this map and save it. Usage: ACE_SetMapHeatSetting <setting> <value>" ..
+				"\n	Settings: " .. table.concat(Names, " "))
+			return false
+		end
+
+		if ValidPly and not Ply:IsAdmin() then
+			PrintMsg(HUD_PRINTCONSOLE, "You can't use this because you are not an admin.")
+			return false
+		end
+
+		Value = math.Clamp(Value, Setting.Min, Setting.Max)
+		if MapOverrides[Setting.Name] == Value then return true end
+
+		MapOverrides[Setting.Name] = Value
+		saveMapHeatSettings()
+		applyHeatSettings()
+
+		PrintMsg(HUD_PRINTCONSOLE, "Command SUCCESSFUL: " .. Setting.Name .. " for " .. game.GetMap() .. " set to " .. Value)
+		tellAdmins(Setting.Name .. " for " .. game.GetMap() .. " has been set to " .. Value .. "!")
+		hook.Run("ACE_HeatSettingsChanged", Setting.Name, Value)
+
+		resendHeatSettings()
+		return true
+	end)
+
+	concommand.Add("ACE_ClearMapHeatSettings", function(Ply)
+		local ValidPly = IsValid(Ply)
+		local PrintMsg = ValidPly and function(Hud, Msg) Ply:PrintMessage(Hud, Msg) end or msgtoconsole
+
+		if ValidPly and not Ply:IsAdmin() then
+			PrintMsg(HUD_PRINTCONSOLE, "You can't use this because you are not an admin.")
+			return false
+		end
+
+		MapOverrides = {}
+		saveMapHeatSettings()
+		applyHeatSettings()
+
+		PrintMsg(HUD_PRINTCONSOLE, "Command SUCCESSFUL: " .. game.GetMap() .. " now uses the server's heat settings.")
+		tellAdmins(game.GetMap() .. " now uses the server's heat settings.")
+		hook.Run("ACE_HeatSettingsChanged")
+
+		resendHeatSettings()
+		return true
+	end)
+end
+
 ----------------------------------------------------------------------------------------/
 ----------------------------------------------------------------------------------------/
 ------------------------------------/FUNCTIONS BELOW------------------------------------/
@@ -72,16 +266,19 @@ function ACE.HeatFromGun( Gun , Heat, DeltaTime )
 	--local Energyloss = ((42500 * (-Heat))) * (1 + (Mass ^ 0.5) * 2/75) * DeltaTime * 0.03
 	--Heat = math.max(Heat +(Energyloss/(Mass ^ 0.5) * 2/743.2),0)
 
+	-- The global heat time scale speeds up heating and cooling alike (1 at the default scale).
+	local Rate = ACE.GetHeatRate()
+
 	--Creates Heat when firing. Just as note, IK last shot will not create Heat, not really relevant though
 	if Gun.HeatFire then
 
-		Heat = Heat + (((0.2 + Gun.BulletData.PropMass) ^ 1.05 * 150000) / (Mass ^ 0.5) / 743.2)
+		Heat = Heat + (((0.2 + Gun.BulletData.PropMass) ^ 1.05 * 150000) / (Mass ^ 0.5) / 743.2) * Rate
 		Gun.HeatFire = false
 	--Dissipates when not firing
 	else
 
 		local Diff = Heat - ACE.AmbientTemp
-		Heat = Heat - Diff * DeltaTime * 0.1 --* 0.35
+		Heat = Heat - Diff * math.min(DeltaTime * 0.1 * Rate, 1) --* 0.35
 
 	end
 
@@ -171,6 +368,7 @@ function ACE.HeatFromEngine( Engine )
 end
 
 function ACE.HeatFromRadar(Radar, Delta)
+	Delta = Delta * ACE.GetHeatRate() -- The global heat time scale (1 at the default scale).
 	local CurHeat = Radar.Heat
 	local AmbientTemp = ACE.AmbientTemp
 
@@ -366,13 +564,6 @@ end
 do
 	local Thermal = ACE.Mobility.Thermal
 
-	local TimeScaleCVar = CreateConVar("ace_engine_thermal_timescale", 2, FCVAR_ARCHIVE,
-		"How many times faster than real time engines heat up and cool down. 1 is real time.", 0.1, 60)
-	local BuiltinCVar = CreateConVar("ace_engine_builtin_cooling", 0.5, FCVAR_ARCHIVE,
-		"Cooling every engine has without a radiator entity, as a share of its full-power heat. 0 - none, 1 - enough for full power.", 0, 4)
-	local DamageCVar = CreateConVar("ace_engine_overheat_damage", 1, FCVAR_ARCHIVE,
-		"1 - overheated engines lose health, 0 - they only lose power.", 0, 1)
-
 	--- Returns (building when needed) an engine's thermal spec.
 	-- @param Engine acf_engine entity.
 	-- @return table|nil Thermal spec, or nil when the engine has no mobility spec yet.
@@ -381,7 +572,7 @@ do
 		if not Spec and ACE.Mobility.EngineSpec then Spec = ACE.Mobility.EngineSpec(Engine) end
 		if not Spec then return end
 
-		local Builtin = BuiltinCVar:GetFloat()
+		local Builtin = ACE.GetHeatSetting("ace_engine_builtin_cooling")
 		local TS = Engine.ThermalSpec
 		if TS and TS.EngineSpec == Spec and Engine.ThermalBuiltin == Builtin then return TS end
 
@@ -442,7 +633,7 @@ do
 			end
 		end
 
-		local Scale = TimeScaleCVar:GetFloat()
+		local Scale = ACE.ThermalTimeScale
 		local W = Engine.MobState and Engine.MobState.W or 0
 		Thermal.Step(T, TS, HeatW, W, Dt * Scale, {
 			Ambient = Ambient, Running = Engine.Active, Exchangers = Exchangers, ExtraC = ExtraC,
@@ -461,7 +652,7 @@ do
 		-- Overheating: past its damage temperature the engine wears itself out (scuffed liners,
 		-- a warped head), on the same accelerated clock as the heat.
 		local Rate = Thermal.DamageRate(TS, T.Tb)
-		if Rate > 0 and DamageCVar:GetBool() and Engine.ACE and Engine.ACE.Health then
+		if Rate > 0 and ACE.GetHeatSetting("ace_engine_overheat_damage") ~= 0 and Engine.ACE and Engine.ACE.Health then
 			Engine.ACE.Health = math.max(Engine.ACE.Health - Engine.ACE.MaxHealth * Rate * Dt * Scale, 0)
 			if Engine.ACE.Health <= 0 and Engine.Active then Engine:TriggerInput("Active", 0) end
 		end

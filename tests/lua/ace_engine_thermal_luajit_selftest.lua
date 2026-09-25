@@ -18,7 +18,7 @@ local function check(Cond, Label, ...)
 	Passed = Passed + 1
 end
 
--- The default of ace_engine_thermal_timescale and ace_engine_builtin_cooling.
+-- The default of ace_heat_timescale and ace_engine_builtin_cooling.
 local TimeScale, Builtin = 2, 0.5
 local Ambient = 20
 

@@ -905,17 +905,19 @@ function ENT:MobilityApply()
 		a 2500-3000 N·m heavy-truck clutch (pressure plate masses from heavy-duty clutch catalogues),
 		air cooled with a ~20 s time constant. Dual (steering) boxes use wet multi-plate clutches
 		running in the transmission oil, which carries heat away several times faster.
+		The global heat time scale (ace_heat_timescale) speeds heating, cooling and wear alike.
 	]]
+	local HeatRate = ACE.GetHeatRate()
 	local Mass = 4 + (self.MaxTorque or 0) / 100
 	local Tau = self.Dual and 6 or 20
 	local T = self.ClutchTemp or ACE.AmbientTemp
-	T = T + (Mob.ClutchHeatJ or 0) / (ClutchSpecificHeat * Mass)
-	T = T - (T - ACE.AmbientTemp) * (1 - math.exp(-Dt / Tau))
+	T = T + (Mob.ClutchHeatJ or 0) * HeatRate / (ClutchSpecificHeat * Mass)
+	T = T - (T - ACE.AmbientTemp) * (1 - math.exp(-Dt * HeatRate / Tau))
 	self.ClutchTemp = T
 
 	if T > ClutchDamageTemp and self.ACE and self.ACE.Health then
 		-- A cooked clutch wears its facings away: lose health in proportion to the overheat.
-		local Wear = (T - ClutchDamageTemp) / 100 * Dt * 0.01 * self.ACE.MaxHealth
+		local Wear = (T - ClutchDamageTemp) / 100 * Dt * HeatRate * 0.01 * self.ACE.MaxHealth
 		self.ACE.Health = math.max(self.ACE.Health - Wear, self.ACE.MaxHealth * 0.05)
 	end
 

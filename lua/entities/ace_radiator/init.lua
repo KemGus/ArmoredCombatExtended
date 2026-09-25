@@ -516,7 +516,7 @@ function ENT:Think()
 		end
 		if not Linked then
 			self.HeatRejected = 0
-			self.Heat = ACE.AmbientTemp + ((self.Heat or ACE.AmbientTemp) - ACE.AmbientTemp) * math.exp(-DeltaTime2 / 60)
+			self.Heat = ACE.AmbientTemp + ((self.Heat or ACE.AmbientTemp) - ACE.AmbientTemp) * math.exp(-DeltaTime2 * ACE.GetHeatRate() / 60)
 		end
 
 		Wire_TriggerOutput( self, "Temperature", self.Heat )

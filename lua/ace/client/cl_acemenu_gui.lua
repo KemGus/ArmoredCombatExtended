@@ -775,7 +775,9 @@ local function addHelpText(text, parent)
 	return label
 end
 
-local function addCheckbox(text, setting, parent)
+local function addCheckbox(text, setting, parent, send)
+	send = send or updateSetting
+
 	local checkbox = vgui.Create("DCheckBoxLabel", parent)
 	checkbox:SetText(text)
 	checkbox:DockMargin(10, 10, 10, 0)
@@ -785,7 +787,7 @@ local function addCheckbox(text, setting, parent)
 	function checkbox:OnChange(value)
 		if self.suppressOnChange then return end
 
-		updateSetting(setting, value and 1 or 0)
+		send(setting, value and 1 or 0)
 	end
 
 	function checkbox:SetValueNoSync(value)
@@ -797,7 +799,9 @@ local function addCheckbox(text, setting, parent)
 	return checkbox
 end
 
-local function addSlider(text, min, max, decimals, default, setting, parent)
+local function addSlider(text, min, max, decimals, default, setting, parent, send)
+	send = send or updateSetting
+
 	local slider = vgui.Create("DNumSlider", parent)
 	slider:SetText(text)
 	slider:SetDark(true)
@@ -811,7 +815,7 @@ local function addSlider(text, min, max, decimals, default, setting, parent)
 		if self.suppressOnChange then return end
 
 		timer.Create("ACE_DebounceSettingUpdate_" .. setting, 0.25, 1, function()
-			updateSetting(setting, math.Round(value, decimals))
+			send(setting, math.Round(value, decimals))
 		end)
 	end
 
@@ -825,6 +829,47 @@ local function addSlider(text, min, max, decimals, default, setting, parent)
 
 	return slider
 end
+
+-- Heat settings are saved per map on the server (ACE.HeatSettings in sv_heat.lua) and are
+-- changed through admin console commands, like the per-map default damage permission mode.
+local heatControls = {}
+local heatStatus
+
+local function setMapHeatSetting(setting, value)
+	RunConsoleCommand("ACE_SetMapHeatSetting", setting, tostring(value))
+end
+
+local function addHeatControl(control, setting, tooltip)
+	control.aceTooltip = tooltip
+	control:SetTooltip(tooltip)
+	heatControls[setting] = control
+
+	return control
+end
+
+net.Receive("ACE_HeatSettings", function()
+	local mapName = net.ReadString()
+	local state = net.ReadTable()
+	local anySaved = false
+
+	for _, setting in ipairs(state) do
+		local control = heatControls[setting.Name]
+		if IsValid(control) then
+			control:SetValueNoSync(setting.Value)
+			control:SetTooltip(control.aceTooltip .. "\nServer default: " .. setting.ServerDefault .. (setting.MapSaved and " (overridden on this map)" or ""))
+		end
+
+		anySaved = anySaved or setting.MapSaved
+	end
+
+	if IsValid(heatStatus) then
+		if anySaved then
+			heatStatus:SetText("Saved for " .. mapName .. ". Hover a setting to see the server default.")
+		else
+			heatStatus:SetText("Nothing saved for " .. mapName .. " - using the server defaults.")
+		end
+	end
+end)
 
 
 --[[=========================
@@ -890,6 +935,36 @@ function ACE.SVGUICreate()	--Serverside folder content
 	addHelpText("Engines with an entity wired to their Exhaust input puff smoke from it. Players can still hide it for themselves in the client settings.", general)
 
 	acemenupanel.CustomDisplay:AddItem(general)
+
+	local heat = vgui.Create("DCollapsibleCategory")
+	heat:SetLabel("Heat (this map)")
+	heat:SetExpanded(false)
+
+	heatStatus = addHelpText("Loading...", heat)
+	addHelpText("These are saved for the current map and applied every time it loads. Changes take effect at once.", heat)
+
+	addHeatControl(addSlider("Heat time scale (x real time)", 0.1, 60, 1, 2, "ace_heat_timescale", heat, setMapHeatSetting), "ace_heat_timescale",
+		"How many times faster than real time everything heats up and cools down. 1 is real time, 2 is the ACE default.")
+	addHelpText("Engines and radiators run at exactly this. Guns, gearbox clutches and missile radars heat and cool at their usual speed at 2, twice as fast at 4, and so on.", heat)
+
+	addHeatControl(addSlider("Engine built-in cooling (x full-power heat)", 0, 4, 2, 0.5, "ace_engine_builtin_cooling", heat, setMapHeatSetting), "ace_engine_builtin_cooling",
+		"Cooling every engine has without a radiator, as a share of the heat it makes at full power.")
+	addHelpText("0 - engines need a radiator to cool at all, 1 - enough to run at full power without one.", heat)
+
+	addHeatControl(addCheckbox("Overheated engines take damage", "ace_engine_overheat_damage", heat, setMapHeatSetting), "ace_engine_overheat_damage",
+		"When off, an overheated engine only loses power.")
+	addHelpText("Past its damage temperature an engine loses health. When off, it only loses power.", heat)
+
+	local heatReset = vgui.Create("DButton", heat)
+	heatReset:SetText("Use the server defaults on this map")
+	heatReset:SetTooltip("Deletes this map's saved heat settings.")
+	heatReset:DockMargin(10, 10, 10, 10)
+	heatReset:Dock(TOP)
+	heatReset.DoClick = function()
+		RunConsoleCommand("ACE_ClearMapHeatSettings")
+	end
+
+	acemenupanel.CustomDisplay:AddItem(heat)
 
 	local damageScaling = vgui.Create("DCollapsibleCategory")
 	damageScaling:SetLabel("Damage Scaling")
@@ -995,6 +1070,9 @@ function ACE.SVGUICreate()	--Serverside folder content
 
 	net.Start("ACE_SettingsSync")
 	net.WriteString("_request")
+	net.SendToServer()
+
+	net.Start("ACE_HeatSettings")
 	net.SendToServer()
 
 	net.Receive("ACE_SettingsSync", function()

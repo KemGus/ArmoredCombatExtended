@@ -363,10 +363,15 @@ up; hot metal costs torque and, past the damage temperature, health.
 | Derate | from 150 °C metal (140 petrol) to ×0.6 (×0.5 petrol, ×0.5 motor) at 250 °C (200 motor) | **Estimated** shape |
 | Damage | from 200 °C metal (180 motor windings), 0.5% of max health per s per 50 K | Onset [MIT 2.61] oil film limit / [IEC 60085]; rate **Estimated** |
 
-Convars (server, archived): `ace_engine_thermal_timescale` (default 2; 1 is real time),
+Convars (server, archived): `ace_heat_timescale` (default 2; 1 is real time),
 `ace_engine_builtin_cooling` (default 0.5), `ace_engine_overheat_damage` (default 1).
-`ACE.ThermalTimeScale`, `ACE.RadiatorEff` and `ACE.RadiatorHeatCap` no longer affect engines
-or radiators.
+Admins can override any of them for one map from the ACE menu (Server settings > Heat); the
+override is saved to `data/ace/heat/<map>.txt` and wins over the convar on that map.
+`ace_heat_timescale` is global: engine coolant runs at exactly that many times real time, and
+gun barrels, clutches, missile radars and unlinked radiators run at `ace_heat_timescale / 2`
+times their tuned speed, so the default leaves them as they were. `ACE.ThermalTimeScale` holds
+the live value. `ACE.RadiatorEff` and `ACE.RadiatorHeatCap` no longer affect engines or
+radiators.
 
 Results for a BMP-2 class engine (15.8 L diesel, 240 kW, 665 kg) from
 `tests/lua/ace_engine_thermal_luajit_selftest.lua`:

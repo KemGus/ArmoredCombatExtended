@@ -55,7 +55,7 @@ ACE.CuIToLiter          = 0.0163871                -- cubic inches to liters
 
 ACE.DriverTorqueBoost   = 1.25                    -- torque multiplier from having a driver
 ACE.FuelRate            = 10                        -- multiplier for fuel usage, 1.0 is approx real world
-ACE.ThermalTimeScale    = 60                        -- Multiplies the timescale of anything heat related. This way engines don't take dozens of minutes to overheat.
+ACE.ThermalTimeScale    = 2                         -- How many times faster than real time heat moves. Live value of ace_heat_timescale or this map's saved value, kept current by sv_heat.lua.
 ACE.RadiatorEff         = 0.125                     -- Multiplier for radiator cooling effectiveness
 ACE.RadiatorHeatCap     = 0.2                       -- Multiplier for radiator specific heat cap. Makes radiators more or less effective at storing energy
 ACE.ElecRate            = 3                         -- multiplier for electrics                                --BEFORE to balance: 0.458

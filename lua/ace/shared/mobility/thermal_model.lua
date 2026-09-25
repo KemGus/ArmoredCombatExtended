@@ -56,7 +56,16 @@ local AirRho, AirCp = 1.13, 1007
 	Per-kind constants.
 	LPerKW: coolant in the whole circuit per kW of rated power. Published: Kharkiv V-2 family
 	  90-95 L at 370-580 kW (0.16-0.25), Cummins QSB5.9-G1 genset 25.6 L at 137 kW (0.19);
-	  passenger cars carry less (~0.06). 0.15 is used.
+	  passenger cars carry less (~0.06). 0.15 is used where no displacement is known.
+	LPerLitre: coolant per litre of displacement, used when the engine has one. It scales with
+	  the size of the water jackets rather than the power: V-2 90-95 L for 38.9 L (2.4), and
+	  passenger cars about 2-3.5 L per litre (6-7 L on a 2 L engine). 2.3 is used (estimated).
+	  Sizing by power gave a 6.2 L petrol V6 about 50 L, four times a car's circuit, and idle
+	  warm-up took most of an hour.
+	WarmFrac: share of the engine's dry mass that warms with the coolant (block, head, oil).
+	  Starter, alternator, flywheel, bellhousing and brackets are outside the water jacket and
+	  lag far behind; 0.6 is used (estimated). With it a car engine idles up to the thermostat
+	  in about 15-20 minutes and much faster when driven, as real ones do.
 	BlockCp: effective specific heat of an engine's mass [J/(kg·K)]: cast iron 460, steel 490,
 	  aluminium 900, with some oil (2,000); 500 for a mostly-iron diesel.
 	DeltaBlock: how far the engine metal sits above the coolant at rated heat [K]. The MIT 2.61
@@ -82,14 +91,14 @@ local AirRho, AirCp = 1.13, 1007
 ]]
 Thermal.Kinds = {
 	liquid = {
-		LPerKW = 0.15, FluidC = GlycolC, BlockCp = 500, DeltaBlock = 25, PumpDeltaT = 7,
+		LPerKW = 0.15, LPerLitre = 2.3, WarmFrac = 0.6, FluidC = GlycolC, BlockCp = 500, DeltaBlock = 25, PumpDeltaT = 7,
 		Open = 82, Full = 95, Boil = 120, FilmBoil = 0.2,
 		DerateStart = 150, DerateEnd = 250, DerateMin = 0.6,
 		DamageStart = 200, DamageRate = 0.005, CoolantMax = 0.6, Builtin = 1,
 	},
 	si = {
 		-- As liquid, but knock makes spark-ignition engines lose more torque when hot.
-		LPerKW = 0.15, FluidC = GlycolC, BlockCp = 500, DeltaBlock = 25, PumpDeltaT = 7,
+		LPerKW = 0.15, LPerLitre = 2.3, WarmFrac = 0.6, FluidC = GlycolC, BlockCp = 500, DeltaBlock = 25, PumpDeltaT = 7,
 		Open = 82, Full = 95, Boil = 120, FilmBoil = 0.2,
 		DerateStart = 140, DerateEnd = 250, DerateMin = 0.5,
 		DamageStart = 200, DamageRate = 0.005, CoolantMax = 0.6, Builtin = 1,
@@ -237,8 +246,8 @@ function Thermal.Build(Spec, MassKg, Builtin)
 		Kind = Kind, K = K, EngineSpec = Spec,
 		RatedHeat = Qr,
 		RatedW = max(Spec.RatedW or 1, 1),
-		CoolantL = max(Pkw * K.LPerKW, 1),
-		Cb = MassKg * K.BlockCp,
+		CoolantL = max((K.LPerLitre and Spec.DispL) and K.LPerLitre * Spec.DispL or Pkw * K.LPerKW, 1),
+		Cb = MassKg * (K.WarmFrac or 1) * K.BlockCp,
 		Gbc = Qr / K.DeltaBlock,
 		PumpC = Qr / K.PumpDeltaT,
 	}
