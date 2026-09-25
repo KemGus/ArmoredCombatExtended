@@ -721,6 +721,12 @@ function ACE.CLGUICreate()
 	Sounds:NumSlider( "Ambient overall sounds", "ace_sound_volume", 0, 100, 0 )
 	Sounds:ControlHelp( "Adjusts the volume of ACE sounds like explosions, penetrations, ricochets, etc. Engines and some mechanic sounds are not affected yet." )
 
+	Sounds:CheckBox("Engine sound Doppler effect", "ace_engine_sound_doppler")
+	Sounds:ControlHelp( "Engines moving towards you sound higher pitched, and lower when moving away." )
+
+	Sounds:CheckBox("Allow engine cabin muffling", "ace_engine_sound_muffle")
+	Sounds:ControlHelp( "Engines whose sound banks have Cabin muffling set sound quieter and muffled while you sit in their vehicle in first person. It is off unless the builder sets it in the engine's sound banks." )
+
 	acemenupanel.CustomDisplay:AddItem( Sounds )
 
 	local Effects = vgui.Create( "DForm" )
@@ -728,6 +734,9 @@ function ACE.CLGUICreate()
 
 	Effects:CheckBox("Allow lighting rendering", "ace_enable_lighting")
 	Effects:ControlHelp( "Enables lighting for explosions, muzzle flashes and rocket motors, increasing the inmersion during combat, however, may impact heavily the performance and it's possible it doesn't render properly in certain map surfaces." )
+
+	Effects:CheckBox("Draw engine exhaust smoke", "ace_exhaust_smoke_draw")
+	Effects:ControlHelp( "Shows smoke from engines with a linked exhaust entity, when the server allows it." )
 
 	Effects:CheckBox("Draw Mobility rope links", "ace_mobility_rope_links")
 	Effects:ControlHelp( "Allow you to see the links between engines and gearboxes (requires dupe restart)" )
@@ -876,6 +885,9 @@ function ACE.SVGUICreate()	--Serverside folder content
 
 	settings.ace_wind = addSlider("Wind strength", 0, 2000, 0, 600, "ace_wind", general)
 	addHelpText("Global wind speed in u/s. 0 to disable.", general)
+
+	settings.ace_exhaust_smoke = addCheckbox("Enable exhaust smoke", "ace_exhaust_smoke", general)
+	addHelpText("Engines with an entity wired to their Exhaust input puff smoke from it. Players can still hide it for themselves in the client settings.", general)
 
 	acemenupanel.CustomDisplay:AddItem(general)
 

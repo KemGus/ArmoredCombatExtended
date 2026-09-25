@@ -25,8 +25,23 @@ TOOL.ClientConVar[ "data13" ] = 0
 TOOL.ClientConVar[ "data14" ] = 0
 TOOL.ClientConVar[ "data15" ] = 0
 TOOL.ClientConVar[ "entitydata" ] = ""
+-- Gearbox drivetrain setup (see acf_gearbox ENT:SetMobilitySetup).
+TOOL.ClientConVar[ "gb_diff" ] = "open"
+TOOL.ClientConVar[ "gb_lsdpreload" ] = 0
+TOOL.ClientConVar[ "gb_lsdramp" ] = 0.3
+TOOL.ClientConVar[ "gb_assisted" ] = 0
+TOOL.ClientConVar[ "gb_dct" ] = 0
 
-TOOL.SelectedEntities = {}
+-- Entities selected for linking, per player. Tool objects inherit from TOOL through a
+-- metatable, so a table set on TOOL itself would be one selection shared by every player.
+function TOOL:Selection()
+	local Selected = rawget( self, "SelectedEntities" )
+	if not Selected then
+		Selected = {}
+		self.SelectedEntities = Selected
+	end
+	return Selected
+end
 
 cleanup.Register( "acemenu" )
 
@@ -53,6 +68,17 @@ if CLIENT then
 		CPanel:AddPanel( DPanel )
 
 	end
+end
+
+-- The gearbox drivetrain setup chosen in the menu.
+function TOOL:GearboxSetup()
+	return {
+		Diff = self:GetClientInfo( "gb_diff" ),
+		LSDPreload = self:GetClientNumber( "gb_lsdpreload" ),
+		LSDRamp = self:GetClientNumber( "gb_lsdramp" ),
+		Assisted = self:GetClientNumber( "gb_assisted" ) ~= 0,
+		DCT = self:GetClientNumber( "gb_dct" ) ~= 0,
+	}
 end
 
 -- Spawn/update functions
@@ -98,11 +124,14 @@ function TOOL:LeftClick( trace )
 		if trace.Entity:GetClass() == entClass and trace.Entity.CanUpdate then
 			table.insert( ArgTable, 1, ply )
 			local success, msg = trace.Entity:Update( ArgTable )
+			if success and trace.Entity.SetMobilitySetup then trace.Entity:SetMobilitySetup( self:GearboxSetup() ) end
 			ACE.SendNotify( ply, success, msg )
 		else
 			-- Using the Duplicator entity register to find the right factory function
 			local Ent = DupeClass.Func( ply, unpack( ArgTable ) ) --aka function like MakeACF_Ammo
 			if not IsValid(Ent) then ACE.SendNotify(ply, false, "#tool.acemenu.creationfailed") return false end
+
+			if Ent.SetMobilitySetup then Ent:SetMobilitySetup( self:GearboxSetup() ) end
 
 			Ent:Activate()
 			Ent:DropToFloor()
@@ -131,7 +160,7 @@ local function SendLinkSelection(tool)
 	if not IsValid(ply) then return end
 
 	local list = {}
-	for ent in pairs(tool.SelectedEntities) do
+	for ent in pairs(tool:Selection()) do
 		if IsValid(ent) and #list < 255 then
 			list[#list + 1] = ent
 		end
@@ -148,12 +177,12 @@ end
 function TOOL:SelectEntity(ent)
 	if CLIENT then return end
 
-	if not self.SelectedEntities[ent] then
-		self.SelectedEntities[ent] = ent:GetColor()
+	if not self:Selection()[ent] then
+		self:Selection()[ent] = ent:GetColor()
 		ent:SetColor(Color(0, 255, 0))
 	else
-		ent:SetColor(self.SelectedEntities[ent])
-		self.SelectedEntities[ent] = nil
+		ent:SetColor(self:Selection()[ent])
+		self:Selection()[ent] = nil
 	end
 
 	SendLinkSelection(self)
@@ -162,12 +191,12 @@ end
 function TOOL:DeselectAll()
 	if CLIENT then return end
 
-	for ent, color in pairs(self.SelectedEntities) do
+	for ent, color in pairs(self:Selection()) do
 		if IsValid(ent) then
 			ent:SetColor(color)
 		end
 
-		self.SelectedEntities[ent] = nil
+		self:Selection()[ent] = nil
 	end
 
 	SendLinkSelection(self)
@@ -221,7 +250,7 @@ function TOOL:RightClick( trace )
 			return true
 		else
 			if SERVER then
-				for selected in pairs(self.SelectedEntities) do
+				for selected in pairs(self:Selection()) do
 					if ent ~= selected and validEnt and IsValid(selected) then
 						local success, msg = linkEnts(ent, selected, holdingUse)
 

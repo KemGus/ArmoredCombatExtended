@@ -323,8 +323,8 @@ function ACE.EqualizeThermalEnergy(Ent1, Ent2) --Instantly balances the thermal 
 	local TMass2 = ACE.GetThermalMass(Ent2)
 	local TotalMass = TMass1 + TMass2
 
-	local Ratio1 = TMass1/TotalMass
-	local Ratio2 = TMass2/TotalMass
+	local Ratio1 = TMass1 / TotalMass
+	local Ratio2 = TMass2 / TotalMass
 
 	local AvgSpecificHeat = SpecificHeat1 * Ratio1 + SpecificHeat2 * Ratio2
 
@@ -355,3 +355,115 @@ end
 
 
 --AtmosphericHeatExchange with speed--
+
+--[[-------------------------------------------------------------------------------------
+	Engine cooling. The physics is in ace/shared/mobility/thermal_model.lua: engine metal and
+	coolant as two thermal masses, a thermostat, a water pump and radiators as cross-flow heat
+	exchangers. Engine.Heat is the coolant temperature (the EngineHeat wire output and what IR
+	sensors see); Engine.BlockHeat is the engine metal. Radiators take their air-side
+	conductance from ENT:Think in entities/ace_radiator.
+]]---------------------------------------------------------------------------------------
+do
+	local Thermal = ACE.Mobility.Thermal
+
+	local TimeScaleCVar = CreateConVar("ace_engine_thermal_timescale", 2, FCVAR_ARCHIVE,
+		"How many times faster than real time engines heat up and cool down. 1 is real time.", 0.1, 60)
+	local BuiltinCVar = CreateConVar("ace_engine_builtin_cooling", 0.5, FCVAR_ARCHIVE,
+		"Cooling every engine has without a radiator entity, as a share of its full-power heat. 0 - none, 1 - enough for full power.", 0, 4)
+	local DamageCVar = CreateConVar("ace_engine_overheat_damage", 1, FCVAR_ARCHIVE,
+		"1 - overheated engines lose health, 0 - they only lose power.", 0, 1)
+
+	--- Returns (building when needed) an engine's thermal spec.
+	-- @param Engine acf_engine entity.
+	-- @return table|nil Thermal spec, or nil when the engine has no mobility spec yet.
+	function ACE.EngineThermalSpec(Engine)
+		local Spec = Engine.MobSpec
+		if not Spec and ACE.Mobility.EngineSpec then Spec = ACE.Mobility.EngineSpec(Engine) end
+		if not Spec then return end
+
+		local Builtin = BuiltinCVar:GetFloat()
+		local TS = Engine.ThermalSpec
+		if TS and TS.EngineSpec == Spec and Engine.ThermalBuiltin == Builtin then return TS end
+
+		local Phys = Engine:GetPhysicsObject()
+		local Mass = Engine.Weight or (IsValid(Phys) and Phys:GetMass()) or 100
+		TS = Thermal.Build(Spec, Mass, Builtin)
+		Engine.ThermalSpec, Engine.ThermalBuiltin = TS, Builtin
+		return TS
+	end
+
+	--- Collects the heat one drivetrain solve put into an engine. Called from ENT:MobilityApply.
+	-- @param Engine acf_engine entity.
+	-- @param Desc table The engine's drivetrain description after the solve (HeatJ, FuelKg).
+	function ACE.EngineThermalInput(Engine, Desc)
+		local HeatJ = Desc.HeatJ or 0
+		if HeatJ <= 0 then return end
+		local TS = ACE.EngineThermalSpec(Engine)
+		local State = Engine.MobState
+		if TS and State then
+			HeatJ = Thermal.CoolantHeat(TS, HeatJ, Desc.FuelKg or 0, State.Load, State.W)
+		end
+		Engine.ThermalHeatJ = (Engine.ThermalHeatJ or 0) + HeatJ
+	end
+
+	--- Advances an engine's cooling system by the time since its last call. Call every think.
+	-- Sets Engine.Heat (coolant, °C), Engine.BlockHeat (metal, °C), Engine.ThermalDerate
+	-- (torque multiplier) and Engine.CoolantBoiling, updates linked radiators' Heat, and
+	-- applies overheat damage.
+	-- @param Engine acf_engine entity.
+	function ACE.EngineThermalThink(Engine)
+		local Now = CurTime()
+		local Dt = math.Clamp(Now - (Engine.ThermalLast or Now), 0, 0.5)
+		Engine.ThermalLast = Now
+		if Dt <= 0 then return end
+
+		local TS = ACE.EngineThermalSpec(Engine)
+		if not TS then return end
+
+		local Ambient = ACE.AmbientTemp
+		local T = Engine.ThermalState
+		if not T then
+			T = Thermal.NewState(Engine.Heat or Ambient)
+			Engine.ThermalState = T
+		end
+
+		local HeatW = (Engine.ThermalHeatJ or 0) / Dt
+		Engine.ThermalHeatJ = 0
+
+		-- Linked radiators: a radiator shared by several engines gives each an equal share.
+		local Exchangers, ExtraC = Engine.ThermalExchangers or {}, 0
+		Engine.ThermalExchangers = Exchangers
+		for I = #Exchangers, 1, -1 do Exchangers[I] = nil end
+		for _, Rad in pairs(Engine.RadLink or {}) do
+			if IsValid(Rad) and Rad.ThermalUA then
+				local Share = 1 / math.max(#Rad.Master, 1)
+				Exchangers[#Exchangers + 1] = { UA = Rad.ThermalUA * Share, Cair = Rad.ThermalCair * Share, Rad = Rad }
+				ExtraC = ExtraC + (Rad.Coolant or 0) * Thermal.CoolantCPerLitre * Share
+			end
+		end
+
+		local Scale = TimeScaleCVar:GetFloat()
+		local W = Engine.MobState and Engine.MobState.W or 0
+		Thermal.Step(T, TS, HeatW, W, Dt * Scale, {
+			Ambient = Ambient, Running = Engine.Active, Exchangers = Exchangers, ExtraC = ExtraC,
+		})
+
+		Engine.Heat = T.Tc
+		Engine.BlockHeat = T.Tb
+		Engine.CoolantBoiling = T.Boiling
+		Engine.ThermalDerate = Thermal.Derate(TS, T.Tb)
+
+		for _, X in ipairs(Exchangers) do
+			X.Rad.Heat = T.Tc
+			X.Rad.HeatRejected = (X.G or 0) * (T.Tc - Ambient)
+		end
+
+		-- Overheating: past its damage temperature the engine wears itself out (scuffed liners,
+		-- a warped head), on the same accelerated clock as the heat.
+		local Rate = Thermal.DamageRate(TS, T.Tb)
+		if Rate > 0 and DamageCVar:GetBool() and Engine.ACE and Engine.ACE.Health then
+			Engine.ACE.Health = math.max(Engine.ACE.Health - Engine.ACE.MaxHealth * Rate * Dt * Scale, 0)
+			if Engine.ACE.Health <= 0 and Engine.Active then Engine:TriggerInput("Active", 0) end
+		end
+	end
+end

@@ -66,11 +66,11 @@ do -- Gear chart (vehicle speed vs engine RPM)
 			local Slider = CData[I]
 
 			if IsValid( Slider ) then
-				Gears[#Gears + 1] = { gear = I, value = Slider:GetValue() }
+				Gears[#Gears + 1] = { gear = I, value = ACE.GearSliderValue( Slider ) }
 			end
 		end
 
-		local Final = IsValid( CData[10] ) and CData[10]:GetValue() or 1
+		local Final = IsValid( CData[10] ) and ACE.GearSliderValue( CData[10] ) or 1
 
 		return Gears, Final
 	end
@@ -201,6 +201,157 @@ do -- Gear chart (vehicle speed vs engine RPM)
 	end
 end
 
+-- Drivetrain setup of the gearbox about to be spawned: differential, limited slip, assisted
+-- driving and dual-clutch shifting. Stored on the gearbox and kept through duplication.
+local function CreateSetupPanel( Table )
+	local CData = acemenupanel.CData
+	if IsValid( CData.SetupDiff ) then return end
+
+	acemenupanel:CPanelText( "SetupHeader", "Drivetrain setup:", "DermaDefaultBold" )
+
+	local Diff = vgui.Create( "DComboBox" )
+	Diff:SetTall( 22 )
+	Diff:SetSortItems( false )
+	Diff:SetTooltip( "Open: equal torque to both sides, the unloaded side spins.\nLocked: both sides turn together.\nLimited slip: a clutch pack between the sides locks with preload plus a share of the input torque." )
+	local Current = GetConVar( "acemenu_gb_diff" ):GetString()
+	Diff:AddChoice( "Open differential", "open", Current == "open" )
+	Diff:AddChoice( "Locked differential", "locked", Current == "locked" )
+	Diff:AddChoice( "Limited slip differential", "lsd", Current == "lsd" )
+	Diff.OnSelect = function( _, _, _, Value )
+		RunConsoleCommand( "acemenu_gb_diff", Value )
+	end
+	CData.SetupDiff = Diff
+	acemenupanel.CustomDisplay:AddItem( Diff )
+
+	local Preload = vgui.Create( "DNumSlider" )
+	Preload:SetText( "LSD preload (Nm)" )
+	Preload:SetDark( true )
+	Preload:SetMinMax( 0, math.max( Table.maxtq or 0, 1 ) )
+	Preload:SetDecimals( 0 )
+	Preload:SetConVar( "acemenu_gb_lsdpreload" )
+	Preload:SetTooltip( "Locking torque the limited slip differential has with no input torque (spring preload)." )
+	CData.SetupPreload = Preload
+	acemenupanel.CustomDisplay:AddItem( Preload )
+
+	local Ramp = vgui.Create( "DNumSlider" )
+	Ramp:SetText( "LSD lock (share of input torque)" )
+	Ramp:SetDark( true )
+	Ramp:SetMinMax( 0, 1 )
+	Ramp:SetDecimals( 2 )
+	Ramp:SetConVar( "acemenu_gb_lsdramp" )
+	Ramp:SetTooltip( "How much of the torque going through the differential also locks it (ramp angle). Road cars run about 0.25-0.5." )
+	CData.SetupRamp = Ramp
+	acemenupanel.CustomDisplay:AddItem( Ramp )
+
+	local Assisted = vgui.Create( "DCheckBoxLabel" )
+	Assisted:SetText( "Assisted (automatic clutch, no stalling, rev-matched shifts)" )
+	Assisted:SetDark( true )
+	Assisted:SetConVar( "acemenu_gb_assisted" )
+	Assisted:SetTooltip( "Only works when the server allows assisted gearboxes." )
+	CData.SetupAssisted = Assisted
+	acemenupanel.CustomDisplay:AddItem( Assisted )
+
+	if not Table.auto and not Table.cvt and ( Table.gears or 0 ) > 1 then
+		local DCT = vgui.Create( "DCheckBoxLabel" )
+		DCT:SetText( "Dual-clutch shifting (no torque interruption)" )
+		DCT:SetDark( true )
+		DCT:SetConVar( "acemenu_gb_dct" )
+		CData.SetupDCT = DCT
+		acemenupanel.CustomDisplay:AddItem( DCT )
+	end
+end
+
+-- Real ratio (reduction, as a gearbox data sheet gives it) of a legacy gear value.
+local function RealRatioText( Value )
+	if math.abs( Value ) < 1e-4 then return "neutral" end
+	return string.format( "%.2f:1", 1 / Value )
+end
+
+local RealRatiosConVar = CreateClientConVar( "acemenu_gb_realratios", "0", true, false,
+	"1 = the gearbox menu's gear sliders take real ratios (4.1 = 4.1:1 reduction) instead of ACE's output/input speed values." )
+
+--[[
+	Gears are stored the way ACE always has, as output/input speed (0.25 = the output turns a
+	quarter as fast). A real ratio is its inverse. Stored values run from -2 to 2, so real ratios
+	below 0.5:1 are raised to 0.5:1.
+]]
+local function ToReal( Stored )
+	if math.abs( Stored ) < 1e-4 then return 0 end
+	return 1 / Stored
+end
+
+local function ToStored( Real )
+	if math.abs( Real ) < 0.01 then return 0 end
+	return ( Real < 0 and -1 or 1 ) / math.max( math.abs( Real ), 0.5 )
+end
+
+--- Stored (output/input speed) value of a gearbox menu gear slider, whichever way it is shown.
+-- @param Slider Panel A gear slider made by ACE.GearsSlider.
+-- @return number
+function ACE.GearSliderValue( Slider )
+	return Slider.Stored or Slider:GetValue()
+end
+
+-- Moves a gear slider to a stored value, showing it the way the slider displays gears.
+local function SetStoredValue( Slider, Stored )
+	if Slider.RealRatio then
+		Slider:SetValue( ToReal( Stored ) )
+	else
+		Slider:SetValue( Stored )
+	end
+end
+
+-- The switch between ACE's gear values and real ratios. The menu is rebuilt to swap the sliders.
+local function CreateRatioToggle()
+	local CData = acemenupanel.CData
+	if IsValid( CData.RealRatios ) then return end
+
+	local Toggle = vgui.Create( "DCheckBoxLabel" )
+	Toggle:SetText( "Real gear ratios (4.1 = 4.1:1 reduction)" )
+	Toggle:SetDark( true )
+	Toggle:SetChecked( RealRatiosConVar:GetBool() )
+	Toggle:SetTooltip( "Off: gears are ACE's output/input speed values (0.25 = 4:1). On: gears are entered as a gearbox data sheet gives them. Gearboxes are stored the same way either way." )
+	Toggle.OnChange = function( _, Value )
+		RealRatiosConVar:SetBool( Value )
+		timer.Simple( 0, function()
+			if IsValid( acemenupanel ) and acemenupanel.ActiveDisplayTable then
+				acemenupanel:UpdateDisplay( acemenupanel.ActiveDisplayTable )
+			end
+		end )
+	end
+	CData.RealRatios = Toggle
+	acemenupanel.CustomDisplay:AddItem( Toggle )
+end
+
+-- Lets the builder paste real ratios, e.g. "4.1, 2.3, 1.5, 1, 0.8 / 3.9" (gears / final drive).
+local function CreateRatioPaste( Table )
+	local CData = acemenupanel.CData
+	if IsValid( CData.RatioPaste ) or Table.cvt then return end
+
+	local Entry = vgui.Create( "DTextEntry" )
+	Entry:SetTall( 20 )
+	Entry:SetPlaceholderText( "Paste real ratios: 4.1, 2.3, 1.5, 1, 0.8 / 3.9 (gears / final drive)" )
+	Entry:SetTooltip( "Ratios as a data sheet gives them (4.1 = 4.1:1 reduction). Press Enter to apply." )
+	Entry.OnEnter = function( Self )
+		local Text = Self:GetValue()
+		local GearPart, FinalPart = string.match( Text, "^([^/]*)/?(.*)$" )
+		local I = 0
+		for Number in string.gmatch( GearPart or "", "[-%d%.]+" ) do
+			local R = tonumber( Number )
+			I = I + 1
+			if R and R ~= 0 and IsValid( CData[I] ) and I <= ( Table.gears or 0 ) then
+				SetStoredValue( CData[I], ToStored( R ) )
+			end
+		end
+		local Final = tonumber( string.match( FinalPart or "", "[-%d%.]+" ) or "" )
+		if Final and Final ~= 0 and IsValid( CData[10] ) then
+			SetStoredValue( CData[10], ToStored( Final ) )
+		end
+	end
+	CData.RatioPaste = Entry
+	acemenupanel.CustomDisplay:AddItem( Entry )
+end
+
 function ACE.GearboxGUICreate( Table )
 
 	if not acemenupanel.Serialize then
@@ -255,6 +406,8 @@ function ACE.GearboxGUICreate( Table )
 		acemenupanel.CustomDisplay:AddItem(acemenupanel.CData.UnitsInput)
 	end
 
+	if not Table.cvt then CreateRatioToggle() end
+
 	if Table.cvt then
 		ACE.GearsSlider(2, acemenupanel.GearboxData[Table.id].GearTable[2], Table.id)
 		ACE.GearsSlider(3, acemenupanel.GearboxData[Table.id].GearTable[-3], Table.id, "Min Target RPM",true)
@@ -293,6 +446,9 @@ function ACE.GearboxGUICreate( Table )
 	acemenupanel:CPanelText("MaxTorque", "Clutch Maximum Torque Rating : " .. Table.maxtq .. "n-m / " .. math.Round(Table.maxtq * 0.73) .. "ft-lb")
 	acemenupanel:CPanelText("Weight", "Weight : " .. Table.weight .. "kg\n")
 
+	CreateRatioPaste( Table )
+	CreateSetupPanel( Table )
+
 	if not Table.cvt then
 		CreateGearChart( Table )
 	end
@@ -315,9 +471,9 @@ function ACE.GearboxGUICreate( Table )
 
 				acemenupanel.CData.ShiftGenPanel.Calc.DoClick = function()
 					local _, factor = acemenupanel.CData.UnitsInput:GetSelected()
-					local mul = math.pi * acemenupanel.CData.ShiftGenPanel.RPM:GetValue() * acemenupanel.CData.ShiftGenPanel.Ratio:GetValue() * acemenupanel.CData[10]:GetValue() * acemenupanel.CData.ShiftGenPanel.Wheel:GetValue() / (60 * factor)
+					local mul = math.pi * acemenupanel.CData.ShiftGenPanel.RPM:GetValue() * acemenupanel.CData.ShiftGenPanel.Ratio:GetValue() * ACE.GearSliderValue( acemenupanel.CData[10] ) * acemenupanel.CData.ShiftGenPanel.Wheel:GetValue() / (60 * factor)
 					for i = 1,acemenupanel.CData.ShiftGenPanel.Gears do
-						acemenupanel.CData[10 + i].Input:SetValue( math.Round( math.abs( mul * acemenupanel.CData[i]:GetValue() ), 2 ) )
+						acemenupanel.CData[10 + i].Input:SetValue( math.Round( math.abs( mul * ACE.GearSliderValue( acemenupanel.CData[i] ) ), 2 ) )
 						acemenupanel.GearboxData[acemenupanel.CData.UnitsInput.ID].ShiftTable[i] = tonumber(acemenupanel.CData[10 + i].Input:GetValue())
 					end
 					acemenupanel.Serialize( acemenupanel.GearboxData[acemenupanel.CData.UnitsInput.ID].ShiftTable, factor )  --dot intentional
@@ -395,20 +551,32 @@ function ACE.GearsSlider(Gear, Value, ID, Desc, CVT)
 
 	if Gear and not acemenupanel.CData[Gear] then
 
+		-- Real-ratio sliders show the reduction; the gearbox still gets the stored value.
+		local Real = not CVT and RealRatiosConVar:GetBool()
 		acemenupanel.CData[Gear] = vgui.Create( "DNumSlider", acemenupanel.CustomDisplay )
 			acemenupanel.CData[Gear]:SetText( Desc or "Gear " .. Gear )
 			acemenupanel.CData[Gear].Label:SizeToContents()
 			acemenupanel.CData[Gear]:SetDark( true )
-			acemenupanel.CData[Gear]:SetMin( CVT and 1 or -2 )
-			acemenupanel.CData[Gear]:SetMax( CVT and 20000 or 2 )
+			acemenupanel.CData[Gear]:SetMin( CVT and 1 or ( Real and -20 or -2 ) )
+			acemenupanel.CData[Gear]:SetMax( CVT and 20000 or ( Real and 20 or 2 ) )
 			acemenupanel.CData[Gear]:SetDecimals( (not CVT) and 2 or 0 )
 			acemenupanel.CData[Gear].Gear = Gear
 			acemenupanel.CData[Gear].ID = ID
-			acemenupanel.CData[Gear]:SetValue(Value)
+			acemenupanel.CData[Gear].RealRatio = Real
+			if not CVT then acemenupanel.CData[Gear].Stored = Value end
+			acemenupanel.CData[Gear]:SetValue( Real and ToReal( Value ) or Value )
 			RunConsoleCommand( "acemenu_data" .. Gear, Value )
+			-- Legacy values are output/input speed; show the real reduction next to them.
+			local Label = Desc or "Gear " .. Gear
+			if not CVT and not Real then
+				acemenupanel.CData[Gear]:SetText( Label .. "  = " .. RealRatioText( Value ) )
+			end
 			acemenupanel.CData[Gear].OnValueChanged = function( slider, val )
-				acemenupanel.GearboxData[slider.ID].GearTable[slider.Gear] = val
-				RunConsoleCommand( "acemenu_data" .. Gear, val )
+				local Stored = Real and ToStored( val ) or val
+				if not CVT then slider.Stored = Stored end
+				acemenupanel.GearboxData[slider.ID].GearTable[slider.Gear] = Stored
+				RunConsoleCommand( "acemenu_data" .. Gear, Stored )
+				if not CVT and not Real then slider:SetText( Label .. "  = " .. RealRatioText( val ) ) end
 			end
 		acemenupanel.CustomDisplay:AddItem( acemenupanel.CData[Gear] )
 	end

@@ -23,36 +23,36 @@ ACE.PerFuelRelativeEfficiency = { --Efficiency multipliers when using various fu
 --local BasePetrol = 1/13 --13kWh per kg gasoline. or ~0.077 kg per kw hr
 --local BaseDiesel = 1/12.6 --12.6kWh per kg Diesel. Or ~0.079 kg per kw hr
 
-local BaseFuel = 1/13 --13kWh per kg or ~0.077 kg per kw hr. The fuel density of gasoline. Diesel is 12.6kWh per kg or ~0.079 kg per kw hr.
+local BaseFuel = 1 / 13 --13kWh per kg or ~0.077 kg per kw hr. The fuel density of gasoline. Diesel is 12.6kWh per kg or ~0.079 kg per kw hr.
 
 ACE.Efficiency = { --how efficient various engine types are, Final units are in kg/kWhr
-	GenericPetrol = (BaseFuel / 0.35), --Divide by % efficiency. Was 38%. Needs to be kept for other legacy engines.
-	GenericDiesel = (BaseFuel / 0.5), --Was 49% efficient. Was 38%. Needs to be kept for other legacy engines.
+	GenericPetrol = BaseFuel / 0.35, --Divide by % efficiency. Was 38%. Needs to be kept for other legacy engines.
+	GenericDiesel = BaseFuel / 0.5, --Was 49% efficient. Was 38%. Needs to be kept for other legacy engines.
 
-	Single = (BaseFuel / 0.4), --Divide by % efficiency. Was 38%
-	I2 = (BaseFuel / 0.395), --Divide by % efficiency. Was 38%
-	I3 = (BaseFuel / 0.39), --Divide by % efficiency. Was 38%
-	I4 = (BaseFuel / 0.385), --Divide by % efficiency. Was 38%
-	I5 = (BaseFuel / 0.38), --Divide by % efficiency. Was 38%
-	I6 = (BaseFuel / 0.375), --Divide by % efficiency. Was 38%
+	Single = BaseFuel / 0.4, --Divide by % efficiency. Was 38%
+	I2 = BaseFuel / 0.395, --Divide by % efficiency. Was 38%
+	I3 = BaseFuel / 0.39, --Divide by % efficiency. Was 38%
+	I4 = BaseFuel / 0.385, --Divide by % efficiency. Was 38%
+	I5 = BaseFuel / 0.38, --Divide by % efficiency. Was 38%
+	I6 = BaseFuel / 0.375, --Divide by % efficiency. Was 38%
 
-	B4 = (BaseFuel / 0.365), --Divide by % efficiency. Was 38%
-	B6 = (BaseFuel / 0.36), --Divide by % efficiency. Was 38%
+	B4 = BaseFuel / 0.365, --Divide by % efficiency. Was 38%
+	B6 = BaseFuel / 0.36, --Divide by % efficiency. Was 38%
 
-	V2 = (BaseFuel / 0.35), --Divide by % efficiency. Was 38%
-	V4 = (BaseFuel / 0.345), --Divide by % efficiency. Was 38%
-	V6 = (BaseFuel / 0.34), --Divide by % efficiency. Was 38%
-	V8 = (BaseFuel / 0.335), --Divide by % efficiency. Was 38%
-	V10 = (BaseFuel / 0.33), --Divide by % efficiency. Was 38%
-	V12 = (BaseFuel / 0.325), --Divide by % efficiency. Was 38%
+	V2 = BaseFuel / 0.35, --Divide by % efficiency. Was 38%
+	V4 = BaseFuel / 0.345, --Divide by % efficiency. Was 38%
+	V6 = BaseFuel / 0.34, --Divide by % efficiency. Was 38%
+	V8 = BaseFuel / 0.335, --Divide by % efficiency. Was 38%
+	V10 = BaseFuel / 0.33, --Divide by % efficiency. Was 38%
+	V12 = BaseFuel / 0.325, --Divide by % efficiency. Was 38%
 
-	Turbine = (BaseFuel / 0.35), --Was 32% efficient. Somewhere between a turboshaft and turbofan.
-	--Turbofan = (BaseFuel / 0.4), --Was 32% efficient.
-	GroundTurbine = (BaseFuel / 0.3), --Was 32% efficient.
-	Wankel = (BaseFuel / 0.25), --Was 34%. Almost on par with regular petrol. Get. Outta. Here.
-	Radial = (BaseFuel / 0.28), --Was 30% efficient.
+	Turbine = BaseFuel / 0.35, --Was 32% efficient. Somewhere between a turboshaft and turbofan.
+	--Turbofan = BaseFuel / 0.4, --Was 32% efficient.
+	GroundTurbine = BaseFuel / 0.3, --Was 32% efficient.
+	Wankel = BaseFuel / 0.25, --Was 34%. Almost on par with regular petrol. Get. Outta. Here.
+	Radial = BaseFuel / 0.28, --Was 30% efficient.
 
-	Racing = (BaseFuel / 0.2), --Racing duty engines meant for absurd speeds. Inefficient but power dense as hell.
+	Racing = BaseFuel / 0.2, --Racing duty engines meant for absurd speeds. Inefficient but power dense as hell.
 
 	Electric = 0.85 --percent efficiency converting chemical kw into mechanical kw WAS 0.85
 }

@@ -67,6 +67,32 @@ end
 local legacy = EngineSound.BanksFromLegacy("engines/v8.wav", 100, 1000, 5000)
 assert(legacy[1].Sounds[1].RPM == 3000 and legacy[1].Sounds[1].Pitch == 80)
 
+-- Legacy sound: full throttle keeps the original ACE volume, closed throttle is LegacyOffLevel of it
+local legacySpec = { Pitch = 100, Limit = 5000 }
+for _, rpm in ipairs({ 0, 800, 2500, 5000 }) do
+	local pitchOn, on = EngineSound.LegacyPitchVolume(legacySpec, rpm, 1)
+	local pitchOff, off = EngineSound.LegacyPitchVolume(legacySpec, rpm, 0)
+	local original = 0.25 + (0.1 + 0.9 * ((rpm / 5000) ^ 1.5)) / 1.5
+	assert(math.abs(on - original) < 1e-9, "full-throttle legacy volume changed at " .. rpm)
+	assert(math.abs(off / on - EngineSound.LegacyOffLevel) < 1e-9, "off-throttle ratio wrong at " .. rpm)
+	assert(pitchOn == pitchOff and pitchOn == 20 + rpm / 50)
+end
+assert(EngineSound.LegacyOffLevel >= 0.3 and EngineSound.LegacyOffLevel <= 0.4)
+
+-- Sound level: never SNDLVL_NONE, never beyond SNDLVL_90dB, monotonic in MaxDB
+assert(EngineSound.SoundLevel(0) == 45 and EngineSound.SoundLevel(11) == 45)
+assert(EngineSound.SoundLevel(70) == 70 and EngineSound.SoundLevel(130) == 88)
+assert(EngineSound.SoundLevel(250) == 90)
+local lastLevel = 0
+for db = 0, 255 do
+	local level = EngineSound.SoundLevel(db)
+	assert(level >= lastLevel and level >= 45 and level <= 90, "bad sound level for " .. db)
+	lastLevel = level
+end
+
+-- Speed of sound: 343 m/s with 1 unit = 0.0254 m
+assert(math.abs(EngineSound.SpeedOfSound * 0.0254 - 343) < 1e-9)
+
 -- Equal-power crossfade from the client file: neighbour weights squared sum to 1
 local client = readFile("lua/ace/client/cl_ace_engine_sounds.lua")
 local fadeStart = assert(client:find("function EngineSound.Fade", 1, true))

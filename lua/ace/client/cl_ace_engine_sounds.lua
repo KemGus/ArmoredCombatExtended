@@ -1,5 +1,9 @@
 -- Engine sounds, client side. Builds the sound patches for each running engine from the server's
 -- description, then sets their pitch and volume every frame from the streamed RPM and throttle.
+-- Also plays the starter motor while an engine cranks, keeps the sound following the crank as it
+-- spins down after shut-off, muffles banks that ask for it while the local player sits in their
+-- vehicle in first person, and drives
+-- the exhaust smoke (cl_ace_exhaust_smoke.lua).
 
 ACE = ACE or {}
 ACE.EngineSound = ACE.EngineSound or {}
@@ -7,18 +11,50 @@ ACE.EngineSound = ACE.EngineSound or {}
 local EngineSound = ACE.EngineSound
 
 local DopplerVar = CreateClientConVar("ace_engine_sound_doppler", 1, true, false, "Apply a Doppler shift to engine sounds.", 0, 1)
+local MuffleVar = CreateClientConVar("ace_engine_sound_muffle", 1, true, false, "Allow the cabin muffling that engine sound banks ask for (it only applies in first person).", 0, 1)
 
 EngineSound.SmoothingTime = 0.08 -- seconds; time constant of the RPM/throttle smoothing
 EngineSound.StaleTime     = 1.5 -- seconds without updates before an engine is treated as out of earshot
+EngineSound.VelocitySmoothing = 0.15 -- seconds; time constant of the Doppler velocity estimate
+
+-- Interior muffling. DSP preset ids are from the GMod wiki "DSP Presets" page: 0 is the NULL
+-- preset (no processing), 30 is "Lowpass" (cuts high frequencies; 31 is the same plus an 80 ms
+-- delay, 14-16 are the echoing Water presets). Lowpass is what a hull does to engine noise.
+-- The DSP is set per sound patch (CSoundPatch:SetDSP), so only these engine sounds are filtered,
+-- never the rest of the game's audio. A bank's Muffle (0-1) sets how much it is muffled.
+EngineSound.MuffleDSP      = 30
+EngineSound.MuffleDSPFrom  = 0.25 -- effective muffling at which the lowpass is switched on
+EngineSound.MaxMuffleCut   = 0.7 -- volume removed at muffling 1
+EngineSound.CabinCheckTime = 0.5 -- seconds between checks of whether an engine shares our vehicle
+EngineSound.ThirdPersonDistance = 48 -- units between the camera and the player's eyes that count as third person
+EngineSound.CabinOpening   = EngineSound.CabinOpening or 0 -- 0 closed .. 1 open, set by Starfall (acf.setCabinOpening)
+
+-- Starter motor. v8_start_loop1.wav is the HL2 jeep's cranking loop (hl2_sound_misc VPK, loops
+-- from 1.8 s to its end); at pitch 100 it is taken to be a crank turning at StarterRefRPM.
+EngineSound.StarterSound  = "vehicles/v8/v8_start_loop1.wav"
+EngineSound.StarterRefRPM = 250
+EngineSound.StarterLevel  = 75 -- SNDLVL_75dB ("busy traffic"); a starter is quieter than the engine
 
 local Clamp = math.Clamp
 local cos   = math.cos
+local sin   = math.sin
 local exp   = math.exp
 local abs   = math.abs
+local max   = math.max
 local HalfPi = math.pi * 0.5
+local TwoPi  = math.pi * 2
 
-local Engines = {} -- [Entity] = state, see Create below
+local Engines = {} -- [Entity] = state, see the Create receiver below
+
+--- The sound state of every engine this client hears, keyed by engine entity. Read-only.
+-- @return table [Entity] = state.
+function EngineSound.GetStates()
+	return Engines
+end
 local Pending = {} -- [Entity] = time the last data request was sent
+
+-- Engines of the vehicle the local player last sat in, from the server's CFW contraption.
+local Cabin = { Vehicle = NULL, Known = false, Engines = {} }
 
 local function StopPatches(State)
 	for _, Bank in ipairs(State.Playing or {}) do
@@ -28,6 +64,11 @@ local function StopPatches(State)
 	end
 
 	State.Playing = nil
+
+	if State.Starter then
+		State.Starter:Stop()
+		State.Starter = nil
+	end
 end
 
 local function Forget(Ent)
@@ -52,20 +93,65 @@ local function RequestData(Ent)
 end
 
 -- Accept wav/mp3/ogg files that exist, and sound script names (no extension).
+local PlayableCache = {}
+
 local function IsPlayable(Path)
 	if Path == "" then return false end
 	if not Path:find("%.%a+$") then return true end
 
-	return file.Exists("sound/" .. Path, "GAME")
+	local Cached = PlayableCache[Path]
+
+	if Cached == nil then
+		Cached = file.Exists("sound/" .. Path, "GAME")
+		PlayableCache[Path] = Cached
+	end
+
+	return Cached
 end
 
-local function NewPatch(Target, Path, Level)
+-- Third person when the game draws the local player, or when the camera (EyePos is the last
+-- rendered view origin) is away from the player's eyes, as with vehicle chase cameras.
+local function FirstPerson(Ply)
+	if Ply:ShouldDrawLocalPlayer() then return false end
+
+	return EyePos():DistToSqr(Ply:EyePos()) < EngineSound.ThirdPersonDistance ^ 2
+end
+
+--- Effective muffling of a bank for the local player: the bank's Muffle while we sit in its
+-- vehicle in first person, reduced by the cabin opening.
+-- @param State table Engine sound state.
+-- @param Bank table Sound bank.
+-- @return number 0-1.
+function EngineSound.MuffleOf(State, Bank)
+	if not State.Muffled then return 0 end
+
+	return (Bank.Muffle or 0) * (1 - Clamp(EngineSound.CabinOpening, 0, 1))
+end
+
+local function DSPSignature(State)
+	local Sig = 0
+
+	for I, Bank in ipairs(State.Banks or {}) do
+		if EngineSound.MuffleOf(State, Bank) >= EngineSound.MuffleDSPFrom then
+			Sig = Sig + 2 ^ I
+		end
+	end
+
+	return Sig
+end
+
+local function NewPatch(Target, Path, Level, DSP)
 	if not IsPlayable(Path) then return end
 
 	local Patch = CreateSound(Target, Path)
 	if not Patch then return end
 
 	Patch:SetSoundLevel(Level)
+
+	if DSP then
+		Patch:SetDSP(DSP)
+	end
+
 	Patch:PlayEx(0, 100)
 
 	return Patch
@@ -80,9 +166,10 @@ local function StartPatches(Ent, State)
 	for _, Bank in ipairs(State.Banks) do
 		local Target = (Bank.Exhaust and IsValid(State.Exhaust)) and State.Exhaust or Ent
 		local Entries = {}
+		local DSP = EngineSound.MuffleOf(State, Bank) >= EngineSound.MuffleDSPFrom and EngineSound.MuffleDSP or nil
 
 		for Index, Snd in ipairs(Bank.Sounds) do
-			local Patch = NewPatch(Target, Snd.Path, State.Level)
+			local Patch = NewPatch(Target, Snd.Path, State.Level, DSP)
 
 			if Patch then
 				Entries[#Entries + 1] = { Patch = Patch, Sound = Snd, Index = Index }
@@ -93,13 +180,16 @@ local function StartPatches(Ent, State)
 	end
 
 	State.Playing = Playing
+	State.DSPSig = DSPSignature(State)
 end
 
 net.Receive("ACE_EngineSound_Create", function()
 	local Ent     = net.ReadEntity()
 	local Exhaust = net.ReadEntity()
 	local Version = net.ReadUInt(8)
-	local Level   = net.ReadUInt(8)
+	local MaxDB   = net.ReadUInt(8)
+	local Limit   = net.ReadUInt(16)
+	local Burns   = net.ReadBool()
 	local IsBanks = net.ReadBool()
 	local Banks, Legacy
 
@@ -109,7 +199,7 @@ net.Receive("ACE_EngineSound_Create", function()
 		Legacy = {
 			Path  = net.ReadString(),
 			Pitch = net.ReadUInt(8),
-			Limit = net.ReadUInt(16),
+			Limit = Limit,
 		}
 	end
 
@@ -125,11 +215,24 @@ net.Receive("ACE_EngineSound_Create", function()
 
 	local State = {
 		Version  = Version,
-		Level    = Level,
+		MaxDB    = MaxDB,
+		Level    = EngineSound.SoundLevel(MaxDB),
+		Limit    = math.max(Limit, 1),
+		Burns    = Burns, -- combustion engine, so its exhaust smokes
 		Exhaust  = IsValid(Exhaust) and Exhaust or nil,
 		Legacy   = Legacy,
 		RPM      = Old and Old.RPM or 0,
 		Throttle = Old and Old.Throttle or 0,
+		Running  = Old and Old.Running or false,
+		Ran      = Old and Old.Ran or false,
+		OffRPM   = Old and Old.OffRPM or nil,
+		Combustion = Old and Old.Combustion or 0,
+		Cranking = false,
+		StarterLoad = 0,
+		Cylinders = 4,
+		StarterPhase = 0,
+		Muffled  = Old and Old.Muffled or false,
+		NextCabinCheck = 0,
 		LastUpdate = RealTime(),
 		Fresh    = Old == nil, -- snap the smoothing to the first update instead of sweeping up from 0
 	}
@@ -138,7 +241,7 @@ net.Receive("ACE_EngineSound_Create", function()
 	State.SmoothThrottle = State.Throttle
 
 	if Legacy then
-		-- The single sound is a bank of one; its pitch and volume use the original ACE formula.
+		-- The single sound is a bank of one; its pitch and volume use the legacy formula.
 		State.Banks = { { Exhaust = false, Sounds = { { Path = Legacy.Path } } } }
 	else
 		State.Banks = Banks or {}
@@ -152,6 +255,14 @@ net.Receive("ACE_EngineSound_Update", function()
 	local Version  = net.ReadUInt(8)
 	local RPM      = net.ReadUInt(16)
 	local Throttle = net.ReadUInt(7) / 100
+	local Running  = net.ReadBool()
+	local Cranking = net.ReadBool()
+	local StarterLoad, Cylinders = 0, nil
+
+	if Cranking then
+		StarterLoad = net.ReadUInt(5) / 31
+		Cylinders = net.ReadUInt(4)
+	end
 
 	if not IsValid(Ent) then return end
 
@@ -165,6 +276,9 @@ net.Receive("ACE_EngineSound_Update", function()
 
 	State.RPM = RPM
 	State.Throttle = Throttle
+	State.Cranking = Cranking
+	State.StarterLoad = StarterLoad
+	State.Cylinders = Cylinders or State.Cylinders
 	State.LastUpdate = RealTime()
 
 	if State.Fresh then
@@ -172,6 +286,16 @@ net.Receive("ACE_EngineSound_Update", function()
 		State.SmoothRPM = RPM
 		State.SmoothThrottle = Throttle
 	end
+
+	if Running then
+		State.Ran = true
+		State.OffRPM = nil
+	elseif State.Running then
+		-- Combustion just ended: from here the sound fades with the crank speed.
+		State.OffRPM = max(State.SmoothRPM, 1)
+	end
+
+	State.Running = Running
 end)
 
 net.Receive("ACE_EngineSound_Stop", function()
@@ -182,57 +306,101 @@ net.Receive("ACE_EngineSound_Stop", function()
 	end
 end)
 
+net.Receive("ACE_EngineSound_Cabin", function()
+	Cabin.Vehicle = net.ReadEntity()
+	Cabin.Known = net.ReadBool()
+	Cabin.Engines = {}
+
+	for _ = 1, net.ReadUInt(8) do
+		local Ent = net.ReadEntity()
+
+		if IsValid(Ent) then
+			Cabin.Engines[Ent] = true
+		end
+	end
+
+	-- Re-check every engine now instead of waiting for the periodic check
+	for _, State in pairs(Engines) do
+		State.NextCabinCheck = 0
+	end
+end)
+
 hook.Add("EntityRemoved", "ACE_EngineSound_Cleanup", function(Ent)
 	Forget(Ent)
 	Pending[Ent] = nil
 end)
 
--- Doppler: velocities come from position differences so parented entities work too.
-local LastPositions = setmetatable({}, { __mode = "k" })
+-- Doppler: velocities come from position differences so parented entities work too. The raw
+-- per-frame difference is noisy (frame time jitter, interpolated positions), so it is smoothed
+-- with a VelocitySmoothing time constant. One record per entity is reused to avoid garbage.
+local Tracks = setmetatable({}, { __mode = "k" })
 
-local function Velocity(Ent, Pos, Now)
-	local Last = LastPositions[Ent]
+--- Smoothed world velocity of an entity (or the local player's eyes), from its position history.
+-- Cached per frame, so calling it several times per frame is cheap.
+-- @param Ent Entity Entity to track.
+-- @param Pos Vector Its current position.
+-- @return Vector Velocity in units per second. Do not modify.
+function EngineSound.TrackVelocity(Ent, Pos)
+	local Now = RealTime()
+	local Track = Tracks[Ent]
 
-	if Last and Last.Time == Now then return Last.Vel end
+	if not Track then
+		Track = { Pos = Vector(Pos), Time = Now, Vel = Vector(0, 0, 0) }
+		Tracks[Ent] = Track
 
-	local Vel = vector_origin
-
-	if Last and Now > Last.Time then
-		Vel = (Pos - Last.Pos) / (Now - Last.Time)
-
-		-- Teleports and spawns would read as a huge one-frame speed
-		if Vel:Length() > EngineSound.SpeedOfSound * 2 then
-			Vel = vector_origin
-		end
+		return Track.Vel
 	end
 
-	LastPositions[Ent] = { Pos = Pos, Time = Now, Vel = Vel }
+	local Dt = Now - Track.Time
+	if Dt <= 0 then return Track.Vel end
 
-	return Vel
+	-- Long gaps (entity was out of earshot) restart the estimate instead of blending stale data
+	if Dt < 0.5 then
+		local Raw = (Pos - Track.Pos) / Dt
+
+		-- Teleports and spawns would read as a huge one-frame speed
+		if Raw:LengthSqr() < (EngineSound.SpeedOfSound * 0.5) ^ 2 then
+			local Alpha = 1 - exp(-Dt / EngineSound.VelocitySmoothing)
+
+			Track.Vel:Add((Raw - Track.Vel) * Alpha)
+		end
+	else
+		Track.Vel:Zero()
+	end
+
+	Track.Pos:Set(Pos)
+	Track.Time = Now
+
+	return Track.Vel
 end
 
+local TrackVelocity = EngineSound.TrackVelocity
+
 --- Pitch multiplier for a sound source moving relative to the local player.
+-- Uses f' = f * (c + Vl) / (c - Vs), with Vl the listener's speed towards the source and Vs the
+-- source's speed towards the listener, c = 343 m/s.
 -- @param Source Entity The entity the sound plays from.
 -- @return number Multiplier between 0.5 and 2.
 function EngineSound.DopplerFactor(Source)
 	local Ply = LocalPlayer()
 	if not IsValid(Ply) or not IsValid(Source) then return 1 end
 
-	local Now = RealTime()
 	local Ear = Ply:EyePos()
 	local Pos = Source:GetPos()
-	local Dir = Pos - Ear
+	local SourceVel = TrackVelocity(Source, Pos)
+	local EarVel = TrackVelocity(Ply, Ear)
+	local Dir = Pos - Ear -- listener to source
 	local Dist = Dir:Length()
 
 	if Dist < 1 then return 1 end
 
 	Dir:Div(Dist)
 
-	local Relative = Velocity(Source, Pos, Now) - Velocity(Ply, Ear, Now)
-	local Closing = -Relative:Dot(Dir)
-	local SpeedOfSound = EngineSound.SpeedOfSound
+	local C = EngineSound.SpeedOfSound
+	local Listener = EarVel:Dot(Dir) -- listener moving towards the source
+	local SourceSpeed = -SourceVel:Dot(Dir) -- source moving towards the listener
 
-	return Clamp(SpeedOfSound / math.max(SpeedOfSound - Closing, SpeedOfSound * 0.1), 0.5, 2)
+	return Clamp((C + Listener) / max(C - SourceSpeed, C * 0.1), 0.5, 2)
 end
 
 --- Equal-power crossfade weight of a sound centred on Mid, fading out towards Low and High.
@@ -257,14 +425,7 @@ function EngineSound.Fade(RPM, Low, Mid, High)
 end
 
 local Fade = EngineSound.Fade
-
--- Original single-sound model from acf_engine CalcRPM.
-local function LegacyPitchVolume(Legacy, RPM, Throttle)
-	local Pitch = math.min(20 + (RPM * (Legacy.Pitch / 100)) / 50, 255)
-	local Volume = 0.25 + (0.1 + 0.9 * ((RPM / math.max(Legacy.Limit, 1)) ^ 1.5)) * Throttle / 1.5
-
-	return Pitch, Volume
-end
+local LegacyPitchVolume = EngineSound.LegacyPitchVolume
 
 local function BankPitchVolume(Bank, Snd, Index, RPM, Throttle)
 	local Sounds = Bank.Sounds
@@ -280,14 +441,78 @@ local function BankPitchVolume(Bank, Snd, Index, RPM, Throttle)
 	return Pitch, Volume
 end
 
-local function UpdateEngine(Ent, State, Alpha, Doppler)
+-- Whether the local player sits in a seat of the engine's vehicle. Uses the server's contraption
+-- list for the current seat when there is one, and also accepts a shared physical parent.
+local function InCabin(Ent, Seat)
+	if not IsValid(Seat) then return false end
+	if not FirstPerson(LocalPlayer()) then return false end
+	if Cabin.Known and Cabin.Vehicle == Seat and Cabin.Engines[Ent] then return true end
+
+	return ACE.GetPhysicalParent(Seat) == ACE.GetPhysicalParent(Ent)
+end
+
+-- Starter motor: pitch follows the crank (the starter drives it through a fixed gear), volume
+-- follows the motor current (highest when bogged down). Every compression stroke loads the
+-- starter, so the volume pulses at the compression frequency, crank rev/s * cylinders / 2:
+-- a slow, struggling crank audibly chugs, a healthy one blurs into a steady whir.
+local function UpdateStarter(Ent, State, Dt, Shift, Muffle)
+	if not State.Cranking then
+		if State.Starter then
+			State.Starter:FadeOut(0.15)
+			State.Starter = nil
+		end
+
+		return
+	end
+
+	if not State.Starter then
+		State.Starter = NewPatch(Ent, EngineSound.StarterSound, math.min(EngineSound.StarterLevel, State.Level + 5), Muffle >= EngineSound.MuffleDSPFrom and EngineSound.MuffleDSP or nil)
+		State.StarterPhase = 0
+
+		if not State.Starter then return end
+	end
+
+	local RPM = State.SmoothRPM
+	local Load = State.StarterLoad
+	local Freq = RPM / 60 * State.Cylinders * 0.5
+	local Depth = Clamp(1.1 - Freq / 10, 0.15, 0.85) -- a pulse faster than ~10 Hz is not heard as one
+
+	State.StarterPhase = (State.StarterPhase + TwoPi * Freq * Dt) % TwoPi
+
+	local Pulse = (0.5 + 0.5 * sin(State.StarterPhase)) ^ 3 -- sharp peak on each compression
+	local Pitch = 100 * RPM / EngineSound.StarterRefRPM * (1 - 0.12 * Depth * Pulse)
+	local Volume = (0.4 + 0.5 * Load) * (1 - Depth * (1 - Pulse)) * (1 - EngineSound.MaxMuffleCut * Muffle)
+
+	State.Starter:ChangePitch(Clamp(Pitch * Shift, 30, 160), 0)
+	State.Starter:ChangeVolume(Clamp(Volume, 0, 1), 0)
+end
+
+local function UpdateEngine(Ent, State, Alpha, Dt, Doppler)
 	State.SmoothRPM = State.SmoothRPM + (State.RPM - State.SmoothRPM) * Alpha
 	State.SmoothThrottle = State.SmoothThrottle + (State.Throttle - State.SmoothThrottle) * Alpha
 
 	local RPM, Throttle = State.SmoothRPM, State.SmoothThrottle
 
+	-- Combustion sound level: full while running; after shut-off it fades with the crank speed;
+	-- before an engine has run (only the starter turning it) there is none.
+	local Level = 0
+
+	if State.Running then
+		Level = 1
+	elseif State.Ran and State.OffRPM then
+		Level = Clamp(RPM / State.OffRPM, 0, 1)
+	end
+
+	State.Combustion = State.Combustion + (Level - State.Combustion) * Alpha
+
+	local StarterMuffle = 0
+
 	for _, Playing in ipairs(State.Playing) do
 		local Target = Playing.Target
+		local Muffle = EngineSound.MuffleOf(State, Playing.Bank)
+		local Gain = State.Combustion * (1 - EngineSound.MaxMuffleCut * Muffle)
+
+		StarterMuffle = max(StarterMuffle, Muffle)
 
 		if not IsValid(Target) then
 			-- The exhaust went away; rebuild so its banks play from the engine
@@ -308,7 +533,7 @@ local function UpdateEngine(Ent, State, Alpha, Doppler)
 			end
 
 			Pitch = Clamp(Pitch * Shift, 1, 255)
-			Volume = Clamp(Volume, 0, 1)
+			Volume = Clamp(Volume * Gain, 0, 1)
 
 			if not Entry.Pitch or abs(Pitch - Entry.Pitch) >= 0.5 then
 				Entry.Pitch = Pitch
@@ -321,14 +546,23 @@ local function UpdateEngine(Ent, State, Alpha, Doppler)
 			end
 		end
 	end
+
+	if State.Cranking or State.Starter then
+		UpdateStarter(Ent, State, Dt, Doppler and EngineSound.DopplerFactor(Ent) or 1, StarterMuffle)
+	end
 end
 
 hook.Add("Think", "ACE_EngineSound_Think", function()
 	if not next(Engines) then return end
 
 	local Now = RealTime()
-	local Alpha = 1 - exp(-FrameTime() / EngineSound.SmoothingTime)
+	local Dt = FrameTime()
+	local Alpha = 1 - exp(-Dt / EngineSound.SmoothingTime)
 	local Doppler = DopplerVar:GetBool()
+	local MuffleOn = MuffleVar:GetBool()
+	local Ply = LocalPlayer()
+	local Seat = MuffleOn and IsValid(Ply) and Ply:GetVehicle() or NULL
+	local Smoke = ACE.ExhaustSmoke
 
 	for Ent, State in pairs(Engines) do
 		if not IsValid(Ent) then
@@ -340,11 +574,26 @@ hook.Add("Think", "ACE_EngineSound_Think", function()
 				StopPatches(State)
 			end
 		else
+			if Now >= State.NextCabinCheck then
+				State.NextCabinCheck = Now + EngineSound.CabinCheckTime
+
+				State.Muffled = InCabin(Ent, Seat)
+
+				if State.Playing and DSPSignature(State) ~= State.DSPSig then
+					-- DSP is set when a patch is created, so rebuild the patches with the new one
+					StopPatches(State)
+				end
+			end
+
 			if not State.Playing then
 				StartPatches(Ent, State)
 			end
 
-			UpdateEngine(Ent, State, Alpha, Doppler)
+			UpdateEngine(Ent, State, Alpha, Dt, Doppler)
+
+			if Smoke and State.Exhaust and State.Burns then
+				Smoke.Think(State, Dt)
+			end
 		end
 	end
 end)

@@ -17,17 +17,18 @@ Units.RadToDeg    = 180 / math.pi
 Units.KwToHp      = 1.34102
 Units.Gravity     = 9.80665
 
--- VPhysics reports GetInertia() in kg·in², so kg·m² = kg·in² · 0.0254².
-Units.SourceInertiaToSI = Units.InchToMeter ^ 2
+-- VPhysics (IVP) works in metric internally and PhysObj:GetInertia() returns kg·m².
+-- Measured with gmodkit: a 100 kg cube1x1x1 reports 17.1 and a 30 kg race wheel 1.51, which
+-- only fit kg·m² (in kg·in² the cube would read ~37500).
+Units.SourceInertiaToSI = 1
 
 --[[
-	ApplyTorqueCenter takes an angular impulse. Measured with gmodkit on a free prop
-	(see tests/mobility_calibration.md): one call changes angular velocity by
-	Δω[deg/s] = arg / I_source[kg·in²], independent of tickrate.
-	An SI angular impulse L [N·m·s] = I_si[kg·m²] · Δω[rad/s], so
-	arg = L · (1 / 0.0254²) · (180 / π).
+	ApplyTorqueCenter takes an angular impulse. Measured with gmodkit on free props (cubes of
+	100-400 kg, a race wheel, all three axes, 33 and 66 tick): one call changes angular velocity
+	by Δω[deg/s] = arg / GetInertia() to within 1e-6, independent of tickrate.
+	An SI angular impulse L [N·m·s] = I[kg·m²] · Δω[rad/s], so arg = L · (180 / π).
 ]]
-Units.SIAngularImpulseToSource = (1 / Units.InchToMeter ^ 2) * Units.RadToDeg
+Units.SIAngularImpulseToSource = Units.RadToDeg
 
 --- Converts an SI angular impulse (N·m·s) to the value ApplyTorqueCenter expects.
 -- @param Impulse Angular impulse in N·m·s.
@@ -36,7 +37,7 @@ function Units.ToSourceAngularImpulse(Impulse)
 	return Impulse * Units.SIAngularImpulseToSource
 end
 
---- Converts a VPhysics inertia component (kg·in²) to kg·m².
+--- Converts a VPhysics inertia component to kg·m² (it already is; kept as the one boundary).
 -- @param SourceInertia Inertia as returned by PhysObj:GetInertia().
 -- @return Inertia in kg·m².
 function Units.InertiaToSI(SourceInertia)

@@ -13,9 +13,13 @@ local floor, Clamp, min = math.floor, math.Clamp, math.min
 function ACE.GetPhysicalParent( obj )
 	if not IsValid(obj) then return nil end
 
-	--check for fresh cached parent
-	if obj.acfphysparent and ACE.CurTime < obj.acfphysstale then
-		return obj.acfphysparent
+	--check for fresh cached parent. It must still be a root, and an entity cached as its own
+	--root must still be unparented: duplicators parent entities after creating them, and a
+	--parented entity has no motion of its own.
+	local Cached = obj.acfphysparent
+	if Cached and ACE.CurTime < obj.acfphysstale and IsValid(Cached) and not IsValid(Cached:GetParent())
+		and (Cached ~= obj or not IsValid(obj:GetParent())) then
+		return Cached
 	end
 
 	local Parent = obj
@@ -72,7 +76,7 @@ function ACE.ApplyEngineFuelModifierToCurve(EngineCurve, FuelCurve)
 		if CurveValue > MaxValue then MaxValue = CurveValue end
 	end
 
-	local NormMul = 1/MaxValue --Used to normalize the new torque curve for the engine.
+	local NormMul = 1 / MaxValue --Used to normalize the new torque curve for the engine.
 
 	for Key in pairs(EngineCurve) do
 		local CurveValue = EngineCurve[Key]
@@ -84,7 +88,7 @@ function ACE.ApplyEngineFuelModifierToCurve(EngineCurve, FuelCurve)
 end
 
 --Calculates the performance characteristics of an engine, given a torque curve, max torque (in nm), idle, and redline rpm
-function ACE.CalcEnginePerformanceData(curve, maxTq, idle, redline, fueltype)
+function ACE.CalcEnginePerformanceData(curve, maxTq, idle, redline, _)
 	local peakTq = 0
 	local peakTqRPM
 	local peakPower = 0

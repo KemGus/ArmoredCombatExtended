@@ -42,7 +42,9 @@ ACE.DefineEngine( "18.0-V8", {
 	fuel = "Petrol",
 	enginetype = "V8",
 	weight = 850,
-	torque = 2187,
+	-- Ford GAA: 1,050 lb·ft (1,424 N·m) at 2,200 rpm, 500 hp at 2,600 rpm (TM 9-1731B par. 4);
+	-- on its published curve this gives 498 hp at 2,600 rpm.
+	torque = 1424,
 	flywheelmass = 2.8,
 	-- Ford GAA: 1,100 cu in (18.03 L), bore 5.4 in, stroke 6 in, 8 cyl (TM 9-1731B, 1945)
 	displacement = 18.03,

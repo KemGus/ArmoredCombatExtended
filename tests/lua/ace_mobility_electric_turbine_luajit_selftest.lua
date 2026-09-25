@@ -121,24 +121,26 @@ do
 	local Spec = build(Leaf)
 	local S = E.NewState(Spec)
 	E.Start(S)
-	local _, Loss = stepAt(S, 4000, 0)
+	stepAt(S, 4000, 0)
+	near(S.Regen, 0, 0, "no regen at throttle 0")
+	local _, Loss = stepAt(S, 4000, -0.4)
 	local Friction = E.FrictionTorque(Spec, 4000 * RPMToRad, 0)
-	check(Loss > Friction + 50, "lift-off regen brakes the motor", Loss)
+	check(Loss > Friction + 50, "regen command brakes the motor", Loss)
 	check(S.FuelRate < 0, "regen charges the battery", S.FuelRate)
 	-- Charging power is below the mechanical power taken in (losses on the way back).
 	check(-S.FuelRate < S.Regen * 4000 * RPMToRad, "regen loses energy on the way back")
 	-- Regen fades out near standstill.
-	stepAt(S, 100, 0)
+	stepAt(S, 100, -0.4)
 	check(S.Regen < 0.4 * 280 * 0.3, "regen fades at crawl speed", S.Regen)
-	stepAt(S, 0, 0)
+	stepAt(S, 0, -0.4)
 	near(S.Regen, 0, 0, "no regen at rest")
 	-- A full battery refuses charge.
 	S.RegenLimitW = 0
-	stepAt(S, 4000, 0)
+	stepAt(S, 4000, -0.4)
 	near(S.Regen, 0, 1e-9, "full battery: no regen")
 	check(S.FuelRate >= 0, "full battery: no charging")
 	S.RegenLimitW = 10000
-	stepAt(S, 4000, 0)
+	stepAt(S, 4000, -0.4)
 	near(-S.FuelRate, 10000, 10000 * 0.1, "regen held to the battery's charge limit")
 	-- Any pedal past the regen band drives instead.
 	S.RegenLimitW = nil
@@ -166,13 +168,18 @@ do
 	local Ratio = Ke / V.FuelKg
 	check(Ratio > 0.6 and Ratio < 0.95, "kinetic energy / battery energy on launch", Ratio)
 
-	-- Lift off: the car slows on regen and the battery gets energy back.
+	-- Throttle 0 coasts: only drag and motor losses, no regen.
+	local C0 = V.Speed
+	Rig.Run(V, V.Time + 1, function(X) X.Throttle = 0 end)
+	check(V.State.Regen == 0 and (C0 - V.Speed) / G < 0.08, "throttle 0 coasts without regen", (C0 - V.Speed) / G)
+
+	-- Throttle -40 (about Nissan's e-Pedal): the car slows on regen and the battery gets energy back.
 	local E0, S0 = V.FuelKg, V.Speed
 	local Tl = V.Time
-	Rig.Run(V, V.Time + 1, function(X) X.Throttle = 0 end)
+	Rig.Run(V, V.Time + 1, function(X) X.Throttle = -0.4 end)
 	local Decel = (S0 - V.Speed) / (V.Time - Tl) / G
-	check(Decel > 0.08 and Decel < 0.25, "lift-off regen deceleration (g)", Decel)
-	Rig.Run(V, V.Time + 60, function(X) X.Throttle = 0 end, function(X) return Rig.Kmh(X) < 20 end)
+	check(Decel > 0.08 and Decel < 0.25, "regen at -40 deceleration (g)", Decel)
+	Rig.Run(V, V.Time + 60, function(X) X.Throttle = -0.4 end, function(X) return Rig.Kmh(X) < 20 end)
 	local Back = E0 - V.FuelKg
 	local KeDrop = 0.5 * V.Mass * (S0 ^ 2 - V.Speed ^ 2)
 	check(Back > 0.3 * KeDrop and Back < 0.9 * KeDrop, "regen recovers part of the kinetic energy", Back / KeDrop)

@@ -84,6 +84,16 @@ Digitised charts were read from rendered PDF pages. Expect about ±1% error on t
 - **[V-2]** "В-2", ru.wikipedia.org (cites *Танк Т-34-85. Руководство по матчасти*):
   38,880 cm³, 150 mm bore, 180/186.7 mm stroke, 500 hp @ 1,800 rpm, 2,160 N·m @ 1,200 rpm, 2,050 rpm maximum.
   https://ru.wikipedia.org/wiki/В-2
+- **[AVDS-9AR]** "Merkava 3", weaponsystems.net: Teledyne Continental AVDS-1790-9AR, 1,200 hp at
+  2,400 rpm, 3,820 N·m at 1,900 rpm. https://weaponsystems.net/system/498-Merkava%203
+- **[AVDS-1500]** General Dynamics Land Systems, *The AVDS-1790 1500 Horsepower Engine* (2004):
+  "1500 horsepower at 2600 rpm, and 3635 lb.-ft. at 1800 rpm for a 20% torque rise".
+  https://archive.org/stream/AVDS17901500HP/AVDS%201790%201500%20HP_djvu.txt
+- **[MB 873]** "Leopard 2", en.wikipedia.org, Propulsion: MTU MB 873 Ka-501, 1,500 PS (1.1 MW) at
+  2,600 rpm, 4,700 N·m at 1,600-1,700 rpm, 47.7 L 90° V12, twin-turbocharged.
+  https://en.wikipedia.org/wiki/Leopard_2 . Wikidata Q130458591: 1,103.25 kW at 2,600 rpm, 47,600 cm³.
+  Army Guide: bore 170 mm, stroke 175 mm. http://www.army-guide.com/eng/product150.html
+  (grosswald.org gives 4,999 N·m at 2,000 rpm instead, uncited; not used.)
 - **[Series 71]** "Detroit Diesel Series 71", en.wikipedia.org: 4.25 × 5 in, 71 cu in per cylinder,
   two-stroke. https://en.wikipedia.org/wiki/Detroit_Diesel_Series_71
 - **[FI AGT1500]** Forecast International, *Industrial & Marine Turbine Forecast: Honeywell
@@ -137,6 +147,40 @@ Digitised charts were read from rendered PDF pages. Expect about ±1% error on t
 - **[Naunheimer]** H. Naunheimer et al., *Automotive Transmissions*, 2nd ed., Springer 2011, §6.3.
 - **[Kotwicki]** A. J. Kotwicki, "Dynamic Models for Torque Converter Equipped Vehicles", SAE 820393, 1982.
 - **[Shigley]** Budynas & Nisbett, *Shigley's Mechanical Engineering Design*, §16-8 (clutch energy).
+
+### Engine cooling (thermal_model.lua)
+
+- **[MIT 2.61]** MIT 2.61 *Internal Combustion Engines* lecture notes, lecture 18 "Engine Heat
+  Transfer". https://web.mit.edu/2.61/www/Lecture%20notes/Lec.%2018%20Heat%20transf.pdf .
+  Heat transfer / fuel energy ∝ BMEP^-0.2 · N^-0.2 (from Nu ∝ Re^0.8); material limits cast iron
+  ~400 °C, aluminium ~300 °C, liner oil film ~200 °C; head temperatures at 2000 rpm WOT with
+  95 °C coolant (after Heywood fig. 12-20).
+- **[Padmaraman 2021]** S. Padmaraman, N. R. Mathivanan, B. R. Ponangi, "Heat Dissipation
+  Characteristics of a FSAE Racecar Radiator", *Int. J. Heat and Technology* 39(5), 2021,
+  https://doi.org/10.18280/ijht.390531 . ε-NTU cross-flow relation (eq. 8), core discharge
+  coefficient 0.75, 1.2 m/s face velocity from a small fan at standstill, tube walls treated as having no
+  thermal resistance, 29% of fuel energy to the cooling system.
+- **[Kim-Bullard 2002]** N.-H. Kim, C. W. Bullard, "Air-side thermal hydraulic performance of
+  multi-louvered fin aluminum heat exchangers", *Int. J. Refrigeration* 25(3), 2002, 390-400.
+  j ∝ Re^-0.49, so h grows about as √(face velocity). Taken from abstracts and citing papers.
+- **[Shah-Sekulic]** R. K. Shah, D. P. Sekulić, *Fundamentals of Heat Exchanger Design*, Wiley,
+  2003. Compact automotive cores 1,000-2,500 m²/m³. *Not re-checked against the book.*
+- **[Incropera]** F. P. Incropera et al., *Fundamentals of Heat and Mass Transfer*, table 1.1
+  (free convection in gases 2-25 W/(m²·K)) and the cross-flow ε-NTU relation. *Not re-checked.*
+- **[Hella]** Hella, *Thermostats, thermoswitches & temperature sender units* brochure.
+  https://www.hella.com/hella-za/assets/media_global/HASA_Thermo_Range_Borchure_LRes.pdf :
+  a typical wax thermostat starts to open at 78-82 °C and is fully open at 95 °C; expansion tank
+  caps relieve at about 1.4 bar.
+- **[Cummins QSB5.9]** Cummins India, *C140D5P / C160D5P genset spec sheet (QSB5.9-G1/G2)*.
+  https://www.cummins.com/sites/default/files/2023-05/140-160kVA_QSB5.9_Specsheet_Rev-3.pdf :
+  184 bhp (137 kW), total coolant 25.6 L (engine and radiator), 50:50 glycol.
+- **[V-2]** Wikipedia, "Kharkiv model V-2": cooling system 90-95 L (family of 370-580 kW
+  engines), dry weight ~1,000 kg.
+- **[FSAE wiki]** "Cooling", https://fswiki.us/Cooling : cooling load 20-60% of the fuel's
+  lower heating value depending on engine and throttle.
+- **[MEGlobal]** MEGlobal, *Ethylene Glycol Product Guide*: 50% glycol near 90 °C, cp about
+  3.5 kJ/(kg·K), density about 1.05 kg/L. *Values from memory of the tables, not re-checked.*
+- **[IEC 60085]** Thermal classes of electrical insulation: class H 180 °C.
 
 ## Torque curves
 
@@ -216,8 +260,8 @@ Definitions with their own `inertia`: AGT1500 7.93 ([FI AGT1500]), Electric-Tiny
 | EtaIndicated electric | removed (was a flat 0.9) | Replaced by the motor loss model below |
 | Motor losses CopperLoss·t² + InverterLoss·t (battery side), IronLoss·w² (shaft drag), ×Prated | 0.03 / 0.065 / 0.037 | **Fitted** by non-negative least squares to seven points read as the shape of the [Burress 2013] LEAF combined map (peak 96%, ≥90% over most of the envelope, ~90% at the peak-torque corner, ~80-85% at 10% torque and 10% speed). Result: peak 95.5%, 91% at the corner, 94.6% at full power and top speed. The seven points are a reading of the summary, not digitised contours, so treat as **estimated to ±2 points of efficiency** |
 | Motor bearing drag | 0.2% of peak torque | **Estimated** |
-| Lift-off regen RegenFrac | 0.4 of the torque envelope | **Derived** from [e-Pedal] 0.2 g on the 2018 LEAF: 0.2·9.81·1,700 kg·0.323 m (215/50R17) / 8.19 final drive = 131 N·m = 41% of its 320 N·m. The 1,700 kg (with driver) and the 2018 LEAF's final drive and tyre size are from Nissan's spec sheet as commonly quoted, **not re-checked** |
-| Regen pedal band / low-speed fade | 5% pedal / 5% of top speed | **Estimated**. The fade speed is where the fitted losses equal the recovered power at regen torque, so below it regen would drain the battery. Real EVs blend in friction brakes there |
+| Regen command | Throttle 0 = none, -100 = the full torque envelope | Behaviour: regen only on a negative throttle, no lift-off regen. For scale, Nissan's e-Pedal (0.2 g on the 2018 LEAF [e-Pedal]) works out at 0.2·9.81·1,700 kg·0.323 m / 8.19 final drive = 131 N·m, about -40 on a 320 N·m motor |
+| Regen low-speed fade | 5% of top speed | **Estimated**. The fade speed is where the fitted losses equal the recovered power at regen torque, so below it regen would drain the battery. Real EVs blend in friction brakes there |
 | Regen charge limit | 0 when every linked battery is full, otherwise none | Behaviour. No C-rate limit is modelled: charge acceptance data per pack size was not found |
 | CoolantFrac | 0.28 / 0.25 / 0.30 / 0.02 (SI / diesel / rotary / turbine) | [Heywood] table 12.1 for SI and diesel, **not re-verified**. The others are **estimated**. Motors put all of their losses (copper, inverter, core, bearings) into the engine's heat instead |
 | LHV petrol (SI, rotary) | 43.3 MJ/kg (was 43.4) | **Sourced**: [EPA-TNGA] EPA test gasoline 43.31 MJ/kg |
@@ -286,18 +330,73 @@ resistance loss, and charge-rate limits on regen.
 | Brake capacity 1.5·μ·N·r + 10·J | sizing rule | **Estimated** |
 | Substeps 8, constraint iterations 6 | numerics | Solver settings, not physical data |
 
+## thermal_model.lua (engine cooling)
+
+Two thermal masses per engine, metal (Tb) and coolant (Tc), solved exactly over each step with
+the conductances frozen (so the result does not depend on tickrate):
+
+    Cb·dTb/dt = Q_in - Gbc·(Tb - Tc) - Gs·(Tb - Ta)
+    Cc·dTc/dt = Gbc·(Tb - Tc) - Σ ε_i·Cmin_i·(Tc - Ta)
+
+Q_in is `HeatRate` from engine_model.lua (fuel share plus friction), rescaled for load and speed.
+Each heat exchanger (the engine's built-in cooler and every linked `ace_radiator`) gets a share
+of the pump flow through the thermostat and is solved with cross-flow ε-NTU. Coolant above its
+boiling point is vented as steam and held there, and film boiling cuts Gbc, so the metal heats
+up; hot metal costs torque and, past the damage temperature, health.
+
+| Constant | Value | Status |
+|---|---|---|
+| Coolant share of fuel energy at part load | × BMEP^-0.2 · N^-0.2 on the full-load share, total ≤ 60% of fuel | [MIT 2.61] scaling, [FSAE wiki] cap |
+| Coolant volume | 0.15 L per kW rated (liquid), 0.03 (motor), 0.02 oil (turbine) | **Estimated** from [V-2] 0.16-0.25 and [Cummins QSB5.9] 0.19 L/kW; cars are lower |
+| Coolant heat capacity | 3.5 kJ/(kg·K) × 1.05 kg/L (50% glycol) | [MEGlobal], not re-checked |
+| Engine metal specific heat | 500 J/(kg·K) (450 motor) | **Estimated** from iron 460, steel 490, aluminium 900, oil 2,000 |
+| Metal above coolant at rated heat | 25 K (40 K motor windings, 30 K turbine) | **Estimated**; [MIT 2.61] head temperatures |
+| Coolant rise through the engine at rated heat | 7 K (sets pump flow ∝ rpm) | **Estimated** (usual 5-10 K design range) |
+| Thermostat | opens 82 °C, fully open 95 °C | [Hella] |
+| Boiling point | 120 °C (water at 2 bar abs under a ~1 bar gauge cap) | Steam tables; glycol's rise not credited |
+| Film boiling | Gbc × 0.2 above boiling (3 K ramp) | **Estimated** (boiling curve past critical heat flux) |
+| Engine skin | h = 10 W/(m²·K), area of a cube of mass / 800 kg/m³ | [Incropera] range, area **Estimated** |
+| Radiator air side | h = 85·√(v/5) W/(m²·K), 1,200 m²/m³ of core | [Kim-Bullard 2002] exponent, [Shah-Sekulic] density, 85 **Estimated** |
+| Face velocity | fan 4 m/s; ram 0.4 × speed × √(5 cm / depth); still air 0.3 m/s; fan and ram added as pressures | [Padmaraman 2021] discharge 0.75 (halved for installation, **Estimated**); fan 4 m/s from the existing 30 W/L fan power, **Estimated** |
+| ε-NTU | cross-flow, both unmixed | [Padmaraman 2021] eq. 8 / [Incropera] |
+| Built-in cooling | `ace_engine_builtin_cooling` (default 0.5) × kind multiplier (turbine 3) of rated heat at 100 °C / 20 °C | Gameplay setting: ACE builds may have no radiator entity |
+| Derate | from 150 °C metal (140 petrol) to ×0.6 (×0.5 petrol, ×0.5 motor) at 250 °C (200 motor) | **Estimated** shape |
+| Damage | from 200 °C metal (180 motor windings), 0.5% of max health per s per 50 K | Onset [MIT 2.61] oil film limit / [IEC 60085]; rate **Estimated** |
+
+Convars (server, archived): `ace_engine_thermal_timescale` (default 2; 1 is real time),
+`ace_engine_builtin_cooling` (default 0.5), `ace_engine_overheat_damage` (default 1).
+`ACE.ThermalTimeScale`, `ACE.RadiatorEff` and `ACE.RadiatorHeatCap` no longer affect engines
+or radiators.
+
+Results for a BMP-2 class engine (15.8 L diesel, 240 kW, 665 kg) from
+`tests/lua/ace_engine_thermal_luajit_selftest.lua`:
+
+| Case | Result |
+|---|---|
+| Heat to coolant at rated power | 323 kW (the engine model's CoolantFrac plus its friction) |
+| Full load, no radiator, default built-in cooling | 120 °C after 408 s real (204 s at timescale 2) |
+| Full load, no cooling at all | 120 °C after 156 s real |
+| 30 min boiling at full load | metal 240 °C, torque × 0.64, −0.4% health/s |
+| Full load, 0.6 m² × 10 cm radiator, standing with fan | 95 °C coolant, 120 °C metal |
+| Idle warm-up to 82 °C | 30 min real (15 min at timescale 2); idles at 82 °C |
+| Tickrate 16 to 128 | all checkpoints within 1 K |
+
 ## Named engines (engine definitions)
 
-Only fields with a source were added. `torque` and `weight` were **not** changed. The last
-column lists the published values for the maintainers' balance decision.
+Only fields with a source were added. `weight` was **not** changed, and `torque` only where a
+rev limit was brought to the real engine's (the V-2-34, Ford GAA and AVDS-1790-2): with the
+real limit the old torque made far too much or too little power, so torque was set to give
+the published horsepower. The last column lists published values not applied, for the
+maintainers' balance decision.
 
 | ACE id | Real engine | Added / changed | Published values not applied |
 |---|---|---|---|
-| 21.0-V12 | AVDS-1790-2 | displacement 29.3, cylinders 12, stroke 0.146; **idle 400 → 700** [TM 9-2815-220-24] | torque 2,449 N·m @ 1,800 (ACE 5,340); dry mass 2,313 kg (ACE 1,800); rated 2,400 rpm (ACE limit 2,500, within 4%) |
-| 24.8-V12 | AVDS-1790-9A | displacement 29.3, cylinders 12, stroke 0.146 [RENK AVDS] | no -9A rating found |
-| 27.0-V12 | "AVDS-1790-1500" | displacement 29.3, cylinders 12, stroke 0.146 [RENK AVDS] | RENK lists up to 1,350 hp for the family |
-| 16.5-V12 | V-2-34 | displacement 38.88, cylinders 12, stroke 0.18; **limit 3,500 → 1,800** [V-2] | torque 2,160 N·m @ 1,200 (ACE 1,650). Only two curve points are published, so it keeps the generic AVDS shape. Idle not found |
-| 18.0-V8 | Ford GAA | displacement 18.03, cylinders 8, stroke 0.1524, torquecurve (GAA); **limit 3,800 → 2,800** [TM 9-1731B] | torque 1,424 N·m @ 2,200 (ACE 2,187); weight 667 kg with accessories (ACE 850) |
+| 21.0-V12 | AVDS-1790-2 | displacement 29.3, cylinders 12, stroke 0.146; **idle 400 → 700** [TM 9-2815-220-24]; **torque 5,340 → 2,330**, 752 hp @ 2,400 on the AVDS curve (rated 750 hp @ 2,400) | peak torque 2,449 N·m @ 1,800 (the curve shape puts 2,330 at 1,990); dry mass 2,313 kg (ACE 1,800); rated 2,400 rpm (ACE limit 2,500, within 4%) |
+| 24.8-V12 | AVDS-1790-9A(R) | displacement 29.3, cylinders 12, stroke 0.146 [RENK AVDS]; **torque 5,400 → 3,820**, **limit 2,800 → 2,400** [AVDS-9AR]: 1,210 hp @ 2,400 on the AVDS curve (rated 1,200) | dry mass 2,313 kg [RENK AVDS] (ACE 2,100); idle not found (ACE 500) |
+| 27.0-V12 | AVDS-1790 1500 hp | displacement 29.3, cylinders 12, stroke 0.146 [RENK AVDS]; **torque 6,630 → 4,928**, **limit 2,800 → 2,600**, torquecurve from the published peak and 20% torque rise (idle to peak **estimated** with the AVDS rise) [AVDS-1500]: 1,500 hp @ 2,600 | dry mass 2,313 kg [RENK AVDS] (ACE 3,150); idle not found (ACE 500) |
+| 47.6-V12 | MTU MB 873 Ka-501 (Leopard 2) | **new engine**: torque 4,700, displacement 47.6, cylinders 12, stroke 0.175, limit 2,600 [MB 873]; torquecurve from the two published points (idle to peak **estimated** with the AVDS rise, linear fall from 1,700 to 2,600 rpm) gives 1,103 kW @ 2,600 | dry mass not found in a primary source (ACE 2,200 kg, **estimated**); idle not published (ACE 700) |
+| 16.5-V12 | V-2-34 | displacement 38.88, cylinders 12, stroke 0.18; **limit 3,500 → 1,800**; **torque 1,650 → 2,160** (513 hp @ 1,800, rated 500) [V-2] | Only two curve points are published, so it keeps the generic AVDS shape. Idle not found |
+| 18.0-V8 | Ford GAA | displacement 18.03, cylinders 8, stroke 0.1524, torquecurve (GAA); **limit 3,800 → 2,800**; **torque 2,187 → 1,424** (498 hp @ 2,600, rated 500) [TM 9-1731B] | weight 667 kg with accessories (ACE 850) |
 | 6.2-V6 | Detroit Diesel 6V-71 | displacement 6.98, cylinders 6, stroke 0.127 [Series 71] | it is a two-stroke **diesel**. ACE defines it as petrol, and the model has no two-stroke cycle |
 | AGT 1500 Large Turbine | Honeywell AGT1500 | inertia 7.93, torquecurve (free-turbine line) [FI AGT1500], [GTW] | peak torque 5,355 N·m (ACE 6,780); 1,134 kg dry (ACE 1,250) |
 | Electric-Tiny-NoBatt | 2012 Nissan LEAF motor | inertia 0.03 [Gao 2019] | 280 N·m, 80 kW, 10,400 rpm (ACE 189 N·m, 11,300 rpm) |

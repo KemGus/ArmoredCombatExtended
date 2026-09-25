@@ -12,8 +12,8 @@ do
 
 	local EngineWireDescs = {
 		--Inputs
-		["Throttle"]    = "Controls the amount of fuel which will be displaced to the engine.\n Increasing it will also increase RPM, Power and fuel consumption. Values go from 0-100.",
-		["Exhaust"]     = "Entity that sound banks marked 'Play at exhaust' play from.",
+		["Throttle"]    = "Controls the amount of fuel which will be displaced to the engine.\n Increasing it will also increase RPM, Power and fuel consumption. Values go from 0-100.\n Electric motors also take -100 to 0: regenerative braking strength, 0 is none and -100 is full.",
+		["Exhaust"]     = "Optional exhaust entity: sound banks marked 'Play at exhaust' play from it, and exhaust smoke comes out along its forward axis.",
 
 		--Outputs
 		["RPM"]         = "Returns the current RPM.",
@@ -125,7 +125,7 @@ do
 		Engine.IsTrans          = Lookup.istrans -- driveshaft outputs to the side
 		Engine.FuelType         = Lookup.fuel or "Petrol"
 		Engine.EngineType       = Lookup.enginetype or "GenericPetrol"
-		Engine.Efficiency     = 1-(ACE.Efficiency[Engine.EngineType] or ACE.Efficiency["GenericPetrol"])  * (1 + (Engine.peakkw * 1.34/2000)*0.1) -- Energy not transformed into kinetic energy and instead into thermal
+		Engine.Efficiency     = 1-(ACE.Efficiency[Engine.EngineType] or ACE.Efficiency["GenericPetrol"])  * (1 + (Engine.peakkw * 1.34 / 2000) * 0.1) -- Energy not transformed into kinetic energy and instead into thermal
 		Engine.EfficiencyMod	= Engine.Efficiency
 		Engine.TorqueCurve	= ACE.GetEngineTorqueCurve(Lookup)
 		Engine.ModTorqueCurve      = table.Copy(Engine.TorqueCurve)
@@ -285,6 +285,9 @@ function ENT:UpdateOverlayText()
 	text = text .. "Powerband: " .. (math.Round(pbmin / 10) * 10) .. " - " .. (math.Round(pbmax / 10) * 10) .. " RPM\n"
 	text = text .. "Redline: " .. self.LimitRPM .. " RPM\n\n"
 	text = text .. "Temp: " .. math.Round(self.Heat) .. " °C / " .. math.Round((self.Heat * (9 / 5)) + 32) .. " °F\n"
+	if self.CoolantBoiling then
+		text = text .. "Coolant boiling - engine at " .. math.Round(self.BlockHeat or self.Heat) .. " °C\n"
+	end
 
 	--if self.FuelLink and #self.FuelLink > 0 then
 	if self.HasFuel then
@@ -385,6 +388,8 @@ function ENT:TriggerInput( iname, value )
 
 	if (iname == "Throttle") then
 		self.Throttle = math.Clamp(value,0,100) / 100
+		-- Electric motors take -100..0 as a regenerative braking command.
+		self.RegenCommand = math.Clamp(-value, 0, 100) / 100
 	elseif (iname == "Active") then
 		if (value > 0 and not self.Active and self.Legal) then
 			--make sure we have fuel
@@ -569,7 +574,13 @@ function ENT:Think()
 	if next(self.GearLink) then
 		self.MobDt = math.Clamp(CurTime() - self.LastThink, engine.TickInterval() * 0.5, 0.1)
 		ACE.Mobility.Tick(self, self.MobDt)
+	elseif self.MobCtrlStarted then
+		-- Unlinked: stop driving the wheels it used to.
+		ACE.Mobility.StopController(self)
 	end
+
+	-- Cooling runs whether or not the engine is on: a stopped engine still cools down.
+	ACE.EngineThermalThink(self)
 
 	self.LastThink = ACE.CurTime
 	self:NextThink( ACE.CurTime )
@@ -634,6 +645,7 @@ function ENT:CalcMassRatio()
 
 	self.MassRatio = PhysMass / Mass
 	self.PhysMass = PhysMass
+	self.TotalMass = Mass
 	--self.MassRatio = 1 / (Tmass/10000)
 	--self.MassRatio = (PhysMass ^ 0.9225) / Mass
 
@@ -687,8 +699,6 @@ end
 -- damage. Torque and RPM come from the drivetrain solve in ace/server/sv_mobility.lua.
 function ENT:CalcRPM()
 
-	local DeltaTime = math.min(CurTime() - self.LastThink, 0.1)
-
 	-- First active fuel tank among the linked ones.
 	local Tank
 	for _, FuelTank in ipairs(self.FuelLink) do
@@ -711,11 +721,6 @@ function ENT:CalcRPM()
 		end
 	end
 
-	-- Air cooling improves with speed: it doubles every 40 mph.
-	local Speed = math.min(ACE.GetPhysicalParent(self):GetVelocity():Length() / 17.6, 141)
-	local CoolingMult = 2 ^ (Speed / 40)
-	ACE.AtmosphericHeatDissipation(self, CoolingMult, DeltaTime)
-
 	ACE.DoContraptionLegalCheck(self)
 
 	if self.RequiresDriver and not (self.HasDriver or self.HasSeatDriver) then
@@ -727,7 +732,8 @@ function ENT:CalcRPM()
 	-- quickly damage bites for this engine type.
 	local DriverBoost = self.HasDriver and ACE.DriverTorqueBoost or 1 --Seat drivers dont give hp boost.
 	self.TorqueMult = math.Clamp(((1 - self.TorqueScale) / 0.5) * ((self.ACE.Health / self.ACE.MaxHealth) - 1) + 1, self.TorqueScale, 1)
-	self.PeakTorque = self.BaseTorque * self.TorqueMult * DriverBoost
+	-- An overheated engine also loses torque (ACE.EngineThermalThink).
+	self.PeakTorque = self.BaseTorque * self.TorqueMult * DriverBoost * (self.ThermalDerate or 1)
 
 	local HealthRatio = self.ACE.Health / self.ACE.MaxHealth
 	if HealthRatio < 0.995 then
@@ -772,11 +778,13 @@ function ENT:MobilityDesc(Ctx)
 	self.MobDesc = Desc
 	Desc.Spec, Desc.State = Spec, self.MobState
 	Desc.Throttle = Running and self.Throttle or 0
+	if self.FuelType == "Electric" and (self.RegenCommand or 0) > 0 then
+		Desc.Throttle = Running and -self.RegenCommand or 0
+	end
 	Desc.HasFuel = Running and (IsValid(Tank) or ACE.EnginesRequireFuel == 0)
 	Desc.NoStall = Assisted
-	-- Mass parented onto a contraption has no weight in Source's physics, so engines lose torque
-	-- in proportion to it (MassRatio). This is a balance rule kept from the old drivetrain.
-	Desc.TorqueMul = (self.PeakTorque / self.BaseTorque) * (self.MassRatio or 1)
+	-- Damage and the driver boost. Parented mass is handled at the road by ACE.Mobility.Tick.
+	Desc.TorqueMul = self.PeakTorque / self.BaseTorque
 	Desc.Gearboxes = Gearboxes
 	if self.FuelType == "Electric" and self.MobState then
 		-- Regenerative braking needs somewhere to put the charge: none once every linked battery
@@ -786,9 +794,17 @@ function ENT:MobilityDesc(Ctx)
 		self.MobState.RegenLimitW = not IsValid(ChargeTank) and 0 or nil
 	end
 	-- Belt-driven accessories such as a radiator fan.
-	Desc.AccessoryTorque = self.AccessoryTorque or 0
-	self.AccessoryTorque = 0
+	-- Radiators add their fan load between Thinks; MobilityApply holds it for every physics step
+	-- until the next.
+	Desc.AccessoryTorque = self.MobAccessory or self.AccessoryTorque or 0
 	return Desc
+end
+
+-- The in-step drivetrain: the physics engine calls this inside every step for the wheels this
+-- engine's motion controller holds (see ACE.Mobility.PhysicsStep).
+function ENT:PhysicsSimulate(Phys, Dt)
+	ACE.Mobility.PhysicsStep(self, Phys, Dt)
+	return vector_origin, vector_origin, SIM_NOTHING
 end
 
 -- Reads back the solve: fuel burned, heat made, RPM and torque outputs, and stalls.
@@ -796,6 +812,8 @@ function ENT:MobilityApply()
 	local Desc = self.MobDesc
 	local State = self.MobState
 	if not Desc or not State then return end
+	self.MobAccessory = self.AccessoryTorque or 0
+	self.AccessoryTorque = 0
 
 	local RPM = State.W * 30 / math.pi
 	self.FlyRPM = math.max(RPM, 0)
@@ -825,7 +843,7 @@ function ENT:MobilityApply()
 
 	if (Desc.HeatJ or 0) > 0 then
 		self.HeatGeneration = Desc.HeatJ / 1000 / Dt -- kJ/s, shown in the menu
-		ACE.AddThermalEnergy(self, Desc.HeatJ / 1000 * ACE.ThermalTimeScale)
+		ACE.EngineThermalInput(self, Desc)
 	end
 
 	-- Over-revving: the limiter only cuts fuel, so a missed downshift can still drag the engine
@@ -849,9 +867,8 @@ function ENT:MobilityApply()
 	Wire_TriggerOutput(self, "Power", math.Round(Power))
 	Wire_TriggerOutput(self, "RPM", math.Round(self.FlyRPM))
 
-	if self.Active then
-		ACE.EngineSound.Update( self, self.FlyRPM, self.Throttle )
-	end
+	-- Also called while off: the sound follows the crank as it spins down, and the starter is heard.
+	ACE.EngineSound.Update( self, self.FlyRPM, self.Active and self.Throttle or 0 )
 end
 
 -------------------------- Periodic Link Engine checks --------------------------
@@ -1152,6 +1169,8 @@ function ENT:UnlinkRadiator( Target )
 	for Key, Value in pairs( self.RadLink ) do
 		if Value == Target then
 			table.remove( self.RadLink, Key )
+			-- The radiator must forget this engine too, or it keeps sharing its cooling with it.
+			table.RemoveByValue( Target.Master, self )
 			return true, "Unlink successful!"
 		end
 	end
@@ -1196,7 +1215,7 @@ do
 		if fuel_info.entities then
 			duplicator.StoreEntityModifier( self, "FuelLink", fuel_info )
 		end
-	
+
 		--fuel tank link saving
 		local rad_info = {}
 		local rad_entids = {}
@@ -1295,5 +1314,5 @@ do
 	end
 end
 function ENT:OnRemove()
-	ACE.EngineSound.Stop( self )
+	ACE.EngineSound.Stop( self, true )
 end

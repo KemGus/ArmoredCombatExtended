@@ -12,7 +12,7 @@ do
 		["GearUp"]		= "Increases one gear above the current one.",
 		["GearDown"]	= "Decreases one gear below the current one.",
 		["Clutch"]		= "Applies Clutch to gearbox. Values from 0 to 1.",
-		["Brake"]		= "Applies Brake to gearbox. The value you put, the strenght of the brake."
+		["Brake"]		= "Brake pedal, 0 to 1. 1 is full braking, which locks the wheels."
 	}
 
 	function ENT:Initialize()
@@ -157,8 +157,8 @@ do
 			table.insert(Inputs, "Brake (" .. GearboxWireDescs["Brake"] .. ")")
 		end
 
-		local Outputs = { "Ratio", "Entity", "Current Gear", "Input RPM", "Clutch Slip", "Clutch Temp", "Output Torque" }
-		local OutputTypes = { "NORMAL", "ENTITY", "NORMAL", "NORMAL", "NORMAL", "NORMAL", "NORMAL" }
+		local Outputs = { "Ratio", "Entity", "Current Gear", "Input RPM", "Clutch Slip", "Clutch Temp", "Output Torque", "Over Torque" }
+		local OutputTypes = { "NORMAL", "ENTITY", "NORMAL", "NORMAL", "NORMAL", "NORMAL", "NORMAL", "NORMAL" }
 		if Gearbox.CVT then
 			table.insert(Outputs,"Min Target RPM")
 			table.insert(Outputs,"Max Target RPM")
@@ -209,6 +209,32 @@ do
 
 		return Gearbox
 	end
+	--- Applies a gearbox's drivetrain setup and stores it so it survives duplication.
+	-- @param Setup Table: Diff ("open", "locked" or "lsd"), LSDPreload (N*m), LSDRamp (0-1,
+	-- share of the input torque that locks the differential), Assisted (bool), DCT (bool,
+	-- dual-clutch shifting: the next gear takes the torque over with no interruption).
+	function ENT:SetMobilitySetup( Setup )
+		Setup = istable( Setup ) and Setup or {}
+		local Diff = ( Setup.Diff == "locked" or Setup.Diff == "lsd" ) and Setup.Diff or "open"
+		local Max = self.MaxTorque or 0
+
+		self.DiffLockSetup = Diff == "locked"
+		self.LSDPreload = Diff == "lsd" and math.Clamp( tonumber( Setup.LSDPreload ) or 0, 0, Max ) or 0
+		self.LSDRamp = Diff == "lsd" and math.Clamp( tonumber( Setup.LSDRamp ) or 0, 0, 1 ) or 0
+		self.AssistedSetup = tobool( Setup.Assisted )
+		self.DCT = tobool( Setup.DCT ) and not self.Auto and not self.CVT and ( self.Gears or 0 ) > 1
+
+		duplicator.StoreEntityModifier( self, "ACE_GearboxSetup", {
+			Diff = Diff, LSDPreload = self.LSDPreload, LSDRamp = self.LSDRamp,
+			Assisted = self.AssistedSetup, DCT = self.DCT
+		} )
+		self:UpdateOverlayText()
+	end
+
+	duplicator.RegisterEntityModifier( "ACE_GearboxSetup", function( _, Ent, Data )
+		if IsValid( Ent ) and Ent.SetMobilitySetup then Ent:SetMobilitySetup( Data ) end
+	end )
+
 	list.Set( "ACFCvars", "acf_gearbox", {"id", "data1", "data2", "data3", "data4", "data5", "data6", "data7", "data8", "data9", "data10", "data11", "data12", "data13", "data14", "data15"} )
 	duplicator.RegisterEntityClass("acf_gearbox", ACE.MakeGearbox, "Pos", "Angle", "Id", "Gear1", "Gear2", "Gear3", "Gear4", "Gear5", "Gear6", "Gear7", "Gear8", "Gear9", "Gear0" )
 
@@ -263,8 +289,8 @@ function ENT:Update( ArgsTable )
 			table.insert(Inputs, "Brake")
 		end
 
-		local Outputs = { "Ratio", "Entity", "Current Gear", "Input RPM", "Clutch Slip", "Clutch Temp", "Output Torque" }
-		local OutputTypes = { "NORMAL", "ENTITY", "NORMAL", "NORMAL", "NORMAL", "NORMAL", "NORMAL" }
+		local Outputs = { "Ratio", "Entity", "Current Gear", "Input RPM", "Clutch Slip", "Clutch Temp", "Output Torque", "Over Torque" }
+		local OutputTypes = { "NORMAL", "ENTITY", "NORMAL", "NORMAL", "NORMAL", "NORMAL", "NORMAL", "NORMAL" }
 		if self.CVT then
 			table.insert(Outputs,"Min Target RPM")
 			table.insert(Outputs,"Max Target RPM")
@@ -366,6 +392,17 @@ function ENT:UpdateOverlayText()
 
 	text = text .. "Final Drive: " .. math.Round( self.Gear0, 2 ) .. "\n"
 	text = text .. "Torque Rating: " .. self.MaxTorque .. " Nm / " .. math.Round( self.MaxTorque * 0.73 ) .. " ft-lb"
+	if self.DiffLockSetup then
+		text = text .. "\nDifferential: locked"
+	elseif ( self.LSDPreload or 0 ) > 0 or ( self.LSDRamp or 0 ) > 0 then
+		text = text .. "\nDifferential: limited slip (preload " .. math.Round( self.LSDPreload or 0 ) .. " Nm, lock " .. math.Round( ( self.LSDRamp or 0 ) * 100 ) .. " %)"
+	end
+	if self.DCT then text = text .. "\nDual-clutch shifting" end
+	if self.AssistedSetup then text = text .. "\nAssisted" end
+
+	if self.OverTorque then
+		text = text .. "\n" .. self:OverTorqueReason()
+	end
 
 	if not self.Legal then
 		text = text .. "\nNot legal, disabled for " .. math.ceil(self.NextLegalCheck - ACE.CurTime) .. "s\nIssues: " .. self.LegalIssues
@@ -559,6 +596,19 @@ function ENT:ClutchCapacityScale()
 	return 1 - F * (1 - ClutchFadeFloor)
 end
 
+-- Automatic shift schedule: the builder's speed points, pushed up by throttle (kickdown).
+local function autoShift(self, Throttle)
+	if self.Drive ~= 1 or self.ChangeFinished > CurTime() or self.Hold then return end
+	local Base = ACE.GetPhysicalParent(self)
+	local Vel = IsValid(Base) and Base:GetVelocity():Length() or 0
+	local Scale = self.ShiftScale * (1 + 0.35 * math.max(Throttle - 0.5, 0) / 0.5)
+	if self.Gear < self.Gears and Vel > self.ShiftPoints[self.Gear] * Scale then
+		self:ChangeGear(self.Gear + 1)
+	elseif self.Gear > 1 and Vel < self.ShiftPoints[self.Gear - 1] * Scale * 0.85 then
+		self:ChangeGear(self.Gear - 1)
+	end
+end
+
 -- Decides the engaged ratio and clutch capacity for this tick. Called by ACE.Mobility.Tick
 -- before the gearbox description is built.
 function ENT:MobilityControl(Dt)
@@ -571,11 +621,24 @@ function ENT:MobilityControl(Dt)
 	local Fade = self:ClutchCapacityScale()
 
 	self.MobDriveCap = nil
+	if self.DoubleDiff then
+		-- Double-differential (Merritt-Brown) steering: the steer path is geared to the engine
+		-- independently of the selected gear. Its reduction equals first gear's, so full steer in
+		-- first stops the inner track and a neutral pivot runs the tracks at first-gear speed;
+		-- turns widen in higher gears, as in the Churchill and Tiger transmissions.
+		local First = math.abs((self.GearTable[1] or 1) * (self.GearTable.Final or 1))
+		self.MobSteerRatio = First > 1e-6 and 1 / First or 2
+	end
 	self.MobEfficiency = self.Auto and 0.94 or (self.CVT and 0.9 or 0.97)
 
 	-- Differential. Transfer cases are locked; everything else is an open diff unless the Diff
 	-- Lock input or a limited-slip preload is set.
-	if self.DiffLockInput then
+	-- A dual-clutch box being steered (its two sides commanded differently) acts as a
+	-- clutch-brake cross-shaft: the released side freewheels and brakes while the other keeps
+	-- full drive. Driven straight it is an open differential, so wheeled builds corner freely.
+	local Steering = self.Dual and (math.abs((self.LClutch or Max) - (self.RClutch or Max)) > 0.02 * Max
+		or math.abs(ACE.Mobility.BrakePedal(self.LBrake) - ACE.Mobility.BrakePedal(self.RBrake)) > 0.02)
+	if self.DiffLockInput or self.DiffLockSetup or Steering then
 		self.MobDiff = "locked"
 	elseif (self.LSDPreload or 0) > 0 or (self.LSDRamp or 0) > 0 then
 		self.MobDiff = "lsd"
@@ -591,29 +654,23 @@ function ENT:MobilityControl(Dt)
 
 	------------------------------------------------ automatic
 	if self.Auto then
-		if IsValid(Engine) and Engine.MobSpec then
-			-- Size the converter once so the engine stalls the converter near 2.2x idle,
-			-- a typical passenger-car stall speed (and never past 60% of redline).
-			if not self.MobConverter or self.MobConverterFor ~= Engine.MobSpec then
-				local Spec = Engine.MobSpec
-				local Stall = math.min(Spec.IdleRPM * 2.2, Spec.LimitRPM * 0.6)
-				self.MobConverter = ACE.Mobility.TorqueConverter.New(Stall, Spec.BrakeWOT(Stall * RPMToRad), 2.0)
-				self.MobConverterFor = Spec
-			end
+		-- Size the converter once so the engine stalls the converter near 2.2x idle,
+		-- a typical passenger-car stall speed (and never past 60% of redline).
+		if IsValid(Engine) and Engine.MobSpec and (not self.MobConverter or self.MobConverterFor ~= Engine.MobSpec) then
+			local Spec = Engine.MobSpec
+			local Stall = math.min(Spec.IdleRPM * 2.2, Spec.LimitRPM * 0.6)
+			self.MobConverter = ACE.Mobility.TorqueConverter.New(Stall, Spec.BrakeWOT(Stall * RPMToRad), 2.0)
+			self.MobConverterFor = Spec
 		end
 
-		-- Shift schedule: the builder's speed points, pushed up by throttle (kickdown).
-		if self.Drive == 1 and not Shifting and not self.Hold then
-			local Base = ACE.GetPhysicalParent(self)
-			local Vel = IsValid(Base) and Base:GetVelocity():Length() or 0
-			local Scale = self.ShiftScale * (1 + 0.35 * math.max(Throttle - 0.5, 0) / 0.5)
-			if self.Gear < self.Gears and Vel > self.ShiftPoints[self.Gear] * Scale then
-				self:ChangeGear(self.Gear + 1)
-			elseif self.Gear > 1 and Vel < self.ShiftPoints[self.Gear - 1] * Scale * 0.85 then
-				self:ChangeGear(self.Gear - 1)
-			end
-			Shifting = self.ChangeFinished > Now
+		-- A gear change sets off wire outputs, which wait for Think when the drivetrain runs
+		-- inside the physics step.
+		if ACE.Mobility.Deferring() then
+			self.MobShiftDue = Throttle
+		else
+			autoShift(self, Throttle)
 		end
+		Shifting = self.ChangeFinished > Now
 
 		-- Clutch-to-clutch shift: the new ratio is engaged at once, its clutch pack picks up the
 		-- torque over the shift time while the old one releases.
@@ -623,16 +680,22 @@ function ENT:MobilityControl(Dt)
 			self.MobDriveCap = Max * (0.25 + 0.75 * Frac)
 		end
 
-		-- Lock-up clutch above the coupling point in the upper gears.
+		--[[
+			Lock-up clutch in the upper gears once the converter is near its coupling point, and
+			held until the next shift, as heavy automatics (Allison) do at any throttle. Asking
+			for 85 % speed ratio at full throttle would never lock: with the engine on its
+			governor the converter settles around 80 % and the vehicle stops gaining speed.
+		]]
 		local SR = 0
 		if IsValid(Engine) and Engine.MobState and Engine.MobState.W > 1 then
 			SR = (Mob.InputW or 0) / Engine.MobState.W
 		end
-		local Lock = self.Gear >= 2 and not Shifting and SR > 0.85 and Throttle < 0.9
+		local Lock = self.Gear >= 2 and not Shifting and (SR > 0.75 or (self.MobLockupCap or 0) > 0 and SR > 0.6)
 		self.MobLockupCap = Lock and Max or 0
 		-- Until the converter is sized (no engine spec yet) the box is coupled by a plain clutch.
 		self.MobClutchCap = self.MobConverter and nil or Max
 		self.MobSideScale = 1
+		self.MobCapFull = false
 		return
 	end
 
@@ -654,9 +717,24 @@ function ENT:MobilityControl(Dt)
 	end
 
 	------------------------------------------------ manual (and CVT, clutch, diffs)
-	local Pedal = Max > 0 and 1 - (self.LClutch or Max) / Max or 0
+	--[[
+		Dual (steering) boxes have no main clutch: their side clutches are the steering input,
+		so only a pedal on both sides disengages the drive. Releasing one side to steer must
+		leave the engine coupled to the other track.
+	]]
+	local Engaged = self.LClutch or Max
+	if self.Dual then Engaged = math.max(Engaged, self.RClutch or Max) end
+	local Pedal = Max > 0 and 1 - Engaged / Max or 0
 
-	if Shifting then
+	if Shifting and self.DCT then
+		-- Dual-clutch: the next gear is already selected on the other input shaft, and the two
+		-- clutches hand the torque over during the shift time, so drive is never interrupted.
+		local Frac = 1 - math.Clamp((self.ChangeFinished - Now) / math.max(self.SwitchTime, 0.05), 0, 1)
+		self.MobRatio = TargetR
+		self.MobDriveCap = Max * (0.25 + 0.75 * Frac)
+		self.PendingEngage = false
+		self.EngagedAt = Now
+	elseif Shifting then
 		self.MobRatio = 0
 		self.PendingEngage = true
 	elseif self.PendingEngage then
@@ -665,10 +743,36 @@ function ENT:MobilityControl(Dt)
 		local Out = outputSpeed(self)
 		local Need = Out * TargetR
 		local Mismatch = math.abs((Mob.InputW or 0) - Need)
-		if Assisted or Pedal > 0.85 or Mismatch < 250 * RPMToRad or TargetR == 0 then
+		--[[
+			An automated manual refuses a downshift that would over-rev the engine: it stays in
+			neutral with the gear requested until the road speed allows it. Engaging anyway
+			would drag the engine far past its limiter and lock the driven wheels.
+		]]
+		local OverRev = false
+		if Assisted and TargetR ~= 0 then
+			for _, Master in pairs(self.Master or {}) do
+				local Spec = IsValid(Master) and Master.MobSpec
+				if Spec and Master:GetClass() == "acf_engine" and math.abs(Need) > Spec.LimitW * 1.02 then OverRev = true end
+			end
+		end
+		if OverRev then
+			self.PendingEngage = true
+		elseif Assisted or Pedal > 0.85 or Mismatch < 250 * RPMToRad or TargetR == 0 then
 			self.PendingEngage = false
 			Mob.InputW = Need
 			self.EngagedAt = Now
+			if Assisted and TargetR ~= 0 then
+				-- Rev-match the engines bolted to this box as well, like an automated manual's
+				-- engine speed control during a shift. Otherwise the clutch has to absorb the
+				-- flywheel's whole speed change, which for a big ratio step (and a heavy tank
+				-- flywheel) is hundreds of kJ per shift.
+				for _, Master in pairs(self.Master or {}) do
+					local State, Spec = IsValid(Master) and Master.MobState, IsValid(Master) and Master.MobSpec
+					if State and Spec and Master:GetClass() == "acf_engine" and State.Running then
+						State.W = math.Clamp(math.abs(Need), Spec.IdleW, Spec.LimitW)
+					end
+				end
+			end
 		elseif Now > (self.NextGrind or 0) then
 			self.NextGrind = Now + 0.4
 			self:EmitSound("physics/metal/metal_solid_strain" .. math.random(1, 5) .. ".wav", 70, math.random(140, 170), 0.7)
@@ -678,40 +782,155 @@ function ENT:MobilityControl(Dt)
 		self.MobRatio = TargetR
 	end
 
-	local Cap = (self.LClutch or Max) * Fade
-	self.MobSideScale = Fade
+	--[[
+		A clutch bolted to the engine is sized for that engine, not for the gearbox's torque
+		rating: about 1.2-2 times peak engine torque (clutch reserve factor, Naunheimer et al.,
+		Automotive Transmissions, 2nd ed., clutch dimensioning). With the gearbox rating as full
+		capacity a half-pressed pedal could still carry several times the engine's torque and
+		would never slip. The pedal scales this capacity linearly (0.5 = half the clamp force).
+	]]
+	local Rated = Max
+	local EngineTorque = 0
+	for _, Master in pairs(self.Master or {}) do
+		if IsValid(Master) and Master:GetClass() == "acf_engine" then EngineTorque = EngineTorque + (Master.PeakTorque or 0) end
+	end
+	if EngineTorque > 0 then Rated = math.min(Max, 1.5 * EngineTorque) end
+	local RateScale = Max > 0 and Rated / Max or 1
+
+	local Cap = (self.LClutch or Max) * RateScale * Fade
+	self.MobSideScale = RateScale * Fade
 	if Assisted and IsValid(Engine) and Engine.MobState and Engine.MobSpec then
 		-- Automatic clutch: fully out while shifting, eased back in afterwards, and slipped
 		-- like a centrifugal clutch at launch so the engine cannot stall.
-		local Launch = ACE.Mobility.Vehicle.AssistedClutch(Engine.MobState, Engine.MobSpec, Max, Pedal, Throttle)
+		local Launch = ACE.Mobility.Vehicle.AssistedClutch(Engine.MobState, Engine.MobSpec, Rated, Pedal, Throttle)
 		local Since = Now - (self.EngagedAt or 0)
 		local Ease = math.Clamp(Since / 0.3, 0, 1)
-		Cap = (Shifting or self.PendingEngage) and 0 or math.min(Launch, Max * Ease) * Fade
+		Cap = (Shifting or self.PendingEngage) and 0 or math.min(Launch, Rated * Ease) * Fade
 		-- Dual-clutch (steering) boxes have no main clutch; their side clutches do the launch.
 		self.MobSideScale = Max > 0 and Cap / Max or 0
 	end
 	self.MobClutchCap = Cap
 	self.MobConverter = nil
+	-- What over-torque detection needs: the clutch fully engaged, and why it could be too weak.
+	self.MobCapFull = Cap > 0 and Cap >= Rated * Fade * 0.98 and Pedal < 0.1
+	self.MobEngineTorque = EngineTorque
+	self.MobRatingLimited = EngineTorque > 0 and Max < 1.5 * EngineTorque
+	self.MobFade = Fade
+end
+
+local OverTorqueSound = "physics/metal/metal_box_scrape_rough_loop1.wav"
+
+-- Whether a clutch ran at its full capacity this tick while slipping.
+local function clutchSaturated(C)
+	if not C or not C.Max or C.Max <= 0 or C.Max == math.huge then return false end
+	local Slip = math.abs(C.Bodies[1].W * C.Coefs[1] + C.Bodies[2].W * C.Coefs[2])
+	return math.abs(C.Acc or 0) >= 0.97 * C.Max and Slip > 3
+end
+
+--[[
+	Over-torque: the engine sends more torque than the fully engaged clutch can carry (the
+	gearbox torque rating is below what the engine makes, or the clutch is hot and fading), so
+	it slips with nobody on the pedal. The engine revs while the vehicle does not pull, which is
+	hard to tell from a weak engine, so it is made obvious: a scraping sound from the gearbox, a
+	line on its overlay, the "Over Torque" wire output and a hint to the owner.
+]]
+function ENT:UpdateOverTorque(Mob, Dt)
+	local Slipping = false
+	if self.MobCapFull then
+		Slipping = clutchSaturated(Mob.Input)
+		if not Slipping and self.Dual then
+			for _, E in ipairs(Mob.SideClutches or {}) do
+				if clutchSaturated(E.C) then Slipping = true break end
+			end
+		end
+	end
+
+	-- Brief slips (a shift, a bump) do not count: the state needs a quarter second to set.
+	self.OverTorqueTime = Slipping and (self.OverTorqueTime or 0) + Dt or 0
+	local Over = self.OverTorqueTime > 0.25 or (self.OverTorque and Slipping) or false
+	if Over ~= (self.OverTorque or false) then
+		self.OverTorque = Over
+		Wire_TriggerOutput(self, "Over Torque", Over and 1 or 0)
+		self:UpdateOverlayText()
+
+		if Over and CurTime() > (self.NextOverTorqueHint or 0) then
+			self.NextOverTorqueHint = CurTime() + 15
+			local Owner = self.CPPIGetOwner and self:CPPIGetOwner()
+			if IsValid(Owner) and Owner:IsPlayer() then
+				ACE.SendNotification(Owner, self:OverTorqueReason(), 8)
+			end
+		end
+	end
+
+	if Over then
+		if not self.OverTorqueLoop then
+			self.OverTorqueLoop = CreateSound(self, OverTorqueSound)
+			self.OverTorqueLoop:PlayEx(0, 100)
+		end
+		local SlipRPM = math.abs(Mob.ClutchSlip or 0) * 30 / math.pi
+		self.OverTorqueLoop:ChangeVolume(math.Clamp(0.35 + SlipRPM / 2000, 0.35, 0.9), 0.1)
+		self.OverTorqueLoop:ChangePitch(math.Clamp(80 + SlipRPM / 40, 80, 140), 0.1)
+	elseif self.OverTorqueLoop then
+		self.OverTorqueLoop:Stop()
+		self.OverTorqueLoop = nil
+	end
+end
+
+--- Player-facing explanation of why the gearbox clutch is slipping under full engagement.
+-- @return string
+function ENT:OverTorqueReason()
+	if self.MobRatingLimited then
+		return string.format("Gearbox over torque: the engine makes %d Nm, the gearbox is rated %d Nm - its clutch is slipping",
+			math.Round(self.MobEngineTorque or 0), math.Round(self.MaxTorque or 0))
+	elseif (self.MobFade or 1) < 1 then
+		return string.format("Gearbox clutch slipping: it is overheated (%d C) and has lost grip", math.Round(self.ClutchTemp or 0))
+	end
+	return "Gearbox clutch slipping: the engine makes more torque than the clutch can carry"
 end
 
 -- Reads back the solve: outputs and clutch heat.
 function ENT:MobilityApply()
 	local Mob = self.Mob
 	if not Mob then return end
+	if self.MobShiftDue then
+		autoShift(self, self.MobShiftDue)
+		self.MobShiftDue = nil
+	end
 	self.InGear = (self.MobRatio or 0) ~= 0
-	local Dt = engine.TickInterval()
+	local Dt = self.MobDt or engine.TickInterval()
 
-	-- Clutch temperature: slip heat in, convection out (~20 s time constant at ambient air).
-	local Mass = 2 + (self.MaxTorque or 0) / 250
+	--[[
+		Clutch temperature: slip heat in, cooling out. The heat sink of a dry clutch is its
+		pressure plate and flywheel face, roughly 5-8 kg for a 300 N·m car clutch and 30-40 kg for
+		a 2500-3000 N·m heavy-truck clutch (pressure plate masses from heavy-duty clutch catalogues),
+		air cooled with a ~20 s time constant. Dual (steering) boxes use wet multi-plate clutches
+		running in the transmission oil, which carries heat away several times faster.
+	]]
+	local Mass = 4 + (self.MaxTorque or 0) / 100
+	local Tau = self.Dual and 6 or 20
 	local T = self.ClutchTemp or ACE.AmbientTemp
 	T = T + (Mob.ClutchHeatJ or 0) / (ClutchSpecificHeat * Mass)
-	T = T - (T - ACE.AmbientTemp) * (1 - math.exp(-Dt / 20))
+	T = T - (T - ACE.AmbientTemp) * (1 - math.exp(-Dt / Tau))
 	self.ClutchTemp = T
 
 	if T > ClutchDamageTemp and self.ACE and self.ACE.Health then
 		-- A cooked clutch wears its facings away: lose health in proportion to the overheat.
 		local Wear = (T - ClutchDamageTemp) / 100 * Dt * 0.01 * self.ACE.MaxHealth
 		self.ACE.Health = math.max(self.ACE.Health - Wear, self.ACE.MaxHealth * 0.05)
+	end
+
+	self:UpdateOverTorque(Mob, Dt)
+
+	-- Torque converter speed ratio (turbine / pump), for the acfConverterRatio accessors.
+	self.ConverterRatio = nil
+	if self.MobConverter then
+		for _, Master in pairs(self.Master or {}) do
+			local State = IsValid(Master) and Master.MobState
+			if State and State.W > 1 then
+				self.ConverterRatio = math.Clamp((Mob.InputW or 0) / State.W, 0, 1)
+				break
+			end
+		end
 	end
 
 	if self.CVT then Wire_TriggerOutput(self, "Ratio", self.GearRatio) end
@@ -864,6 +1083,8 @@ function ENT:Link( Target )
 		Vel			= 0
 	}
 	table.insert( self.WheelLink, Link )
+	-- A chained gearbox finds its engine through the box that drives it.
+	if Target.IsGeartrain then Target.ParentBox = self end
 
 	return true, "Link successful!"
 
@@ -886,6 +1107,7 @@ function ENT:Unlink( Target )
 				Link.Rope:Remove()
 			end
 
+			if IsValid( Target ) and Target.ParentBox == self then Target.ParentBox = nil end
 			table.remove( self.WheelLink, Key )
 
 			return true, "Unlink successful!"
@@ -950,6 +1172,8 @@ function ENT:PostEntityPaste( Player, Ent, CreatedEntities )
 end
 
 function ENT:OnRemove()
+
+	if self.OverTorqueLoop then self.OverTorqueLoop:Stop() end
 
 	for Key in pairs(self.Master) do	--Let's unlink ourselves from the engines properly
 		if IsValid( self.Master[Key] ) then

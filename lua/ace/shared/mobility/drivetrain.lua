@@ -22,6 +22,7 @@
 	    Efficiency,         -- mesh efficiency of the engaged path (0..1)
 	    SpinLoss,           -- constant churning/bearing drag at the input, N·m
 	    Brake = {[0]=, [1]=},    -- brake torque per side at the wheels, N·m
+	    BrakeOnly,          -- can never transmit (every ratio is zero): brakes only, no drive
 	    Outputs = { {Side = 0|1, Wheel = Wheel} | {Side = 0|1, Gearbox = Gearbox} ... },
 	  }
 	  Wheel   = { Key, J, W, RollDrag, Ground }
@@ -85,13 +86,61 @@ end
 
 local buildGearbox
 
+--[[
+	Input shaft speed that a gearbox's wheels dictate this tick, or nil when its outputs can
+	slip (a dual box's side clutches, a capped drive during a shift) or it is in neutral. The
+	wheels are re-read from the physics engine every tick, so a shaft geared rigidly to them
+	must start from their speed too: carrying last tick's speed over would kick the wheels back
+	towards it whenever the physics engine moved them (a standing vehicle rocking on its
+	suspension through a high ratio kept rocking).
+]]
+local function kinematicInputW(Gearbox)
+	local R = Gearbox.Ratio or 0
+	if R == 0 or Gearbox.Dual or Gearbox.DriveCap then return nil end
+	local Sum, N = { [0] = 0, [1] = 0 }, { [0] = 0, [1] = 0 }
+	for _, Out in ipairs(Gearbox.Outputs or {}) do
+		if not (Out.Gearbox and Out.Gearbox.BrakeOnly) then
+			local W
+			if Out.Wheel then W = Out.Wheel.W elseif Out.Gearbox then W = kinematicInputW(Out.Gearbox) end
+			if W == nil then return nil end
+			local S = Out.Side == 0 and 0 or 1
+			Sum[S], N[S] = Sum[S] + W, N[S] + 1
+		end
+	end
+	local Total, Sides = 0, 0
+	for S = 0, 1 do
+		if N[S] > 0 then Total, Sides = Total + Sum[S] / N[S], Sides + 1 end
+	end
+	if Sides == 0 then return nil end
+	return R * Total / Sides
+end
+
+--[[
+	Inertia the gearbox's input shaft carries through its engaged gears: the wheels and the
+	share of the vehicle each one moves, reflected through the ratio (J / R²). Open
+	differentials and slipping tyres make this an upper bound.
+]]
+local function reflectedJ(Gearbox, Depth)
+	local R = Gearbox.Ratio or 0
+	if R == 0 or Depth > 8 then return 0 end
+	local Out = 0
+	for _, O in ipairs(Gearbox.Outputs or {}) do
+		if O.Wheel then
+			Out = Out + (O.Wheel.J or 0) + (O.Wheel.Ground and O.Wheel.Ground.J or 0)
+		elseif O.Gearbox and not O.Gearbox.BrakeOnly then
+			Out = Out + (O.Gearbox.InputJ or 0.02) + reflectedJ(O.Gearbox, Depth + 1)
+		end
+	end
+	return Out / (R * R)
+end
+
 -- Couples a crank to a gearbox's input body through the gearbox's clutch or converter.
 -- A gearbox driven by several engines gets one coupling per engine.
 local function couple(Sys, Crank, Gearbox)
 	local In = Sys.GearboxBodies[Gearbox.Key]
 	local Fresh = not In
 	if Fresh then
-		In = Solver.Body(max(Gearbox.InputJ or 0.02, 1e-4), Gearbox.InputW or Crank.W)
+		In = Solver.Body(max(Gearbox.InputJ or 0.02, 1e-4), kinematicInputW(Gearbox) or Gearbox.InputW or Crank.W)
 		In.Gearbox = Gearbox
 		Sys.Bodies[#Sys.Bodies + 1] = In
 		Sys.GearboxBodies[Gearbox.Key] = In
@@ -105,6 +154,7 @@ local function couple(Sys, Crank, Gearbox)
 		-- a constraint.
 		C = addConstraint(Sys, { Crank, In }, { 1, -1 }, Gearbox.LockupCap or 0, 0, "lockup")
 		Sys.Converters[#Sys.Converters + 1] = { Gearbox = Gearbox, Crank = Crank }
+		Gearbox.TurbineJ = In.J + reflectedJ(Gearbox, 0)
 	else
 		C = addConstraint(Sys, { Crank, In }, { 1, -1 }, (not Gearbox.Dual) and Gearbox.ClutchCap or nil, 0, "clutch")
 	end
@@ -118,34 +168,44 @@ buildGearbox = function(Sys, Gearbox)
 	local In = Gearbox.Body
 	local R = Gearbox.Ratio or 0
 
-	-- Group outputs by side.
-	local Sides = { [0] = {}, [1] = {} }
+	-- Chained gearboxes need their input body before we can constrain to them.
 	for _, Out in ipairs(Gearbox.Outputs or {}) do
-		local List = Sides[Out.Side == 0 and 0 or 1]
-		List[#List + 1] = Out
+		if Out.Gearbox and not Sys.GearboxBodies[Out.Gearbox.Key] then
+			local Child = Out.Gearbox
+			local Body = Solver.Body(max(Child.InputJ or 0.02, 1e-4), kinematicInputW(Child) or Child.InputW or (R ~= 0 and In.W / R or 0))
+			Body.Gearbox = Child
+			Sys.Bodies[#Sys.Bodies + 1] = Body
+			Sys.GearboxBodies[Child.Key] = Body
+			Child.Body = Body
+			Child.Inputs = Child.Inputs or {}
+			buildGearbox(Sys, Child)
+		end
 	end
 
-	-- Chained gearboxes need their input body before we can constrain to them.
-	for S = 0, 1 do
-		for _, Out in ipairs(Sides[S]) do
-			if Out.Gearbox and not Sys.GearboxBodies[Out.Gearbox.Key] then
-				local Child = Out.Gearbox
-				local Body = Solver.Body(max(Child.InputJ or 0.02, 1e-4), Child.InputW or (R ~= 0 and In.W / R or 0))
-				Body.Gearbox = Child
-				Sys.Bodies[#Sys.Bodies + 1] = Body
-				Sys.GearboxBodies[Child.Key] = Body
-				Child.Body = Body
-				buildGearbox(Sys, Child)
-			end
+	--[[
+		Group outputs by side. A chained box that can never transmit (all ratios zero) is how
+		builders give an undriven axle its brakes; it is not a drive output. Left in, its free
+		input shaft would sit on one side of an open differential and take all the speed while
+		the driven side got no torque.
+	]]
+	local Sides = { [0] = {}, [1] = {} }
+	for _, Out in ipairs(Gearbox.Outputs or {}) do
+		if not (Out.Gearbox and Out.Gearbox.BrakeOnly) then
+			local List = Sides[Out.Side == 0 and 0 or 1]
+			List[#List + 1] = Out
 		end
 	end
 
 	Gearbox.Drive = {}
+	-- Friction elements that slip instead of the main clutch (a dual box's side clutches), with
+	-- the factor that turns their slip into input-shaft speed.
+	Gearbox.SideClutches = {}
 	local HasL, HasR = #Sides[0] > 0, #Sides[1] > 0
 
 	if R ~= 0 then
-		if Gearbox.Dual or not (HasL and HasR) or Gearbox.Diff == "locked" then
-			-- Each output rigidly geared (through its side clutch on dual boxes).
+		if not (HasL and HasR) or Gearbox.Diff == "locked" then
+			-- Each output rigidly geared (through its side clutch on dual boxes). A locked dual box is
+			-- a clutch-brake steering cross-shaft.
 			for S = 0, 1 do
 				local Cap = Gearbox.Dual and Gearbox.SideCap and Gearbox.SideCap[S] or nil
 				for _, Out in ipairs(Sides[S]) do
@@ -154,8 +214,37 @@ buildGearbox = function(Sys, Gearbox)
 						OutCap = OutCap and min(OutCap, Out.Gearbox.ClutchCap) or Out.Gearbox.ClutchCap
 					end
 					if Gearbox.DriveCap then OutCap = OutCap and min(OutCap, Gearbox.DriveCap) or Gearbox.DriveCap end
-					Gearbox.Drive[#Gearbox.Drive + 1] = addConstraint(Sys, { In, outputBody(Sys, Out) }, { 1, -R }, OutCap, 0, "gear")
+					local C = addConstraint(Sys, { In, outputBody(Sys, Out) }, { 1, -R }, OutCap, 0, "gear")
+					Gearbox.Drive[#Gearbox.Drive + 1] = C
+					if Gearbox.Dual then Gearbox.SideClutches[#Gearbox.SideClutches + 1] = { C = C, Scale = 1 } end
 				end
+			end
+		elseif Gearbox.Dual then
+			-- Open differential with a clutch on each output (a controlled differential): the side
+			-- gears are small bodies of their own, each clutched to that side's outputs.
+			local SideJ = max((Gearbox.InputJ or 0.02) * 0.5, 1e-4)
+			local SideBodies = {}
+			for S = 0, 1 do
+				local First = outputBody(Sys, Sides[S][1])
+				local SB = Solver.Body(SideJ, First.W)
+				Sys.Bodies[#Sys.Bodies + 1] = SB
+				SideBodies[S] = SB
+				-- Side clutch ratings are input-shaft torque (as on locked dual boxes); the clutch sits
+				-- on the output side of the ratio, where the same clutch carries |R| times as much.
+				local Cap = Gearbox.SideCap and Gearbox.SideCap[S]
+				if Cap then Cap = Cap * abs(R) end
+				for _, Out in ipairs(Sides[S]) do
+					local OutCap = Cap
+					if Out.Gearbox and Out.Gearbox.ClutchCap then
+						OutCap = OutCap and min(OutCap, Out.Gearbox.ClutchCap) or Out.Gearbox.ClutchCap
+					end
+					local C = addConstraint(Sys, { SB, outputBody(Sys, Out) }, { 1, -1 }, OutCap, 0, "side clutch")
+					Gearbox.SideClutches[#Gearbox.SideClutches + 1] = { C = C, Scale = abs(R) }
+				end
+			end
+			Gearbox.Drive[1] = addConstraint(Sys, { In, SideBodies[0], SideBodies[1] }, { 1, -R / 2, -R / 2 }, Gearbox.DriveCap, 0, "diff")
+			if Gearbox.Diff == "lsd" then
+				Gearbox.LSD = addConstraint(Sys, { SideBodies[0], SideBodies[1] }, { 1, -1 }, 0, 0, "lsd")
 			end
 		else
 			-- Differential between the first output on each side; extra outputs on a side
@@ -199,10 +288,10 @@ end
 
 --- Builds a solver system for one or more engines and everything downstream of them.
 -- @param Group An engine description, or { Engines = { engine descriptions } } when engines
--- share gearboxes.
+-- share gearboxes, optionally with Roots = { gearbox descriptions } for trees no engine drives.
 -- @return System table for Drivetrain.Step.
 function Drivetrain.Build(Group)
-	local Engines = Group.Engines or { Group }
+	local Engines = Group.Engines or (Group.Roots and {}) or { Group }
 	local Sys = {
 		Engines = Engines,
 		Engine = Engines[1],
@@ -224,6 +313,18 @@ function Drivetrain.Build(Group)
 			couple(Sys, Crank, Gearbox)
 		end
 	end
+	-- Gearbox trees with no engine (a trailer, a braked axle): their input shaft turns freely.
+	for _, Gearbox in ipairs(Group.Roots or {}) do
+		if not Sys.GearboxBodies[Gearbox.Key] then
+			local In = Solver.Body(max(Gearbox.InputJ or 0.02, 1e-4), kinematicInputW(Gearbox) or Gearbox.InputW or 0)
+			In.Gearbox = Gearbox
+			Sys.Bodies[#Sys.Bodies + 1] = In
+			Sys.GearboxBodies[Gearbox.Key] = In
+			Gearbox.Body = In
+			Gearbox.Inputs = {}
+			buildGearbox(Sys, Gearbox)
+		end
+	end
 	Sys.Crank = Sys.Cranks[1]
 	return Sys
 end
@@ -232,10 +333,15 @@ local function converterStep(Gearbox, Crank, H)
 	local Conv = Gearbox.Converter
 	local In = Gearbox.Body
 	local Tp, Tt = TC.Torques(Conv, Crank.W, In.W)
-	-- Bound the exchange so one substep cannot drive the turbine past the pump (the
-	-- converter can only ever pull the two speeds together in drive).
+	--[[
+		Bound the exchange so one substep cannot drive the turbine past the pump (the
+		converter can only ever pull the two speeds together in drive). The turbine drives the
+		whole vehicle through the gears, so that is the inertia the bound uses: the input shaft
+		alone would clip the converter's torque, harder the longer the substep, which made an
+		automatic pull less at low tickrates.
+	]]
 	local Rel = Crank.W - In.W
-	local Meff = 1 / (Crank.InvJ + In.InvJ)
+	local Meff = 1 / (Crank.InvJ + 1 / (Gearbox.TurbineJ or In.J))
 	local Limit = abs(Rel) * Meff / H
 	if abs(Tt) > Limit and Rel * Tt > 0 then
 		local Scale = Limit / abs(Tt)
@@ -271,7 +377,9 @@ function Drivetrain.Step(Sys, Dt, Substeps, Iterations)
 			local State = Engine.State
 			State.W = Crank.W
 			local Drive, Loss = EngineModel.Step(State, Engine.Throttle or 0, H, Crank.Opts)
-			Crank.Torque = Crank.Torque + Drive * (Engine.TorqueMul or 1)
+			-- Damage and driver modifiers scale combustion, not the starter motor.
+			local Starter = State.StarterTorque or 0
+			Crank.Torque = Crank.Torque + (Drive - Starter) * (Engine.TorqueMul or 1) + Starter
 			Solver.Drag(Crank, Loss + (Engine.AccessoryTorque or 0), H)
 			Engine.FuelKg = Engine.FuelKg + State.FuelRate * H
 			Engine.HeatJ = Engine.HeatJ + State.HeatRate * H
@@ -310,6 +418,11 @@ function Drivetrain.Step(Sys, Dt, Substeps, Iterations)
 				local Slip = abs(C.Bodies[1].W * C.Coefs[1] + C.Bodies[2].W * C.Coefs[2])
 				Gearbox.ClutchHeatJ = Gearbox.ClutchHeatJ + abs(C.Acc) * Slip
 			end
+			for _, E in ipairs(Gearbox.SideClutches or {}) do
+				local C = E.C
+				local Slip = abs(C.Bodies[1].W * C.Coefs[1] + C.Bodies[2].W * C.Coefs[2])
+				Gearbox.ClutchHeatJ = Gearbox.ClutchHeatJ + abs(C.Acc) * Slip
+			end
 		end
 	end
 
@@ -335,6 +448,12 @@ function Drivetrain.Step(Sys, Dt, Substeps, Iterations)
 		local C = Gearbox.Input
 		if C then
 			Gearbox.ClutchSlip = C.Bodies[1].W * C.Coefs[1] + Gearbox.Body.W * C.Coefs[2]
+		end
+		-- Dual boxes slip at their side clutches; report the worst one in input-shaft speed.
+		for _, E in ipairs(Gearbox.SideClutches or {}) do
+			local SC = E.C
+			local Slip = (SC.Bodies[1].W * SC.Coefs[1] + SC.Bodies[2].W * SC.Coefs[2]) * E.Scale
+			if abs(Slip) > abs(Gearbox.ClutchSlip or 0) then Gearbox.ClutchSlip = Slip end
 		end
 	end
 end

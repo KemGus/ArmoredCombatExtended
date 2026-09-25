@@ -6,6 +6,38 @@ ACE.EngineSound = ACE.EngineSound or {}
 local EngineSound = ACE.EngineSound
 
 local Editor -- the open DFrame, if any
+local Preview -- { Patch = CSoundPatch, Button = DButton } of the sound being previewed
+
+local function StopPreview()
+	if not Preview then return end
+
+	Preview.Patch:Stop()
+
+	if IsValid(Preview.Button) then
+		Preview.Button:SetIcon("icon16/sound.png")
+	end
+
+	Preview = nil
+end
+
+-- Engine recordings loop, so a preview plays until it is stopped: clicking the button again,
+-- previewing another sound or closing the editor stops it.
+local function TogglePreview(Button, Path)
+	local Same = Preview and Preview.Button == Button
+
+	StopPreview()
+
+	if Same or Path == "" or not IsValid(LocalPlayer()) then return end
+
+	local Patch = CreateSound(LocalPlayer(), Path)
+	if not Patch then return end
+
+	Patch:SetSoundLevel(0) -- 0 = heard everywhere at full volume (SNDLVL_NONE)
+	Patch:Play()
+	Button:SetIcon("icon16/sound_mute.png")
+
+	Preview = { Patch = Patch, Button = Button }
+end
 
 local RowHeight = 22
 
@@ -65,10 +97,9 @@ local function BuildSoundRow(List, Bank, Index, Rebuild)
 	Remove:Dock(RIGHT)
 	Remove:SetWide(RowHeight)
 
-	local Play = AddButton(Row, "", "icon16/sound.png", "Preview this sound", function()
-		if Snd.Path ~= "" then
-			surface.PlaySound(Snd.Path)
-		end
+	local Play
+	Play = AddButton(Row, "", "icon16/sound.png", "Preview this sound (click again to stop)", function()
+		TogglePreview(Play, Snd.Path)
 	end)
 	Play:Dock(RIGHT)
 	Play:SetWide(RowHeight)
@@ -146,13 +177,14 @@ local function BuildBank(Scroll, Banks, BankIndex, Rebuild)
 		Slider:SetDark(true)
 		Slider:SetMinMax(0, 1)
 		Slider:SetDecimals(2)
-		Slider:SetValue(Bank[Key])
+		Slider:SetValue(Bank[Key] or 0)
 		Slider:SetTooltip(Tooltip)
 		Slider.OnValueChanged = function(_, Value) Bank[Key] = Value end
 	end
 
 	AddVolumeSlider("Off-throttle volume", "OffVolume", "Bank volume with the throttle closed")
 	AddVolumeSlider("On-throttle volume", "OnVolume", "Bank volume at full throttle")
+	AddVolumeSlider("Cabin muffling", "Muffle", "How muffled and quiet this bank sounds to players sitting in the vehicle in first person (0 = off). Use it for enclosed hulls, leave it at 0 for open-top vehicles and exhaust banks outside the hull")
 
 	local Columns = Panel:Add("DLabel")
 	Columns:Dock(TOP)
@@ -181,8 +213,8 @@ local function BuildBank(Scroll, Banks, BankIndex, Rebuild)
 	AddSound:Dock(TOP)
 	AddSound:SetEnabled(#Bank.Sounds < EngineSound.MaxSounds)
 
-	-- padding + header + two sliders + column captions + rows + add button
-	Panel:SetTall(8 + RowHeight * 3 + 16 + List:GetTall() + RowHeight + 4)
+	-- padding + header + three sliders + column captions + rows + add button
+	Panel:SetTall(8 + RowHeight * 4 + 16 + List:GetTall() + RowHeight + 4)
 end
 
 --- Opens the sound bank editor with data sent by the server.
@@ -204,6 +236,7 @@ function EngineSound.OpenEditor(Engine, IsLegacy, IdleRPM, LimitRPM, Banks)
 	Frame:Center()
 	Frame:MakePopup()
 	Frame:SetSizable(true)
+	Frame.OnRemove = StopPreview
 	Editor = Frame
 
 	local Info = Frame:Add("DLabel")
@@ -225,6 +258,7 @@ function EngineSound.OpenEditor(Engine, IsLegacy, IdleRPM, LimitRPM, Banks)
 	local AddBank
 
 	local function Rebuild()
+		StopPreview()
 		Scroll:Clear()
 
 		for I = 1, #Banks do
@@ -239,7 +273,7 @@ function EngineSound.OpenEditor(Engine, IsLegacy, IdleRPM, LimitRPM, Banks)
 	AddBank = AddButton(Footer, "Add bank", "icon16/add.png", nil, function()
 		if #Banks >= EngineSound.MaxBanks then return end
 
-		Banks[#Banks + 1] = { Exhaust = false, OffVolume = 0.25, OnVolume = 1, Sounds = { { Path = "", RPM = IdleRPM > 0 and IdleRPM or 1000, Pitch = 100, Volume = 1, Width = 0 } } }
+		Banks[#Banks + 1] = { Exhaust = false, OffVolume = 0.25, OnVolume = 1, Muffle = 0, Sounds = { { Path = "", RPM = IdleRPM > 0 and IdleRPM or 1000, Pitch = 100, Volume = 1, Width = 0 } } }
 		Rebuild()
 	end)
 	AddBank:Dock(LEFT)

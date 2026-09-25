@@ -187,6 +187,148 @@ do
 	X.Gear = 1
 	Rig.Run(X, X.Time + 5, function(V) V.Throttle = 1 end)
 	check(X.Speed == X.Speed and Rig.RPM(X) < 2500 * 1.2, "absurd build stays finite", Rig.RPM(X))
+
+	-- The same engine through a 50:1 crawl gear: huge wheel torque, still finite and grip-limited.
+	local Y = Rig.New({ EngineDef = Big, Mass = 800, WheelRadius = 0.2, WheelJ = 0.2, Driven = 2,
+		Ratios = { 50 }, Final = 1, Tick = 1 / 33, Assisted = true })
+	Rig.StartEngine(Y)
+	Y.Gear = 1
+	Rig.Run(Y, Y.Time + 5, function(V) V.Throttle = 1 end)
+	check(Y.Speed == Y.Speed and Y.Speed > 0 and Rig.RPM(Y) < 2500 * 1.2, "50:1 gear stays finite", Rig.Kmh(Y), Rig.RPM(Y))
+
+	--[[
+		62 t tank on the AGT1500 through a converter automatic, tracks (rolling resistance 0.04).
+		M1A2: 0-32 km/h in about 7 s, 67 km/h governed (US Army fact files); ACE's AGT1500 has
+		27 % more torque than the real one, so it may be a little quicker. Checked at 16, 66
+		and 128 tick against each other.
+	]]
+	local Agt = { id = "agt", name = "AGT 1500", category = "Turbine", fuel = "Multifuel", enginetype = "GroundTurbine",
+		torque = 6780, idlerpm = 830, limitrpm = 3000, inertia = 7.93,
+		torquecurve = { 1.0, 0.974, 0.947, 0.921, 0.895, 0.868, 0.842, 0.815, 0.789, 0.763, 0.736, 0.71, 0.684 } }
+	local T32 = {}
+	for _, Tick in ipairs({ 16, 66, 128 }) do
+		local K = Rig.New({ EngineDef = Agt, Mass = 62000, WheelRadius = 0.33, WheelJ = 40, Driven = 2,
+			Ratios = { 4.0, 2.4, 1.5, 1.0 }, Final = 5.6, Converter = true, StallRPM = 1800, Crr = 0.04,
+			CdA = 8, Mu = 0.9, BrakeMax = 200000, Tick = 1 / Tick })
+		Rig.StartEngine(K)
+		K.Gear = 1
+		local T0 = K.Time
+		-- The gearbox's own automatic logic: upshift at set road speeds, lock-up above 75 % speed ratio.
+		local ShiftKmh = { 10, 22, 38 }
+		local function Auto(V)
+			V.Throttle = 1
+			local Turbine = V.Gearbox.InputW or 0
+			if ShiftKmh[V.Gear] and Rig.Kmh(V) > ShiftKmh[V.Gear] then V.Gear = V.Gear + 1 end
+			V.Opts.Lockup = V.Gear >= 2 and (Turbine > 0.75 * V.State.W or V.Opts.Lockup and Turbine > 0.6 * V.State.W)
+		end
+		Rig.Run(K, K.Time + 40, Auto, function(V)
+			if not T32[Tick] and V.Speed >= 32 / 3.6 then T32[Tick] = V.Time - T0 end
+			return false
+		end)
+		check(K.Speed == K.Speed and T32[Tick] and T32[Tick] > 4 and T32[Tick] < 12, "tank 0-32 km/h plausible at " .. Tick, tostring(T32[Tick]))
+		check(Rig.Kmh(K) > 55 and Rig.Kmh(K) < 75, "tank top speed near the governor at " .. Tick, Rig.Kmh(K))
+	end
+	near(T32[16], T32[66], 0.1 * T32[66], "tank 0-32 same at 16 and 66 tick")
+	near(T32[128], T32[66], 0.1 * T32[66], "tank 0-32 same at 128 and 66 tick")
+
+	-- Leopard 2 (62 t) on ACE's MB 873 definition as shipped: 1,500 PS at 2,600 rpm through a
+	-- 4-speed converter automatic geared for about 70 km/h at 2,600 rpm (68 km/h governed).
+	local Leo
+	do
+		local Saved = ACE.DefineEngine
+		function ACE.DefineEngine(Id, Data) if Id == "47.6-V12" then Leo = Data end end
+		local F = assert(io.open(root .. "/lua/ace/shared/engines/v12.lua", "rb"))
+		assert(loadstring(F:read("*a"), "v12.lua"))()
+		F:close()
+		ACE.DefineEngine = Saved
+	end
+	check(Leo ~= nil, "MB 873 definition found")
+	local LeoSpec = M.Engine.Build(Leo, ACE.GetEngineTorqueCurve(Leo))
+	near(LeoSpec.RatedPower, 1103e3, 0.02 * 1103e3, "MB 873 rated power 1,103 kW")
+	local L = Rig.New({ EngineDef = Leo, Mass = 62000, WheelRadius = 0.33, WheelJ = 40, Driven = 2,
+		Ratios = { 4.0, 2.4, 1.5, 1.0 }, Final = 4.6, Converter = true, StallRPM = 1600, Crr = 0.04,
+		CdA = 8, Mu = 0.9, BrakeMax = 200000, Tick = 1 / 66 })
+	Rig.StartEngine(L)
+	check(L.State.Running, "MB 873 starts")
+	L.Gear = 1
+	local L0, L32 = L.Time, nil
+	local LeoShift = { 10, 22, 38 }
+	Rig.Run(L, L.Time + 40, function(V)
+		V.Throttle = 1
+		local Turbine = V.Gearbox.InputW or 0
+		if LeoShift[V.Gear] and Rig.Kmh(V) > LeoShift[V.Gear] then V.Gear = V.Gear + 1 end
+		V.Opts.Lockup = V.Gear >= 2 and (Turbine > 0.75 * V.State.W or V.Opts.Lockup and Turbine > 0.6 * V.State.W)
+	end, function(V)
+		if not L32 and V.Speed >= 32 / 3.6 then L32 = V.Time - L0 end
+		return false
+	end)
+	check(L32 and L32 > 3 and L32 < 10, "Leopard 2 0-32 km/h plausible", tostring(L32))
+	check(Rig.Kmh(L) > 55 and Rig.Kmh(L) < 75 and Rig.RPM(L) < LeoSpec.LimitRPM * 1.07, "Leopard 2 top speed near 68 km/h", Rig.Kmh(L), Rig.RPM(L))
+
+	-- Overdrive: a tall 0.56 top gear. Top speed must be set by drag, below the rev limit.
+	local O = car(1 / 66, { CdA = 0.65 })
+	Rig.StartEngine(O)
+	O.Gear = 1
+	Rig.Run(O, O.Time + 120, Rig.LaunchDriver(6000))
+	local Before = O.Speed
+	Rig.Run(O, O.Time + 5, Rig.LaunchDriver(6000))
+	check(O.Gear == #O.Opts.Ratios, "overdrive reaches top gear", O.Gear)
+	check(Rig.RPM(O) < O.Spec.LimitRPM * 0.98, "overdrive top speed is below the limiter", Rig.RPM(O))
+	check(math.abs(O.Speed - Before) < 0.5 and Rig.Kmh(O) > 200 and Rig.Kmh(O) < 340, "overdrive settles at a drag-limited top speed", Rig.Kmh(O))
+
+	-- High-revving single at 128 tick too.
+	local B2 = Rig.New({ EngineDef = Single, Mass = 180, WheelRadius = 0.3, WheelJ = 0.4, Driven = 1,
+		Ratios = { 2.8, 2.0, 1.6, 1.3, 1.1, 0.95 }, Final = 2.9, Tick = 1 / 128, Assisted = true, CdA = 0.4 })
+	Rig.StartEngine(B2)
+	B2.Gear = 1
+	Rig.Run(B2, B2.Time + 8, Rig.LaunchDriver(13000))
+	check(B2.Speed == B2.Speed and B2.Speed > 5 and Rig.RPM(B2) < 16000, "single stable at 128 tick", Rig.Kmh(B2), Rig.RPM(B2))
+end
+
+------------------------------------------------------------------ odd layouts
+do
+	local Spec = M.Engine.Build(V8, ACE.GenericTorqueCurves.V8)
+	local function engine(W)
+		local State = M.Engine.NewState(Spec)
+		State.W, State.Running = W, true
+		return { Spec = Spec, State = State, Throttle = 1, HasFuel = true }
+	end
+	local function wheel(Key)
+		return { Key = Key, J = 1.2, W = 0, Ground = M.Vehicle.Ground(800, 0.33, 0, 0.9, 800 * 9.81, true) }
+	end
+
+	-- Ten gearboxes chained end to end (a 12:1 first box, then 1:1), the last on two wheels:
+	-- finite, and the wheels turn.
+	local Chain, Top = nil, nil
+	local Wheels = { wheel("L"), wheel("R") }
+	for I = 10, 1, -1 do
+		local Box = { Key = "chain" .. I, Ratio = I == 1 and 12 or 1, InputJ = 0.03, ClutchCap = I == 1 and 2000 or nil, Diff = "open",
+			Brake = { [0] = 0, [1] = 0 }, Outputs = {} }
+		if Chain then
+			Box.Outputs[1] = { Side = 0, Gearbox = Chain }
+		else
+			Box.Outputs[1] = { Side = 0, Wheel = Wheels[1] }
+			Box.Outputs[2] = { Side = 1, Wheel = Wheels[2] }
+		end
+		Chain = Box
+		Top = Box
+	end
+	local E = engine(300)
+	E.NoStall = true
+	E.Gearboxes = { Top }
+	local Sys = M.Drivetrain.Build(E)
+	for _ = 1, 66 do M.Drivetrain.Step(Sys, 1 / 66, 8) end
+	check(Wheels[1].WOut == Wheels[1].WOut and Wheels[1].WOut > 0.5, "ten chained gearboxes drive the wheels", Wheels[1].WOut)
+
+	-- Two engines on one gearbox: coupled through the same input, both finite, sharing the load.
+	local E1, E2 = engine(300), engine(250)
+	local Box = { Key = "twin", Ratio = 3, InputJ = 0.03, ClutchCap = 1e5, Diff = "open",
+		Brake = { [0] = 0, [1] = 0 }, Outputs = { { Side = 0, Wheel = wheel("A") }, { Side = 1, Wheel = wheel("B") } } }
+	E1.Gearboxes, E2.Gearboxes = { Box }, { Box }
+	local Twin = M.Drivetrain.Build({ Engines = { E1, E2 } })
+	for _ = 1, 66 do M.Drivetrain.Step(Twin, 1 / 66, 8) end
+	check(E1.State.W == E1.State.W and E2.State.W == E2.State.W, "twin engines stay finite")
+	near(E1.State.W, E2.State.W, 0.05 * E1.State.W, "twin engines turn together through a locked clutch")
 end
 
 ------------------------------------------------------------------ automatic with converter
@@ -203,6 +345,30 @@ do
 	H.Gear = 1
 	Rig.Run(H, H.Time + 3, function(X) X.Throttle = 1 X.Brake = 1 end)
 	near(Rig.RPM(H), 2200, 300, "converter stall speed")
+end
+
+------------------------------------------------------------------ dual-clutch box: open diff unless locked
+do
+	local function dual(Diff)
+		local Spec = M.Engine.Build(V8, ACE.GenericTorqueCurves.GenericPetrol)
+		local Box = {
+			Key = "box", Ratio = 1, Dual = true, Diff = Diff, InputW = 11,
+			SideCap = { [0] = 1e4, [1] = 1e4 }, Brake = { [0] = 0, [1] = 0 },
+			Outputs = {
+				{ Side = 0, Wheel = { Key = "L", J = 3, W = 10 } },
+				{ Side = 1, Wheel = { Key = "R", J = 3, W = 12 } },
+			},
+		}
+		local State = M.Engine.NewState(Spec)
+		State.W = 11
+		local Sys = M.Drivetrain.Build({ Spec = Spec, State = State, Throttle = 0, HasFuel = false, Gearboxes = { Box } })
+		M.Drivetrain.Step(Sys, 1 / 66, 8)
+		return Box.Outputs[1].Wheel.WOut, Box.Outputs[2].Wheel.WOut
+	end
+	local L, R = dual("open")
+	near(R - L, 2, 0.2, "dual-clutch box differentiates by default")
+	L, R = dual("locked")
+	near(R - L, 0, 0.05, "dual-clutch box with diff lock is a solid axle")
 end
 
 print(("Mobility self-test: PASS (%d assertions)"):format(Passed))

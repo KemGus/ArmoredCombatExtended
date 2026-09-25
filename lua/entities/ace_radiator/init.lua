@@ -26,6 +26,8 @@ do
 		self.Size             = 0	--outer dimensions
 		self.Volume           = 0	--total internal volume in cubic inches
 		self.Capacity         = 0	--max coolant capacity in liters
+		self.Coolant          = 0	--coolant in liters
+		self.Leaking          = 0
 		self.EmptyMass        = 0	--mass of tank only
 
 		self.ThermalSurfaceArea = 1 	--total surface area of the radiator fins
@@ -162,6 +164,8 @@ do
 	function ACE.MakeRadiator(Owner, Pos, Angle, Id, Data1)
 
 		if IsValid(Owner) and not Owner:CheckLimit("_ace_misc") then return false end
+		-- A radiator is defined by its size ("L:W:H" or a vector); anything else cannot be built.
+		if not ConvertStringScale(Data1) then return false end
 
 		local Tank = ents.Create("ace_radiator")
 		if IsValid(Tank) then
@@ -182,7 +186,6 @@ do
 
 				Data1 = Scale
 				Model = ModelData.Model
-				Weight = (Scale.x * Scale.y * Scale.z) / 200
 				Dimensions = Scale
 
 				local DefaultSize    = ModelData.DefaultSize
@@ -191,11 +194,11 @@ do
 				--Width is X
 				--Thickness is y
 				--Height is Z
-				local RadScale = Vector(1/35.775, 1/4.5, 1/22.5)
-				--local EntityScale    = Vector(Scale.x / DefaultSize, Scale.y / DefaultSize, Scale.z / DefaultSize) --Defaultsize does not support 3d vectors. 
+				local RadScale = Vector(1 / 35.775, 1 / 4.5, 1 / 22.5)
+				--local EntityScale    = Vector(Scale.x / DefaultSize, Scale.y / DefaultSize, Scale.z / DefaultSize) --Defaultsize does not support 3d vectors.
 				local EntityScale    = Vector(Scale.x, Scale.y, Scale.z) * RadScale
 
-					
+
 				Tank.ScaleData = {
 					Mesh = Mesh,
 					Scale = EntityScale,
@@ -221,10 +224,12 @@ do
 			Tank.Dimensions   = Dimensions
 
 			Tank.LastMass = 1
-			Tank:UpdateRadiator(Id, Data1) 
+			Tank:UpdateRadiator(Id, Data1)
 
-			Owner:AddCount( "_ace_misc", Tank )
-			Owner:AddCleanup( "acemenu", Tank )
+			if IsValid(Owner) then
+				Owner:AddCount( "_ace_misc", Tank )
+				Owner:AddCleanup( "acemenu", Tank )
+			end
 
 			--table.insert(ACE.FuelTanks, Tank)
 
@@ -240,11 +245,10 @@ duplicator.RegisterEntityClass("ace_radiator", ACE.MakeRadiator, "Pos", "Angle",
 
 
 local Wall = 0.75 -- wall thickness in inches
+local FanOnTemp = 85 -- deg C; coolant thermostats open at about 82-90 °C and switch the fan on above it
 
 function ENT:UpdateRadiator(_, _)
 
-	local electric = "ups"
-	local gas = "ups"
 	local pct = 1 --how full is the tank?
 	self.Leaking = 0
 
@@ -274,52 +278,31 @@ function ENT:UpdateRadiator(_, _)
 
 	self:UpdateRadiatorMass()
 
-	--Calculates the average specific heat of the object
-	self.ACESpecificHeat = (self.EmptyMass * 0.9211 + self.Coolant * 4.184) / self.Mass * ACE.RadiatorHeatCap --0.9211 is the specific heat of aluminum in kj/kg * k, and 4.184 is the specific heat of water in kj/kg * k
-
-
 	local x = math.Round(Length, 1) / 10
 	local y = math.Round(Width, 1) / 10
 	local z = math.Round(Height, 1) / 10
 
-	self.ActiveTorqueDemand = self.Volume / 61.02 * 60 --Convert to liters. Then multiply by the amount of Joules per second it'll take to actively cool the engine per liter of radiator volume.
-
-	--print("Horsepower required to use active cooling: " .. self.ActiveTorqueDemand / 1.3410220896 / 1000)
-
-
-	local FinsPerInch = 15
-	local FinPackRatio = 0.5 --Ratio of volume fins to volume air in radiator
-
-	local FinHeight = (1/FinsPerInch) * FinPackRatio --Air/Fin ratio.
-
-	local finSize = Length * Width * 2 + Width * FinHeight * 2 --Surface area of one fin(Top and bottom)
-
-	local FinCount = Height / FinsPerInch
-
-	self.ThermalSurfaceArea = finSize * FinCount / 1550 --Converts from square inches to square meters
-
-	self.AirflowRestrictiveness = 1-(1-(1/Length))^2 --Airflow ratio of the radiator. Difficulty air flowing through it will have cooling anything.
-
-	--Infotext moved from the overlay update. No need to recalculate this.
-
-	local text = "\nTotal Surface Area: " .. math.Round(self.ThermalSurfaceArea,2) .. "m^2"
-	text = text .. "\nAirflow Restriction: " .. math.Round((1-self.AirflowRestrictiveness)*100,1) .. "%\n"
-	local HeatCapacity = self.ACESpecificHeat * self.Mass
-	text = text .. "\nThermal Storage: " .. math.Round(HeatCapacity,1) .. " kJ/Deg C\n"
-
-	local OldHeat = self.Heat
-	--Bit of a hacked together way to measure the thermal dissipation rate at a given temp.
-	self.Heat = 100
-	ACE.AtmosphericHeatDissipation(self, self.AirflowRestrictiveness * ACE.RadiatorEff, 1)
-	local Dissipation = (100 - self.Heat) * HeatCapacity  / ACE.ThermalTimeScale --Gets the heat difference in Deg/C and multiplies it by the Heat capacity of the radiator to determine the KJ dissipated
-	text = text .. "\nStationary Cooling:\n" .. math.Round(Dissipation,2) .. " kJ / second @ 100 Deg C.\n"
-
-	text = text .. "\nw/ Active:\n" .. math.Round(Dissipation*3,2) .. " kJ / second @ 100 Deg C."
-	text = text .. "\nusing " .. math.Round(self.ActiveTorqueDemand / 1.3410220896 / 1000,2) .. "hp when needed\n"
-
+	-- Fan shaft power in W: 30 W per liter of radiator core. ActiveTorqueDemand keeps its old
+	-- name for dupes and chips that read it, but it is a power, not a torque.
 	self.ActiveTorqueDemand = self.Volume / 61.02 * 30
 
-	self.Heat = OldHeat
+	-- Core geometry for the heat exchanger model (ace/shared/mobility/thermal_model.lua): the
+	-- face the air passes through, inside the walls, and the depth it passes along.
+	self.CoreFrontM2 = math.max(Width - Wall * 2, 0) * math.max(Height - Wall * 2, 0) * 0.00064516
+	self.CoreDepthM = Length * 0.0254
+
+	--Infotext moved from the overlay update. No need to recalculate this.
+	local Thermal = ACE.Mobility.Thermal
+	local function Rating(Face)
+		return Thermal.RadiatorRating(self.CoreFrontM2, self.CoreDepthM, Face, 80) / 1000
+	end
+
+	local text = "\nCore: " .. math.Round(self.CoreFrontM2, 2) .. " m^2 face, " .. math.Round(self.CoreDepthM * 100, 1) .. " cm deep\n"
+	text = text .. "\nCooling with coolant at 100 °C, air at 20 °C:"
+	text = text .. "\n- Standing, fan off: " .. math.Round(Rating(Thermal.FaceVelocity(self.CoreDepthM, 0, 0)), 1) .. " kW"
+	text = text .. "\n- Standing, fan on: " .. math.Round(Rating(Thermal.FaceVelocity(self.CoreDepthM, 0, 1)), 1) .. " kW"
+	text = text .. "\n- 40 km/h, fan on: " .. math.Round(Rating(Thermal.FaceVelocity(self.CoreDepthM, 40 / 3.6, 1)), 1) .. " kW"
+	text = text .. "\nFan uses " .. math.Round(self.ActiveTorqueDemand / 745.7, 2) .. " hp when needed\n"
 
 	self.RadiatorStats = text
 
@@ -354,7 +337,8 @@ function ENT:UpdateOverlayText()
 
 	text = text .. self.RadiatorStats
 
-	text = text .. "\nTemp: " .. math.Round(self.Heat) .. " °C / " .. math.Round((self.Heat * (9 / 5)) + 32) .. " °F\n"
+	text = text .. "\nTemp: " .. math.Round(self.Heat or ACE.AmbientTemp or 20) .. " °C / " .. math.Round(((self.Heat or ACE.AmbientTemp or 20) * (9 / 5)) + 32) .. " °F\n"
+	text = text .. "Rejecting: " .. math.Round((self.HeatRejected or 0) / 1000, 1) .. " kW\n"
 
 	text = text .. "\nCurrent Coolant Remaining:"
 	text = text .. "\n-  " .. math.Round( self.Coolant, 1 ) .. " / " .. math.Round( self.Capacity, 1 ) .. " liters"
@@ -417,21 +401,25 @@ function ENT:Think()
 	local CT = ACE.CurTime
 
 	local ECount = #self.Master
-	local DriveFactor = 0 --Active fan drive factor. Ability for engines to meet fan's torque demands.
+
+	--[[
+		Active cooling: a fan driven from the engines, switched on by the ActiveCooling input and
+		run by its thermostat only while the coolant is above the thermostat's opening point
+		(the thermostatic fan clutch of real cooling systems). The fan's power is taken from the
+		crank as a torque, P / omega, at no less than idle speed.
+	]]
+	local FanWanted = self.Active and (self.Heat or 0) > FanOnTemp
+	self.FanRunning = 0
 
 	for Key in pairs(self.Master) do
 		local Ent = self.Master[Key]
-		if IsValid( Ent ) then
-			--Active cooling. Saps a certain amount of power from the engine to drive the cooling fans
-			--Activates only if needed to keep the radiator below the coolant overheating temperature.
-			if self.Active then -- and self.Heat > 21
-				-- The fan is a load on the crank; the drivetrain solve takes it from the engine.
-				Ent.AccessoryTorque = (Ent.AccessoryTorque or 0) + self.ActiveTorqueDemand / ECount
+		if FanWanted and IsValid( Ent ) and Ent.Active then
+			local Spec, State = Ent.MobSpec, Ent.MobState
+			local Omega = math.max(State and State.W or 0, Spec and Spec.IdleW or 80)
+			-- The fan is a load on the crank; the drivetrain solve takes it from the engine.
+			Ent.AccessoryTorque = (Ent.AccessoryTorque or 0) + self.ActiveTorqueDemand / math.max(ECount, 1) / Omega
 
-				self.FanRunning = 1
-			else
-				self.FanRunning = 0
-			end
+			self.FanRunning = 1
 		end
 	end
 
@@ -449,14 +437,14 @@ function ENT:Think()
 				end
 			elseif self.FanSpeed == 0 then --Fan just started
 				--stupid workaround for the engine sound. THANK YOU garry
-				filter = RecipientFilter(true)
-				filter:AddAllPlayers()
+				local Filter = RecipientFilter(true)
+				Filter:AddAllPlayers()
 
 				if self.SoundPath ~= "" then
-					self.Sound = CreateSound(self, self.SoundPath , filter)
-					local Horsepower = 	self.ActiveTorqueDemand / 1.3410220896 / 1000
+					self.Sound = CreateSound(self, self.SoundPath , Filter)
+					local Horsepower = self.ActiveTorqueDemand / 745.7
 
-					local DB = 40 + Horsepower * 10
+					local DB = math.min(40 + Horsepower * 10, 90)
 					self.Sound:SetSoundLevel( DB ) --Has to be adjusted before being played sadly. No dynamic DB levels.
 					self.Sound:PlayEx(1.0,0)
 				end
@@ -507,32 +495,28 @@ function ENT:Think()
 		--Update the UI
 			self:UpdateOverlayText()
 
-		--Exchange heat with all linked linked engines.
-		for Key in pairs(self.Master) do
-			local Ent = self.Master[Key]
-			if IsValid( Ent ) then
-					ACE.EqualizeThermalEnergy(self, Ent)
-			end
+		--[[
+			Air side of the heat exchanger. The linked engines solve the coolant circuit
+			(ACE.EngineThermalThink) and write back this radiator's Heat; here the radiator only
+			says how well air gets through it: ram air from the vehicle's speed plus the fan.
+		]]
+		local Thermal = ACE.Mobility.Thermal
+		local SpeedMS = ACE.GetPhysicalParent(self):GetVelocity():Length() * 0.01905 -- units/s to m/s
+		local Face = Thermal.FaceVelocity(self.CoreDepthM or 0.05, SpeedMS, self.FanRunning == 1 and self.FanSpeed or 0)
+		if self.Legal and (self.Coolant or 0) > 0 then
+			self.ThermalUA, self.ThermalCair = Thermal.RadiatorAir(self.CoreFrontM2 or 0, self.CoreDepthM or 0, Face)
+		else
+			self.ThermalUA, self.ThermalCair = 0, 0
 		end
 
-		--Do the actual radiator dissipation logic
-		local Speed = math.min(ACE.GetPhysicalParent(self):GetVelocity():Length() / 17.6,141) --Speed in MPH. Capped to 141mph or ~12x cooling.
-
-		if self.Heat > 90 then --Tries to keep the loop at the ideal combustion temperature (~90C-104C). Otherwise uses slower dissipation rate.
-			--Calculate the drive factor if applicable. I/E if we meet power demand. This running slowly doesn't really matter. Mostly it's to make sure underpowered engines don't run huge radiators.
-			if self.FanRunning == 0 then 
-				DriveFactor = 0
-			else
-				DriveFactor = 1
-				Speed = Speed + 64 * DriveFactor * self.FanSpeed --Add the radiator cooling fan speed. Enough for 3x base cooling when active.
-				--print(Speed)
-			end
-		
-			local CoolingMult = 1 * 2^(Speed/40) --The cooling of radiators doubles every 40mph of speed
-			ACE.AtmosphericHeatDissipation(self, CoolingMult  * self.AirflowRestrictiveness * ACE.RadiatorEff, DeltaTime2)
-		else
-			local CoolingMult = 0.1 * 2^(Speed/40) --The cooling of radiators doubles every 40mph of speed
-			ACE.AtmosphericHeatDissipation(self, CoolingMult  * self.AirflowRestrictiveness * ACE.RadiatorEff, DeltaTime2)
+		-- With no running circuit through it, the radiator drifts back to the air temperature.
+		local Linked = false
+		for _, Ent in pairs(self.Master) do
+			if IsValid(Ent) then Linked = true break end
+		end
+		if not Linked then
+			self.HeatRejected = 0
+			self.Heat = ACE.AmbientTemp + ((self.Heat or ACE.AmbientTemp) - ACE.AmbientTemp) * math.exp(-DeltaTime2 / 60)
 		end
 
 		Wire_TriggerOutput( self, "Temperature", self.Heat )
@@ -553,15 +537,13 @@ end
 
 function ENT:OnRemove()
 
-	for Key in pairs(self.Master) do
-		if IsValid( self.Master[Key] ) then
-			self.Master[Key]:Unlink( self )
+	-- A copy: unlinking removes each engine from self.Master.
+	for _, Engine in ipairs(table.Copy(self.Master)) do
+		if IsValid( Engine ) then
+			Engine:Unlink( self )
 		end
 	end
 
-end
-
-function ENT:OnRemove()
 	if self.Sound then
 		self.Sound:Stop()
 	end

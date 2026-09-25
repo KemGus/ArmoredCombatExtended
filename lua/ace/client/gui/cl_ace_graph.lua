@@ -263,8 +263,30 @@ function PANEL:InvalidateCache()
 	self.Cache = nil
 end
 
+-- Width of the panel that is actually on screen. Menu lists can make their items wider than
+-- the area they show (a scrollbar appearing after layout), which would clip the right edge.
+function PANEL:VisibleWidth()
+	local W = self:GetWide()
+	local Left = self:LocalToScreen(0, 0)
+	local Parent = self:GetParent()
+
+	while IsValid(Parent) do
+		local Right = Parent:LocalToScreen(0, 0) + Parent:GetWide()
+		local VBar = Parent.VBar
+
+		if IsValid(VBar) and VBar:IsVisible() and VBar.Enabled then
+			Right = Right - VBar:GetWide()
+		end
+
+		W = math.min(W, Right - Left)
+		Parent = Parent:GetParent()
+	end
+
+	return max(W, MarginLeft + MarginRight + 40)
+end
+
 function PANEL:PlotArea()
-	local W, H = self:GetSize()
+	local W, H = self:VisibleWidth(), self:GetTall()
 
 	return MarginLeft, MarginTop, max(W - MarginLeft - MarginRight, 1), max(H - MarginTop - MarginBottom, 1)
 end
@@ -403,6 +425,8 @@ function PANEL:PaintReadout(PX, PY, PW, PH, Cache)
 	if BoxX + BoxW > PX + PW then
 		BoxX = MX - 10 - BoxW
 	end
+
+	BoxX = Clamp(BoxX, 0, max(PX + PW + MarginRight - BoxW, 0))
 
 	local BoxY = PY + 2
 

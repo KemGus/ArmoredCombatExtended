@@ -468,7 +468,8 @@ do
 		if isGun(this) then
 			Heat = ACE.HeatFromGun(this, this.Heat, this.DeltaTime)
 		elseif isEngine(this) then
-			Heat = ACE.HeatFromEngine(this)
+			-- The engine's coolant temperature, as E2's acfHeat returns.
+			Heat = this.Heat or ACE.AmbientTemp
 		else
 			Heat = ACE.AmbientTemp
 		end
@@ -1700,6 +1701,66 @@ do
 		if restrictInfo(this) then return false end
 
 		return this.Stalled == true
+	end
+
+	--- Returns how fast a wheel driven by an ACF gearbox turns against its hub
+	-- @server
+	-- @return number Wheel speed in RPM
+	function ents_methods:acfWheelRPM()
+		local this = getent(self)
+
+		if this.ACEWheelW == nil then return 0 end
+		if restrictInfo(this) then return 0 end
+
+		return round(this.ACEWheelW * 30 / math.pi)
+	end
+
+	--- Returns the torque converter speed ratio of an ACF automatic gearbox
+	-- @server
+	-- @return number Turbine / pump speed, 0-1 (0 without a converter)
+	function ents_methods:acfConverterRatio()
+		local this = getent(self)
+
+		if not isGearbox(this) then return 0 end
+		if restrictInfo(this) then return 0 end
+
+		return this.ConverterRatio or 0
+	end
+
+	--- Returns the coolant temperature of an ACF engine
+	-- @server
+	-- @return number Coolant temperature in degrees C
+	function ents_methods:acfCoolantTemp()
+		local this = getent(self)
+
+		if not isEngine(this) then return 0 end
+		if restrictInfo(this) then return 0 end
+
+		return this.Heat or ACE.AmbientTemp
+	end
+
+	--- Returns the metal (block) temperature of an ACF engine
+	-- @server
+	-- @return number Block temperature in degrees C
+	function ents_methods:acfBlockTemp()
+		local this = getent(self)
+
+		if not isEngine(this) then return 0 end
+		if restrictInfo(this) then return 0 end
+
+		return this.BlockHeat or this.Heat or ACE.AmbientTemp
+	end
+
+	--- Returns whether an ACF engine's coolant is boiling
+	-- @server
+	-- @return boolean True if boiling
+	function ents_methods:acfBoiling()
+		local this = getent(self)
+
+		if not isEngine(this) then return false end
+		if restrictInfo(this) then return false end
+
+		return this.CoolantBoiling == true
 	end
 
 	--- Sets the gear ratio of a CVT, set to 0 to use built-in algorithm

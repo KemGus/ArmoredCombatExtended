@@ -131,13 +131,9 @@ Engine.Kinds = {
 		-- peak above 96%, a wide region above 90%, lower at low speed and torque). The fit
 		-- peaks at 95.5% and gives 91% at the peak-torque corner.
 		CopperLoss = 0.03, InverterLoss = 0.065, IronLoss = 0.037, BearingFrac = 0.002,
-		-- Lift-off regeneration as a fraction of the motor's torque envelope. Nissan's e-Pedal
-		-- decelerates the 2018 LEAF at up to 0.2 g: 0.2·9.81·1,700 kg·0.323 m / 8.19 final drive
-		-- = 131 N·m at the motor, 41% of its 320 N·m.
-		RegenFrac = 0.4,
-		-- Pedal travel over which lift-off regen fades out, and the speed (fraction of max) below
-		-- which it fades to zero: at 5% of top speed the fitted losses eat all the recovered power.
-		RegenPedal = 0.05, RegenFadeFrac = 0.05,
+		-- Speed (fraction of max) below which regen fades to zero: at 5% of top speed the fitted
+		-- losses eat all the recovered power.
+		RegenFadeFrac = 0.05,
 	},
 }
 
@@ -411,7 +407,8 @@ end
 --- Advances the engine's own control state and returns the torque it applies to the crank.
 -- Call this once per solver substep with the crank speed the drivetrain solver left.
 -- @param State Engine state.
--- @param Throttle Pedal 0..1.
+-- @param Throttle Pedal 0..1. Electric motors also take -1..0: a regenerative braking command
+-- (fraction of the motor's torque envelope). 0 is no regen.
 -- @param Dt Substep length in seconds.
 -- @param Opts Optional { NoStall = bool, HasFuel = bool }.
 -- @return Drive torque (combustion, starter or motor) in N·m, and loss torque magnitude in N·m
@@ -433,13 +430,13 @@ function Engine.Step(State, Throttle, Dt, Opts)
 		-- The inverter stops driving past the rated top speed.
 		local Drive = (On and Speed <= Spec.LimitW) and Pedal * Envelope or 0
 
-		-- Lift-off regeneration: the motor brakes as a generator and charges the battery. It is
-		-- applied as drag, so it slows the crank but can never spin it backwards.
+		-- Regenerative braking on a negative throttle: the motor brakes as a generator and
+		-- charges the battery. It is applied as drag, so it slows the crank but can never spin
+		-- it backwards.
 		local Regen = 0
-		if On then
-			local Lift = clamp(1 - Pedal / K.RegenPedal, 0, 1)
+		if On and Throttle < 0 then
 			local Fade = clamp(Speed / (K.RegenFadeFrac * Spec.LimitW), 0, 1)
-			Regen = K.RegenFrac * Envelope * Lift * Fade
+			Regen = clamp(-Throttle, 0, 1) * Envelope * Fade
 			-- A full (or refusing) battery takes no charge: State.RegenLimitW is the most
 			-- charging power it accepts, set by the entity; nil means no limit.
 			local Limit = State.RegenLimitW
@@ -504,9 +501,13 @@ function Engine.Step(State, Throttle, Dt, Opts)
 			local Hi = Spec.LimitW * 1.06
 			Load = min(Load, clamp((Hi - W) / (Hi - Spec.LimitW), 0, 1))
 		else
-			if W > Spec.LimitW then State.Cut = true end
-			if State.Cut and W < Spec.LimitW - 150 * RPMToRad then State.Cut = false end
-			if State.Cut then Load = 0 end
+			-- Spark-ignition rev limiter as modern engine controllers do it: a progressive
+			-- cylinder cut over the last ~150 RPM rather than an on/off fuel cut, so the engine
+			-- holds the limit and burns only what holding it takes (Bosch Automotive Handbook,
+			-- 10th ed., engine management: speed limitation by selective injection cut-off).
+			local Band = 150 * RPMToRad
+			Load = min(Load, clamp((Spec.LimitW + 0.5 * Band - W) / Band, 0, 1))
+			State.Cut = W > Spec.LimitW + 0.5 * Band
 		end
 
 		-- Once the engine has run up to idle, dropping back below the stall speed stalls it.
@@ -529,16 +530,21 @@ function Engine.Step(State, Throttle, Dt, Opts)
 		local StallTq = 4 * (Engine.FrictionTorque(Spec, 0, 0) + Engine.PumpingTorque(Spec, 0))
 		Starter = StallTq * clamp(1 - W / Free, 0, 1)
 	end
+	-- How hard the starter is pulling, 0..1: 1 when it is bogged down against a load it cannot
+	-- turn (the sound of a struggling starter), falling as it spins up freely.
+	State.StarterLoad = Starter > 0 and clamp(1 - W / (450 * RPMToRad), 0, 1) or 0
 
 	State.Load = Load
+	State.StarterTorque = Starter
 	State.Torque = Combustion + Starter - Loss * (W >= 0 and 1 or -1)
 
 	local Pind = Combustion * max(W, 0)
 	local Pfuel = Pind / K.EtaIndicated
 	State.FuelRate = Pfuel / K.LHV
-	-- Coolant heat: the fuel-energy share plus mechanical friction, which ends up in the oil
-	-- and coolant as well.
-	State.HeatRate = Pfuel * K.CoolantFrac + Engine.FrictionTorque(Spec, W, Load) * abs(W)
+	-- Coolant heat: the share of fuel energy measured in the coolant on test beds. Friction
+	-- heat is part of that measurement (it ends up in the oil and coolant), so it is not added
+	-- again (Heywood 12.1, table 12.1).
+	State.HeatRate = Pfuel * K.CoolantFrac
 
 	return Combustion + Starter, Loss
 end

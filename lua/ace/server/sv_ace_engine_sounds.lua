@@ -13,6 +13,7 @@ util.AddNetworkString("ACE_EngineSound_Request")
 util.AddNetworkString("ACE_EngineSound_MenuGet")
 util.AddNetworkString("ACE_EngineSound_MenuData")
 util.AddNetworkString("ACE_EngineSound_MenuSet")
+util.AddNetworkString("ACE_EngineSound_Cabin")
 
 local Clamp = math.Clamp
 local Round = math.Round
@@ -61,8 +62,9 @@ function EngineSound.GetBanks(Engine)
 	return DefaultBanks(Engine)
 end
 
+-- Silent engines stream nothing, unless an exhaust is linked: clients draw its smoke from the stream.
 local function IsMuted(Engine)
-	return not EngineSound.GetBanks(Engine) and (Engine.SoundPath or "") == ""
+	return not EngineSound.GetBanks(Engine) and (Engine.SoundPath or "") == "" and not IsValid(Engine.ACE_SoundExhaust)
 end
 
 local function WriteCreate(Engine, State)
@@ -73,6 +75,8 @@ local function WriteCreate(Engine, State)
 	net.WriteEntity(IsValid(Exhaust) and Exhaust or NULL)
 	net.WriteUInt(State.Version, 8)
 	net.WriteUInt(Clamp(Round(Engine.MaxDB or 75), 0, 255), 8)
+	net.WriteUInt(Clamp(Round(Engine.LimitRPM or 6000), 1, 65535), 16)
+	net.WriteBool(Engine.EngineType ~= "Electric" and Engine.FuelType ~= "Electric") -- burns fuel: has exhaust smoke
 	net.WriteBool(Banks ~= nil)
 
 	if Banks then
@@ -80,8 +84,18 @@ local function WriteCreate(Engine, State)
 	else
 		net.WriteString(Engine.SoundPath or "")
 		net.WriteUInt(Clamp(Round(Engine.SoundPitch or 100), 0, 255), 8)
-		net.WriteUInt(Clamp(Round(Engine.LimitRPM or 6000), 1, 65535), 16)
 	end
+end
+
+local function BroadcastStop(Engine)
+	net.Start("ACE_EngineSound_Stop")
+	net.WriteEntity(Engine)
+	net.Broadcast()
+end
+
+-- True while clients should be playing this engine: running, or spinning down after shut-off.
+local function IsSounding(State)
+	return State.Active or (State.SpinDown and CurTime() < State.SpinDownUntil)
 end
 
 local function BroadcastCreate(Engine, State)
@@ -98,6 +112,7 @@ function EngineSound.Start(Engine)
 	local State = GetState(Engine)
 
 	State.Active = true
+	State.SpinDown = false
 	State.Muted = IsMuted(Engine)
 	State.NextSend = 0
 
@@ -106,9 +121,13 @@ function EngineSound.Start(Engine)
 	BroadcastCreate(Engine, State)
 end
 
---- Stops an engine's sound on every client. Call when the engine turns off or is removed.
+--- Switches an engine's sound off. Call when the engine turns off or is removed.
+-- A crank that is still turning keeps its sound: EngineSound.Update keeps streaming the RPM as the
+-- drivetrain spins it down, and the sound stops once it falls below SpinDownStopRPM. Engines the
+-- drivetrain does not simulate while off (no gearbox linked) stop at once.
 -- @param Engine Entity The acf_engine.
-function EngineSound.Stop(Engine)
+-- @param Immediate boolean|nil True to cut the sound now instead of letting it spin down.
+function EngineSound.Stop(Engine, Immediate)
 	if not IsValid(Engine) then return end
 
 	local State = GetState(Engine)
@@ -116,9 +135,17 @@ function EngineSound.Stop(Engine)
 
 	State.Active = false
 
-	net.Start("ACE_EngineSound_Stop")
-	net.WriteEntity(Engine)
-	net.Broadcast()
+	local Simulated = istable(Engine.GearLink) and next(Engine.GearLink) ~= nil
+
+	if not Immediate and not State.Muted and Simulated and (Engine.FlyRPM or 0) > EngineSound.SpinDownStopRPM then
+		State.SpinDown = true
+		State.SpinDownUntil = CurTime() + EngineSound.MaxSpinDownTime
+		State.NextSend = 0
+		return
+	end
+
+	State.SpinDown = false
+	BroadcastStop(Engine)
 end
 
 --- Resends an engine's sound setup after its sound, banks or exhaust changed.
@@ -131,7 +158,7 @@ function EngineSound.Refresh(Engine)
 
 	State.Version = (State.Version + 1) % 256
 
-	if not State.Active then return end
+	if not IsSounding(State) then return end
 
 	local WasMuted = State.Muted
 
@@ -139,9 +166,7 @@ function EngineSound.Refresh(Engine)
 
 	if State.Muted then
 		if not WasMuted then
-			net.Start("ACE_EngineSound_Stop")
-			net.WriteEntity(Engine)
-			net.Broadcast()
+			BroadcastStop(Engine)
 		end
 
 		return
@@ -161,28 +186,48 @@ local function CheckExhaust(Engine)
 	end
 end
 
---- Streams an engine's RPM and throttle to nearby clients. Safe to call every tick; it rate limits itself.
+--- Streams an engine's RPM, throttle and starter state to nearby clients.
+-- Safe to call every tick, running or not: it returns at once for engines that are not sounding
+-- and rate limits itself otherwise. After shut-off it keeps streaming while the crank spins down
+-- and ends the sound once the RPM falls below SpinDownStopRPM.
+-- Combustion and starter state come from the engine's mobility state (Engine.MobState).
 -- @param Engine Entity The acf_engine.
 -- @param RPM number Current flywheel RPM.
 -- @param Throttle number Throttle from 0 to 1.
 function EngineSound.Update(Engine, RPM, Throttle)
 	if not IsValid(Engine) then return end
 
-	local State = GetState(Engine)
-	if not State.Active or State.Muted then return end
+	local State = Engine.ACE_EngineSoundState
+	if not State or State.Muted then return end
+	if not State.Active and not State.SpinDown then return end
 
 	local Now = CurTime()
+	RPM = Clamp(Round(tonumber(RPM) or 0), 0, 65535)
+
+	if not State.Active and (RPM <= EngineSound.SpinDownStopRPM or Now >= State.SpinDownUntil) then
+		State.SpinDown = false
+		BroadcastStop(Engine)
+		return
+	end
+
 	if Now < State.NextSend then return end
 
 	if Now >= State.NextExhaustCheck then
 		State.NextExhaustCheck = Now + ExhaustCheckInterval
 		CheckExhaust(Engine)
+		if State.Muted then return end -- losing the exhaust silenced it
 	end
 
-	RPM = Clamp(Round(tonumber(RPM) or 0), 0, 65535)
 	Throttle = Clamp(Round((tonumber(Throttle) or 0) * 100), 0, 100)
 
-	local Changed = State.LastRPM ~= RPM or State.LastThrottle ~= Throttle
+	-- Combustion is on once the engine has caught; before that only the starter is heard.
+	local Mob = Engine.MobState
+	local Running = State.Active and (not Mob or Mob.Running ~= false)
+	local Cranking = State.Active and Mob ~= nil and not Mob.Running and (Mob.Cranking or 0) > 0
+	local StarterLoad = Cranking and Clamp(Round((Mob.StarterLoad or 0) * 31), 0, 31) or 0
+
+	local Changed = State.LastRPM ~= RPM or State.LastThrottle ~= Throttle or State.LastRunning ~= Running
+		or State.LastCranking ~= Cranking or State.LastStarterLoad ~= StarterLoad
 
 	if not Changed and Now - State.LastSent < KeepAliveInterval then return end
 
@@ -190,12 +235,24 @@ function EngineSound.Update(Engine, RPM, Throttle)
 	State.LastSent = Now
 	State.LastRPM = RPM
 	State.LastThrottle = Throttle
+	State.LastRunning = Running
+	State.LastCranking = Cranking
+	State.LastStarterLoad = StarterLoad
 
 	net.Start("ACE_EngineSound_Update", true)
 	net.WriteEntity(Engine)
 	net.WriteUInt(State.Version, 8)
 	net.WriteUInt(RPM, 16)
 	net.WriteUInt(Throttle, 7)
+	net.WriteBool(Running)
+	net.WriteBool(Cranking)
+
+	if Cranking then
+		local Spec = Mob.Spec
+		net.WriteUInt(StarterLoad, 5)
+		net.WriteUInt(Clamp(Round(Spec and Spec.Cylinders or 4), 1, EngineSound.MaxCylinders), 4)
+	end
+
 	net.SendPAS(Engine:GetPos())
 end
 
@@ -294,7 +351,7 @@ net.Receive("ACE_EngineSound_Request", function(_, Ply)
 
 	local State = Engine.ACE_EngineSoundState
 	if not State or not AllowSoundRequest(Ply) then return end
-	if not State.Active or State.Muted then return end
+	if not IsSounding(State) or State.Muted then return end
 
 	net.Start("ACE_EngineSound_Create")
 	WriteCreate(Engine, State)
@@ -349,4 +406,40 @@ net.Receive("ACE_EngineSound_MenuSet", function(_, Ply)
 	else
 		ACE.SendNotify(Ply, false, "No valid sounds in those banks.")
 	end
+end)
+
+-- Interior muffling: when a player takes a seat, tell them which engines share the seat's
+-- contraption (CFW). Clients without this list compare physical parents instead.
+local MaxCabinEngines = 255
+
+local function SendCabin(Ply, Vehicle)
+	local Con = IsValid(Vehicle) and Vehicle.CFW_GetContraption and Vehicle:CFW_GetContraption()
+	local Ents = Con and Con.ents
+	local Engines = {}
+
+	if istable(Ents) then
+		for Key, Value in pairs(Ents) do
+			local Ent = isentity(Key) and Key or Value
+
+			if isentity(Ent) and IsValid(Ent) and EngineClasses[Ent:GetClass()] then
+				Engines[#Engines + 1] = Ent
+				if #Engines >= MaxCabinEngines then break end
+			end
+		end
+	end
+
+	net.Start("ACE_EngineSound_Cabin")
+	net.WriteEntity(IsValid(Vehicle) and Vehicle or NULL)
+	net.WriteBool(istable(Ents))
+	net.WriteUInt(#Engines, 8)
+
+	for _, Ent in ipairs(Engines) do
+		net.WriteEntity(Ent)
+	end
+
+	net.Send(Ply)
+end
+
+hook.Add("PlayerEnteredVehicle", "ACE_EngineSound_Cabin", function(Ply, Vehicle)
+	if IsValid(Ply) then SendCabin(Ply, Vehicle) end
 end)

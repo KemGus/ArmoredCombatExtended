@@ -31,9 +31,9 @@ do
 
 		   local Id = X .. ":" .. Y .. ":" .. Z
 
-		   ACE.RadiatorGUIUpdate( Table )
+		   ACE.RadiatorGUIUpdate()
 		   acemenupanel.RadiatorData["Id"] = Id
-		   RunConsoleCommand( "acfmenu_data1", Id )
+		   RunConsoleCommand( "acemenu_data1", Id )
 
 	 end
 
@@ -69,7 +69,7 @@ do
 			CrateNewCat:SetPos( 25, 50 )		-- Set position
 			CrateNewCat:SetSize( 250, 100 )	-- Set size
 			CrateNewCat:SetExpanded( acemenupanel.RadiatorPanelConfig["ExpandedCatNew"] )
-	
+
 			function CrateNewCat:OnToggle( bool )
 			   acemenupanel.RadiatorPanelConfig["ExpandedCatNew"] = bool
 			end
@@ -101,7 +101,7 @@ do
 				CreateIdForCrate()
 			end
 			CrateNewPanel:AddItem(LengthSlider)
-	
+
 			-- Y Slider
 			local WidthSlider = vgui.Create( "DNumSlider" )
 			WidthSlider:SetText( "Width" )
@@ -136,7 +136,9 @@ do
 
 		----------- The rest below -----------
 
-		ACE.RadiatorGUIUpdate( Table )
+		-- Send the size now, not only when a slider moves: data1 still holds whatever the last
+		-- menu item wrote (an ammo or engine id), which is not a radiator size.
+		CreateIdForCrate()
 
 		MainPanel:PerformLayout()
 
@@ -160,28 +162,21 @@ do
 			local EmptyMass = (CrateVolume - ContentVolume) * 16.387 * ( 2.6 / 1000 )               -- total wall volume * cu in to cc * density of aluminum (kg/cc)
 			local Mass      = EmptyMass + Capacity --* 1   Conversion Ommited    -- weight of tank + weight of contained water. Water is 1kg/Liter
 
-			local FinsPerInch = 15
-			local FinPackRatio = 0.5 --Ratio of volume fins to volume air in radiator
-
-			local FinHeight = (1/FinsPerInch) * FinPackRatio --Air/Fin ratio.
-
-			local finSize = Length * Width * 2 + Width * FinHeight * 2 --Surface area of one fin(Top and bottom)
-
-			local FinCount = Height / FinsPerInch
-
-			local TotalSurfaceArea = finSize * FinCount / 1550
-
-			local AirflowRestrictiveness = 1-(1-(1/Length))^2 --Airflow ratio of the radiator. Difficulty air flowing through it will have cooling anything.
-
 			acemenupanel:CPanelText("Mass", "Full mass: " .. math.Round(Mass,1) .. " kg, Empty mass: " .. math.Round(EmptyMass,1) .. " kg")
 			acemenupanel:CPanelText("Cap", "Capacity: " .. math.Round(Capacity,1) .. " liters / " .. math.Round(Capacity * 0.264172,1) .. " gallons")
 
-			acemenupanel:CPanelText("RestrictedFlow", "Airflow restriction: " .. math.Round(AirflowRestrictiveness * 100,1) .. "%")
+			-- Same heat exchanger model the server runs (ace/shared/mobility/thermal_model.lua).
+			local Thermal = ACE.Mobility.Thermal
+			local FrontM2 = math.max(Width - Wall * 2, 0) * math.max(Height - Wall * 2, 0) * 0.00064516
+			local DepthM = Length * 0.0254
+			local function Rating(SpeedMS, Fan)
+				local Face = Thermal.FaceVelocity(DepthM, SpeedMS, Fan)
+				return math.Round(Thermal.RadiatorRating(FrontM2, DepthM, Face, 80) / 1000, 1)
+			end
 
-			acemenupanel:CPanelText("Area", "Total Fin Surface Area: " .. math.Round(TotalSurfaceArea,1) .. " m^2")
-			local specificHeat = (EmptyMass * 0.9211 + Capacity * 4.184) / Mass
-			local KJTo100C = Mass * specificHeat * 100 * ACE.RadiatorHeatCap --Heat capacity of the radiator. Joules needed to raise the radiator to 100C.
-			acemenupanel:CPanelText("ThermalStorage", "" .. math.Round(KJTo100C,1) .. " kilojoules needed to raise the radiator to 100C")
+			acemenupanel:CPanelText("Core", "Core: " .. math.Round(FrontM2, 2) .. " m^2 face, " .. math.Round(DepthM * 100, 1) .. " cm deep (Length is the depth)")
+			acemenupanel:CPanelText("CoolStand", "Cooling at 100 °C coolant, 20 °C air, standing: " .. Rating(0, 0) .. " kW, with fan: " .. Rating(0, 1) .. " kW")
+			acemenupanel:CPanelText("CoolMove", "At 40 km/h with fan: " .. Rating(40 / 3.6, 1) .. " kW. An engine rejects roughly its own power to coolant at full load.")
 
 
 	end

@@ -14,6 +14,7 @@ net.Receive("ACE_SettingsSync", function(_, ply)
             ace_gunfire = GetConVar("ace_gunfire"):GetFloat(),
             ace_legacyrecoil = GetConVar("ace_legacyrecoil"):GetFloat(),
             ace_wind = GetConVar("ace_wind"):GetFloat(),
+            ace_exhaust_smoke = GetConVar("ace_exhaust_smoke"):GetFloat(),
 
             -- Damage Scaling
             ace_healthmod = GetConVar("ace_healthmod"):GetFloat(),

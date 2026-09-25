@@ -787,6 +787,51 @@ do
 		return this.Stalled and 1 or 0
 	end
 
+	-- Returns how fast a wheel driven by an ACF gearbox turns against its hub, in RPM
+	[nodiscard]
+	e2function number entity:acfWheelRPM()
+		if not IsValid(this) or this.ACEWheelW == nil then return self:throw("Entity is not a wheel driven by an ACF gearbox", 0) end
+		if restrictInfo(self.player, this) then return 0 end
+
+		return round(this.ACEWheelW * 30 / pi)
+	end
+
+	-- Returns the speed ratio (turbine / pump, 0-1) of an ACF automatic gearbox's torque converter
+	[nodiscard]
+	e2function number entity:acfConverterRatio()
+		if not isGearbox(this) then return self:throw("Entity is not a valid ACF gearbox", 0) end
+		if restrictInfo(self.player, this) then return 0 end
+
+		return this.ConverterRatio or 0
+	end
+
+	-- Returns the coolant temperature of an ACF engine, in °C
+	[nodiscard]
+	e2function number entity:acfCoolantTemp()
+		if not isEngine(this) then return self:throw("Entity is not a valid ACF engine", 0) end
+		if restrictInfo(self.player, this) then return 0 end
+
+		return round(this.Heat or ACE.AmbientTemp, 1)
+	end
+
+	-- Returns the metal (block) temperature of an ACF engine, in °C
+	[nodiscard]
+	e2function number entity:acfBlockTemp()
+		if not isEngine(this) then return self:throw("Entity is not a valid ACF engine", 0) end
+		if restrictInfo(self.player, this) then return 0 end
+
+		return round(this.BlockHeat or this.Heat or ACE.AmbientTemp, 1)
+	end
+
+	-- Returns 1 if an ACF engine's coolant is boiling
+	[nodiscard]
+	e2function number entity:acfBoiling()
+		if not isEngine(this) then return self:throw("Entity is not a valid ACF engine", 0) end
+		if restrictInfo(self.player, this) then return 0 end
+
+		return this.CoolantBoiling and 1 or 0
+	end
+
 	-- Sets the gear ratio of a CVT, set to 0 to use automatic calculation
 	e2function void entity:acfCVTRatio(number ratio)
 		if not isGearbox(this) then return self:throw("Entity is not a valid ACF gearbox") end

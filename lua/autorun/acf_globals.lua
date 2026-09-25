@@ -214,6 +214,13 @@ ACE.DustMaterialColor = {
 
 --------------------------------------------------------------------------------------
 
+---------------------------------- Replicated Convars ----------------------------------
+-- Created in both realms so clients can read the server's value.
+
+-- Engines with a linked exhaust entity puff smoke from it (drawn on clients; each client can
+-- also turn it off locally with ace_exhaust_smoke_draw).
+CreateConVar("ace_exhaust_smoke", 1, bit.bor(FCVAR_ARCHIVE, FCVAR_REPLICATED), "Allow exhaust smoke from engines with a linked exhaust entity.", 0, 1)
+
 ---------------------------------- Serverside Convars ----------------------------------
 if SERVER then
 

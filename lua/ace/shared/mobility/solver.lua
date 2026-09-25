@@ -76,13 +76,161 @@ local function solveOne(C)
 	end
 end
 
+-- Gaussian elimination with partial pivoting on an M×M system (in place). Near-singular pivots
+-- (redundant constraints) solve to zero instead of blowing up.
+local function gauss(A, R, M)
+	for K = 1, M do
+		local P, Best = K, abs(A[K][K])
+		for I = K + 1, M do
+			local V = abs(A[I][K])
+			if V > Best then P, Best = I, V end
+		end
+		if P ~= K then A[P], A[K] = A[K], A[P]; R[P], R[K] = R[K], R[P] end
+		local Piv = A[K][K]
+		if abs(Piv) > 1e-14 then
+			local RowK = A[K]
+			for I = K + 1, M do
+				local RowI = A[I]
+				local F = RowI[K] / Piv
+				if F ~= 0 then
+					for J = K, M do RowI[J] = RowI[J] - F * RowK[J] end
+					R[I] = R[I] - F * R[K]
+				end
+			end
+		end
+	end
+	local X = {}
+	for K = M, 1, -1 do
+		local RowK = A[K]
+		local Sum = R[K]
+		for J = K + 1, M do Sum = Sum - RowK[J] * X[J] end
+		local Piv = RowK[K]
+		X[K] = abs(Piv) > 1e-14 and Sum / Piv or 0
+	end
+	return X
+end
+
+-- Largest system solved directly; bigger ones (tanks with many road wheels) fall back to
+-- extra Gauss-Seidel sweeps.
+Solver.DirectLimit = 40
+
+--[[
+	Direct solve of the boxed velocity problem  A·λ = -b,  |λ_i| <= Max_i  with an active-set
+	loop (Murty's principal pivoting, as used for friction LCPs in Baraff 1994, "Fast contact force
+	computation for nonpenetrating rigid bodies"). A drivetrain is stiff by nature: a gearbox
+	input shaft of 0.02 kg·m² sits between an engine and wheels 100-1000 times heavier, and
+	Gauss-Seidel needs hundreds of sweeps to converge there. Left unconverged it hands the two
+	sides of an axle different torques. The direct solve is exact in one pass.
+]]
+local function directSolve(Constraints, Count)
+	local Idx = {}
+	for I = 1, Count do
+		local C = Constraints[I]
+		if C.Mass ~= 0 then Idx[#Idx + 1] = C end
+	end
+	local N = #Idx
+	if N == 0 then return true end
+	if N > Solver.DirectLimit then return false end
+
+	local B, A = {}, {}
+	for I = 1, N do
+		local C = Idx[I]
+		local E = -C.Target
+		for K = 1, #C.Bodies do E = E + C.Coefs[K] * C.Bodies[K].W end
+		B[I] = E
+	end
+	for I = 1, N do
+		local Ci = Idx[I]
+		local Row = {}
+		for J = 1, N do
+			local Cj = Idx[J]
+			local Sum = 0
+			for P = 1, #Ci.Bodies do
+				local Body = Ci.Bodies[P]
+				if Body.InvJ ~= 0 then
+					for Q = 1, #Cj.Bodies do
+						if Cj.Bodies[Q] == Body then Sum = Sum + Ci.Coefs[P] * Cj.Coefs[Q] * Body.InvJ end
+					end
+				end
+			end
+			Row[J] = Sum
+		end
+		A[I] = Row
+	end
+
+	local State, L = {}, {}
+	for I = 1, N do State[I], L[I] = 0, 0 end
+
+	for _ = 1, 2 * N + 2 do
+		local Free = {}
+		for I = 1, N do
+			if State[I] == 0 then Free[#Free + 1] = I else L[I] = State[I] * Idx[I].Max end
+		end
+		local M = #Free
+		local Sys, Rhs = {}, {}
+		for P = 1, M do
+			local I = Free[P]
+			local Ai = A[I]
+			local Row = {}
+			for Q = 1, M do Row[Q] = Ai[Free[Q]] end
+			-- A tiny compliance keeps redundant (looped) constraints solvable.
+			Row[P] = Row[P] * (1 + 1e-9) + 1e-12
+			Sys[P] = Row
+			local R = -B[I]
+			for J = 1, N do
+				if State[J] ~= 0 then R = R - Ai[J] * L[J] end
+			end
+			Rhs[P] = R
+		end
+		local X = gauss(Sys, Rhs, M)
+		for P = 1, M do L[Free[P]] = X[P] end
+
+		local Changed = false
+		for I = 1, N do
+			if State[I] == 0 then
+				local Max = Idx[I].Max
+				if L[I] > Max then State[I], Changed = 1, true
+				elseif L[I] < -Max then State[I], Changed = -1, true end
+			end
+		end
+		if not Changed then
+			-- A clamped constraint whose residual now points the other way wants less than its limit.
+			for I = 1, N do
+				if State[I] ~= 0 then
+					local V = B[I]
+					local Ai = A[I]
+					for J = 1, N do V = V + Ai[J] * L[J] end
+					if (State[I] == 1 and V > 1e-9) or (State[I] == -1 and V < -1e-9) then
+						State[I], Changed = 0, true
+					end
+				end
+			end
+		end
+		if not Changed then break end
+	end
+
+	for I = 1, N do
+		local C = Idx[I]
+		local Lambda = L[I]
+		C.Acc = Lambda
+		if Lambda ~= 0 then
+			for K = 1, #C.Bodies do
+				local Body = C.Bodies[K]
+				Body.W = Body.W + C.Coefs[K] * Lambda * Body.InvJ
+			end
+		end
+	end
+	return true
+end
+
 --- Runs one substep: applies body torques, then solves all constraints.
--- Constraints keep their accumulated impulse (Acc) between calls. Zero it with
--- Solver.Reset before the first substep of a tick.
+-- Small systems are solved directly; larger ones by warm-started Gauss-Seidel.
+-- Zero accumulated impulses with Solver.Reset before the first substep of a tick.
 -- @param Bodies Array of bodies (their Torque fields are applied then cleared).
 -- @param Constraints Array of constraints.
 -- @param H Substep length in seconds.
--- @param Iterations Gauss-Seidel sweeps; each sweep runs forwards then backwards.
+-- @param Iterations Gauss-Seidel sweeps; each sweep runs forwards then backwards. After a direct
+-- solve two polishing sweeps are run to absorb round-off.
 function Solver.Step(Bodies, Constraints, H, Iterations)
 	for I = 1, #Bodies do
 		local B = Bodies[I]
@@ -94,33 +242,42 @@ function Solver.Step(Bodies, Constraints, H, Iterations)
 
 	local Count = #Constraints
 	for I = 1, Count do
-		local C = Constraints[I]
-		local Prev = C.Max
-		prepare(C, H)
-		-- Warm start: re-apply last substep's impulse, clamped to this substep's capacity.
-		if Prev and C.Acc ~= 0 and C.Mass ~= 0 then
-			local Warm = C.Acc
-			if Warm > C.Max then Warm = C.Max elseif Warm < -C.Max then Warm = -C.Max end
-			C.Acc = Warm
-			for J = 1, #C.Bodies do
-				local B = C.Bodies[J]
-				B.W = B.W + C.Coefs[J] * Warm * B.InvJ
-			end
-		else
-			C.Acc = 0
-		end
+		prepare(Constraints[I], H)
+		Constraints[I].Acc = 0
 	end
 
-	for _ = 1, Iterations or 8 do
+	local Sweeps = Iterations or 8
+	if directSolve(Constraints, Count) then
+		Sweeps = 2
+	else
+		-- Warm start from the previous substep's impulses, clamped to this substep's capacity.
+		for I = 1, Count do
+			local C = Constraints[I]
+			local Warm = C.Prev or 0
+			if Warm ~= 0 and C.Mass ~= 0 then
+				if Warm > C.Max then Warm = C.Max elseif Warm < -C.Max then Warm = -C.Max end
+				C.Acc = Warm
+				for J = 1, #C.Bodies do
+					local B = C.Bodies[J]
+					B.W = B.W + C.Coefs[J] * Warm * B.InvJ
+				end
+			end
+		end
+		Sweeps = Sweeps * 4
+	end
+
+	for _ = 1, Sweeps do
 		for I = 1, Count do solveOne(Constraints[I]) end
 		for I = Count, 1, -1 do solveOne(Constraints[I]) end
 	end
+	for I = 1, Count do Constraints[I].Prev = Constraints[I].Acc end
 end
 
 --- Clears accumulated impulses (call when the constraint set is rebuilt).
 function Solver.Reset(Constraints)
 	for I = 1, #Constraints do
 		Constraints[I].Acc = 0
+		Constraints[I].Prev = nil
 		Constraints[I].Max = nil
 	end
 end

@@ -6,7 +6,7 @@
 -- ACF-3 PR #556 (TeeMeeFe, with the crossfade from mgcheezus's interpolation chip).
 --
 -- Bank format:
---   { Exhaust = bool, OffVolume = 0-1, OnVolume = 0-1,
+--   { Exhaust = bool, OffVolume = 0-1, OnVolume = 0-1, Muffle = 0-1 (cabin muffling, 0 = off),
 --     Sounds = { { Path = string, RPM = number, Pitch = 1-255, Volume = 0-2, Width = 0-15 }, ... } }
 
 ACE = ACE or {}
@@ -22,7 +22,48 @@ EngineSound.MaxPathLength      = 200
 EngineSound.MaxVolume          = 2
 EngineSound.UpdateInterval     = 0.05 -- seconds between RPM/throttle updates (20 Hz)
 EngineSound.MaxExhaustDistance = 512 -- same as the fuel tank link distance
-EngineSound.SpeedOfSound       = 343 * 39.37 -- units per second
+EngineSound.SpeedOfSound       = 343 / 0.0254 -- 343 m/s in units per second (1 unit = 0.0254 m), ~13504
+EngineSound.SpinDownStopRPM    = 30 -- after shut-off the sound follows the crank down and stops below this
+EngineSound.MaxSpinDownTime    = 60 -- seconds; safety cap on how long a switched-off engine keeps streaming
+EngineSound.MaxCylinders       = 15 -- sent in 4 bits for the starter's compression pulse
+
+-- Legacy single-sound model. Off throttle (closed throttle: idling or engine braking) the sound is
+-- LegacyOffLevel of its full-throttle level at the same RPM.
+EngineSound.LegacyOffLevel = 0.35
+
+--- Pitch and volume of the legacy single engine sound.
+-- Full-throttle volume is the original ACE formula; closing the throttle scales it down to
+-- LegacyOffLevel, so engine braking at high RPM is no longer nearly as loud as full power.
+-- @param Legacy table { Pitch = legacy pitch percentage, Limit = redline RPM }.
+-- @param RPM number Crank RPM.
+-- @param Throttle number Throttle from 0 to 1.
+-- @return number Pitch (not clamped).
+-- @return number Volume (not clamped).
+function EngineSound.LegacyPitchVolume(Legacy, RPM, Throttle)
+	local Pitch = math.min(20 + (RPM * (Legacy.Pitch / 100)) / 50, 255)
+	local Full = 0.25 + (0.1 + 0.9 * ((RPM / math.max(Legacy.Limit, 1)) ^ 1.5)) / 1.5
+	local Off = EngineSound.LegacyOffLevel
+
+	return Pitch, Full * (Off + (1 - Off) * Throttle)
+end
+
+--- Sound level (SNDLVL, dB) an engine's sound is created with.
+-- The engine's MaxDB (70 + 60 * hp / 2400, x0.15 for electrics) went up to 130 dB, which in
+-- Source is SNDLVL_130dB "air raid siren": its attenuation (20 / (dB - 50)) is a quarter of
+-- SNDLVL_75dB's, so a big tank engine stayed audible across the map. Above 70 dB (SNDLVL_70dB,
+-- "car") the excess is compressed to 30%, so a 1500 hp engine gets ~81 dB (SNDLVL_80dB "mini-bike,
+-- outboard motor") and nothing exceeds SNDLVL_90dB ("passing motorcycle"). Quiet engines keep
+-- their level but never go below SNDLVL_45dB, because 0 is SNDLVL_NONE (heard everywhere) and
+-- Source attenuates everything at or below 50 dB the same way. Values: GMod wiki Enums/SNDLVL.
+-- @param MaxDB number The engine's MaxDB.
+-- @return number Sound level for CSoundPatch:SetSoundLevel.
+function EngineSound.SoundLevel(MaxDB)
+	MaxDB = tonumber(MaxDB) or 75
+
+	if MaxDB <= 70 then return math.Clamp(math.Round(MaxDB), 45, 70) end
+
+	return math.min(math.Round(70 + (MaxDB - 70) * 0.3), 90)
+end
 
 local BankBits  = 3 -- up to 7 banks
 local SoundBits = 5 -- up to 31 sounds
@@ -88,6 +129,7 @@ function EngineSound.SanitizeBanks(Banks)
 					Exhaust   = Bank.Exhaust == true,
 					OffVolume = Round(Number(Bank.OffVolume, 0.25, 0, 1), 2),
 					OnVolume  = Round(Number(Bank.OnVolume, 1, 0, 1), 2),
+					Muffle    = Round(Number(Bank.Muffle, 0, 0, 1), 2),
 					Sounds    = Sounds,
 				}
 			end
@@ -113,6 +155,7 @@ function EngineSound.WriteBanks(Banks)
 		net.WriteBool(Bank.Exhaust)
 		net.WriteUInt(Round(Bank.OffVolume * 100), 7)
 		net.WriteUInt(Round(Bank.OnVolume * 100), 7)
+		net.WriteUInt(Round((Bank.Muffle or 0) * 100), 7)
 		net.WriteUInt(SoundCount, SoundBits)
 
 		for J = 1, SoundCount do
@@ -137,6 +180,7 @@ function EngineSound.ReadBanks()
 			Exhaust   = net.ReadBool(),
 			OffVolume = net.ReadUInt(7) / 100,
 			OnVolume  = net.ReadUInt(7) / 100,
+			Muffle    = net.ReadUInt(7) / 100,
 			Sounds    = {},
 		}
 
