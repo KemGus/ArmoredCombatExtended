@@ -48,6 +48,15 @@ function Vehicle.Ground(ShareMass, R, GroundSpeed, Mu, NormalLoad, Grounded, Whe
 	if not Grounded or R <= 0 or ShareMass <= 0 then return nil end
 	local W = GroundSpeed / R
 	if WheelW and Meshed then
+		--[[
+			The track moves with the sprocket only while their speeds roughly agree (the pitch
+			radius differs from the sprocket prop's radius, so allow a wide band). A sprocket far
+			faster than the vehicle is slipping in or off its track: coupling the vehicle's
+			inertia to it at its own speed made the solver brake that inertia through a free
+			sprocket every tick, flipping it between +169 and -169 rad/s on an Abrams at
+			1.8 m/s. It is left uncoupled until it comes back into step.
+		]]
+		if math.abs(WheelW * R - GroundSpeed) > max(2, math.abs(GroundSpeed)) then return nil end
 		W = WheelW
 	elseif WheelW then
 		-- Adhesion band: below roughly 0.3 m/s or 8 % slip a tyre is still in its linear,

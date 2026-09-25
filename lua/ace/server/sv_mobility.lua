@@ -593,9 +593,13 @@ end
 ]]
 local function engineHeldWheels(EngineDescs)
 	if not EngineDescs then return nil end
+	-- An engine that is off (and not cranking) holds the wheels whatever its crank speed reads:
+	-- on a standing vehicle that speed only comes from the wheels jiggling through the clutch,
+	-- and waiting for it to reach zero kept the jiggle going. Each wheel is still only held
+	-- once its own ground speed is near zero.
 	for _, E in ipairs(EngineDescs) do
 		local State = E.State
-		if not State or State.Running or abs(State.W or 0) > 1 then return nil end
+		if not State or State.Running or (State.Cranking or 0) > 0 then return nil end
 	end
 
 	local Held = {}
@@ -674,10 +678,25 @@ local function solveGroup(Ctx, EngineDescs, Roots, PhysMass, TotalMass, Dt)
 		]]
 		local Box, Side = W.Box, W.Link and W.Link.Side
 		local Pedal = IsValid(Box) and (Side == 0 and Box.LBrake or Box.RBrake) or 0
-		local Stopped = abs(W.GroundSpeed or 0) < 0.25
+		--[[
+			A hold engages below 0.25 m/s but, once on, lets go only past 1.5 m/s: the chassis
+			rocking on its suspension reads up to about 0.6 m/s at the wheel centres, and a lock
+			that let go on that was made and removed every few ticks, each time kicking the car
+			and keeping it rocking (measured on the Volvo parked in gear).
+		]]
+		local Speed = abs(W.GroundSpeed or 0)
+		local Stopped = Speed < (IsValid(W.BrakeLock) and 1.5 or 0.25)
 		local Parked = EngineHeld and EngineHeld[W] and W.Grounded
 		brakeLock(W, (M.BrakePedal(Pedal) >= LockPedal or Parked) and Stopped and not W.BrakeSlipped)
 		local Held = IsValid(W.BrakeLock) or (Pedal or 0) > 0 and Stopped and abs(W.W * W.Radius) < 0.5
+		--[[
+			A wheel locked to its hub is a fixed point for the drivetrain and gets no impulse.
+			Solved as a free wheel, the solver pushed it every tick against the lock and the lock
+			pushed back, so a held car vibrated in place (a parked Volvo, and one on the brake
+			pedal: 4 m of jitter in 10 s). The torque the drivetrain puts through it is still
+			measured (AnchorTorque), so a pedal hold lets go once the engine overpowers the brake.
+		]]
+		W.Anchored = IsValid(W.BrakeLock) or nil
 		W.Braking = (Pedal or 0) > 0
 		W.Ground = not Held and Vehicle.Ground(Share, W.Radius, W.GroundSpeed, W.Mu, Share * Gravity, W.Grounded, W.W, W.Meshed) or nil
 		--[[
@@ -736,7 +755,14 @@ local function solveGroup(Ctx, EngineDescs, Roots, PhysMass, TotalMass, Dt)
 	-- clutch, a steep slope with a light pedal): it slips, so the static lock must let go.
 	for _, Gearbox in ipairs(Sys.Gearboxes) do
 		for _, C in ipairs(Gearbox.Brakes or {}) do
-			if C.Wheel then C.Wheel.BrakeSlipped = C.Max and C.Max > 0 and C.Max < math.huge and abs(C.Acc) >= 0.98 * C.Max or false end
+			local W = C.Wheel
+			if W and W.Anchored then
+				-- A held wheel: the brake slips once the drivetrain pushes harder than it holds.
+				-- A parking hold (no pedal, engine off) only lets go when its conditions end.
+				W.BrakeSlipped = (C.Cap or 0) > 0 and abs(W.AnchorTorque or 0) > C.Cap or false
+			elseif W then
+				W.BrakeSlipped = C.Max and C.Max > 0 and C.Max < math.huge and abs(C.Acc) >= 0.98 * C.Max or false
+			end
 		end
 	end
 
@@ -749,7 +775,7 @@ local function solveGroup(Ctx, EngineDescs, Roots, PhysMass, TotalMass, Dt)
 			what the drivetrain delivered (the solver pulling a wheel back up to ground speed)
 			would otherwise come out as a push that grows with speed.
 		]]
-		local Imp = W.Impulse or 0
+		local Imp = W.Anchored and 0 or W.Impulse or 0
 		local Road = W.GroundImpulse or 0
 		Road = Road * Imp > 0 and (Road > 0 and min(Road, Imp) or max(Road, Imp)) or 0
 		Imp = Imp - Road * (1 - RoadScale)

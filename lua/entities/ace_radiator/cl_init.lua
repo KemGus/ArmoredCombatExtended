@@ -58,6 +58,21 @@ do
 		 end
 
 		acemenupanel:CPanelText("Name", Table.name, "DermaDefaultBold")
+
+		-- Preview of the radiator model (it is scaled to the chosen size when spawned).
+		if not IsValid(acemenupanel.CData.DisplayModel) then
+			local Preview = vgui.Create( "DModelPanel", acemenupanel.CustomDisplay )
+			Preview:SetSize( acemenupanel:GetWide(), acemenupanel:GetWide() * 0.6 )
+			Preview.LayoutEntity = function() end
+			acemenupanel.CData.DisplayModel = Preview
+			acemenupanel.CustomDisplay:AddItem( Preview )
+		end
+		local RadModel = ACE.ModelData["Radiator"] and ACE.ModelData["Radiator"].Model or "models/radiators/radiator_med.mdl"
+		acemenupanel.CData.DisplayModel:SetModel( RadModel )
+		acemenupanel.CData.DisplayModel:SetCamPos( Vector( 55, 90, 45 ) )
+		acemenupanel.CData.DisplayModel:SetLookAt( Vector( 0, 0, 0 ) )
+		acemenupanel.CData.DisplayModel:SetFOV( 25 )
+
 		acemenupanel:CPanelText("Desc", Table.desc)
 
 		--------------- NEW CONFIG ---------------

@@ -58,9 +58,15 @@ end
 local function wheelBody(Sys, Wheel)
 	local B = Sys.WheelBodies[Wheel.Key]
 	if B then return B end
-	B = Solver.Body(Wheel.J, Wheel.W)
+	-- An anchored wheel (held to its hub by a parking lock) is fixed: infinite inertia, no spin.
+	if Wheel.Anchored then
+		B = Solver.Body(math.huge, 0)
+	else
+		B = Solver.Body(Wheel.J, Wheel.W)
+	end
 	B.Wheel = Wheel
-	B.W0 = Wheel.W
+	B.W0 = B.W
+	Wheel.AnchorTorque = nil
 	Wheel.Impulse = 0
 	Wheel.GroundImpulse = 0
 	Sys.WheelBodies[Wheel.Key] = B
@@ -101,7 +107,7 @@ local function kinematicInputW(Gearbox)
 	for _, Out in ipairs(Gearbox.Outputs or {}) do
 		if not (Out.Gearbox and Out.Gearbox.BrakeOnly) then
 			local W
-			if Out.Wheel then W = Out.Wheel.W elseif Out.Gearbox then W = kinematicInputW(Out.Gearbox) end
+			if Out.Wheel then W = Out.Wheel.Anchored and 0 or Out.Wheel.W elseif Out.Gearbox then W = kinematicInputW(Out.Gearbox) end
 			if W == nil then return nil end
 			local S = Out.Side == 0 and 0 or 1
 			Sum[S], N[S] = Sum[S] + W, N[S] + 1
@@ -432,11 +438,23 @@ function Drivetrain.Step(Sys, Dt, Substeps, Iterations)
 		Engine.AvgTorque = Engine.TorqueSum / Substeps
 	end
 
+	-- Torque the drivetrain puts through each anchored wheel (last substep), for its hold to
+	-- compare with the brake: brakes themselves are left out, they are what holds it.
+	for _, C in ipairs(Sys.Constraints) do
+		if C.Tag ~= "brake" and C.Acc ~= 0 then
+			for I, B in ipairs(C.Bodies) do
+				if B.Wheel and B.InvJ == 0 then
+					B.Wheel.AnchorTorque = (B.Wheel.AnchorTorque or 0) + C.Coefs[I] * C.Acc / H
+				end
+			end
+		end
+	end
+
 	for _, B in ipairs(Sys.Wheels) do
 		local GB = B.GroundBody
 		local Ground = GB and GB.J * (GB.W - GB.W0) or 0
 		B.Wheel.GroundImpulse = Ground
-		B.Wheel.Impulse = B.J * (B.W - B.W0) + Ground
+		B.Wheel.Impulse = B.InvJ == 0 and 0 or B.J * (B.W - B.W0) + Ground
 		B.Wheel.WOut = B.W
 	end
 

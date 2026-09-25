@@ -469,7 +469,15 @@ function PANEL:Paint(W, H)
 				local SX = self:ToScreen(Line.val, 0, PX, PY, PW, PH)
 
 				surface.DrawLine(SX, PY, SX, PY + PH)
-				draw.SimpleText(Line.label, Font, SX + 2, PY + 1, Line.col, TEXT_ALIGN_LEFT, TEXT_ALIGN_TOP)
+				-- Labels sit right of the line unless that would run past the plot (a redline at
+				-- the right edge); then they go on its left.
+				surface.SetFont(Font)
+				local TW = surface.GetTextSize(Line.label or "")
+				if SX + 2 + TW > PX + PW then
+					draw.SimpleText(Line.label, Font, SX - 2, PY + 1, Line.col, TEXT_ALIGN_RIGHT, TEXT_ALIGN_TOP)
+				else
+					draw.SimpleText(Line.label, Font, SX + 2, PY + 1, Line.col, TEXT_ALIGN_LEFT, TEXT_ALIGN_TOP)
+				end
 			end
 		elseif Line.val >= self.MinY and Line.val <= self.MaxY then
 			local _, SY = self:ToScreen(self.MinX, Line.val, PX, PY, PW, PH)
@@ -506,7 +514,11 @@ function PANEL:Paint(W, H)
 
 		surface.SetDrawColor(Point.col)
 		surface.DrawRect(SX - 3, SY - 3, 7, 7)
-		draw.SimpleText(Point.label, Font, SX, SY - 4, Point.col, TEXT_ALIGN_CENTER, TEXT_ALIGN_BOTTOM)
+		-- Centred over the point, but kept inside the panel (peak power is often at the redline).
+		surface.SetFont(Font)
+		local TW = surface.GetTextSize(Point.label or "")
+		local LX = Clamp(SX, TW * 0.5 + 1, PX + PW - TW * 0.5)
+		draw.SimpleText(Point.label, Font, LX, SY - 4, Point.col, TEXT_ALIGN_CENTER, TEXT_ALIGN_BOTTOM)
 	end
 
 	-- Axes
