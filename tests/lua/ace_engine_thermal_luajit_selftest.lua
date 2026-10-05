@@ -210,15 +210,20 @@ do
 	run(TS, T, 3600, 1 / 33, TS.RatedHeat, S.RatedW)
 	check(T.Tc < 120 and Th.Derate(TS, T.Tb) == 1, "turbine oil stays cool at full power", T.Tc)
 
-	-- Electric motor: its own cooling holds rated losses.
+	-- Electric motor: no implicit cooler, so with nothing linked half its peak losses for an hour
+	-- overheat it, and a linked radiator holds them.
 	local Leaf = { id = "E", name = "Electric motor", category = "Electric", fuel = "Electric", enginetype = "Electric",
 		torque = 280, idlerpm = 10, limitrpm = 10400, weight = 60 }
 	local SE = M.Engine.Build(Leaf, ACE.GetEngineTorqueCurve(Leaf))
 	local TSE = Th.Build(SE, 60, 1)
+	check(TSE.BuiltinUA == 0, "motor has no implicit cooler", TSE.BuiltinUA)
 	local TE = Th.NewState(Ambient)
 	run(TSE, TE, 3600, 1 / 33, TSE.RatedHeat * 0.5, SE.RatedW)
-	check(TE.Tc < 100 and Th.Derate(TSE, TE.Tb) == 1, "motor at half its peak losses stays cool", TE.Tc)
-	print(("turbine full power: oil %.0f °C; motor at half peak losses: %.0f °C"):format(T.Tc, TE.Tc))
+	check(Th.Derate(TSE, TE.Tb) < 1, "uncooled motor at half its peak losses overheats", TE.Tb)
+	local TR = Th.NewState(Ambient)
+	run(TSE, TR, 3600, 1 / 33, TSE.RatedHeat * 0.5, SE.RatedW, { Rad = true, Speed = 10 })
+	check(TR.Tc < 100 and Th.Derate(TSE, TR.Tb) == 1, "motor with a radiator at half its peak losses stays cool", TR.Tc)
+	print(("turbine full power: oil %.0f °C; motor at half peak losses: %.0f °C windings uncooled, %.0f °C coolant with a radiator"):format(T.Tc, TE.Tb, TR.Tc))
 end
 
 print(("thermal self-test: %d checks passed"):format(Passed))

@@ -426,6 +426,17 @@ function ENT:Think()
 		end
 	end
 
+	--[[
+		A radiator cooling only batteries (no engine turning its fan) runs an electric fan off the
+		battery while the cells are warm (acf_fueltank batteryLoop sets BatteryFanWanted).
+	]]
+	local Battery = self.FanBattery
+	if self.FanRunning == 0 and self.Active and self.BatteryFanWanted and IsValid(Battery) and Battery.DrawEnergy then
+		local Dt = CT - (self.LastThink or CT)
+		if Dt > 0 then Battery:DrawEnergy(self.ActiveTorqueDemand * Dt / 3.6e6, Dt) end
+		self.FanRunning = 1
+	end
+
 
 
 	if CT > self.NextFanLogic then
@@ -517,6 +528,9 @@ function ENT:Think()
 		for _, Ent in pairs(self.Master) do
 			if IsValid(Ent) then Linked = true break end
 		end
+		for _, Ent in pairs(self.Batteries or {}) do
+			if IsValid(Ent) then Linked = true break end
+		end
 		if not Linked then
 			self.HeatRejected = 0
 			self.Heat = ACE.AmbientTemp + ((self.Heat or ACE.AmbientTemp) - ACE.AmbientTemp) * math.exp(-DeltaTime2 * ACE.GetHeatRate() / 60)
@@ -544,6 +558,12 @@ function ENT:OnRemove()
 	for _, Engine in ipairs(table.Copy(self.Master)) do
 		if IsValid( Engine ) then
 			Engine:Unlink( self )
+		end
+	end
+
+	for _, Battery in ipairs(table.Copy(self.Batteries or {})) do
+		if IsValid( Battery ) then
+			Battery:Unlink( self )
 		end
 	end
 

@@ -917,8 +917,11 @@ end
 -- @return string
 function ENT:OverTorqueReason()
 	if self.MobRatingLimited then
-		return string.format("Gearbox over torque: the engine makes %d Nm, the gearbox is rated %d Nm - its clutch is slipping",
-			math.Round(self.MobEngineTorque or 0), math.Round(self.MaxTorque or 0))
+		-- The clutch carries the engine's torque plus what it takes to speed up or slow down the
+		-- engine's rotating mass (shifts, wheels gripping again, braking in gear), so a rating
+		-- only a little above the engine's peak still slips. Clutches are sized 1.2-2 times peak.
+		return string.format("Gearbox over torque: its clutch is slipping. It is rated %d Nm, the engine makes up to %d Nm, and shocks from shifts or braking in gear add more - use a gearbox rated about %d Nm",
+			math.Round(self.MaxTorque or 0), math.Round(self.MobEngineTorque or 0), math.Round(1.5 * (self.MobEngineTorque or 0)))
 	elseif (self.MobFade or 1) < 1 then
 		return string.format("Gearbox clutch slipping: it is overheated (%d C) and has lost grip", math.Round(self.ClutchTemp or 0))
 	end

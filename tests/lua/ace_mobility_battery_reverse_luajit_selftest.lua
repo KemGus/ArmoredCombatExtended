@@ -9,6 +9,11 @@ do
 	local F = assert(io.open(root .. "/lua/ace/shared/mobility/battery_model.lua", "rb"))
 	assert(loadstring(F:read("*a"), "battery_model.lua"))()
 	F:close()
+	if not (ACE.Mobility and ACE.Mobility.Thermal) then
+		F = assert(io.open(root .. "/lua/ace/shared/mobility/thermal_model.lua", "rb"))
+		assert(loadstring(F:read("*a"), "thermal_model.lua"))()
+		F:close()
+	end
 end
 local M = ACE.Mobility
 local E = M.Engine
@@ -155,6 +160,24 @@ do
 	B.ThermalStep(Pack, L1, 100, 20, 2)
 	for _ = 1, 100 do B.ThermalStep(Pack, L2, 1, 20, 2) end
 	near(L1.T, L2.T, 1e-6, "cooling is step-size independent")
+
+	-- Liquid loop through a radiator: 2C for an hour (far harder than any drive) stays inside the
+	-- discharge limit with a small core at road speed, and runs into it without one.
+	local Th = M.Thermal
+	local UA, Cair = Th.RadiatorAir(0.15, 0.03, Th.FaceVelocity(0.03, 15, 1))
+	local LoopG = B.LoopG(Pack, { { UA = UA, Cair = Cair } })
+	check(LoopG > 0 and LoopG < Pack.PlateG, "the loop is limited by the cold plate in series", LoopG, Pack.PlateG)
+	check(B.LoopG(Pack, {}) == 0, "no radiator, no loop")
+	local Hot, Cool = B.NewState(20), B.NewState(20)
+	for _ = 1, Steps do
+		B.Transfer(Pack, Hot, -2 * Wh / Steps, 3600 / Steps)
+		B.ThermalStep(Pack, Hot, 3600 / Steps, 20, 1)
+		B.Transfer(Pack, Cool, -2 * Wh / Steps, 3600 / Steps)
+		B.ThermalStep(Pack, Cool, 3600 / Steps, 20, 1, LoopG)
+	end
+	check(Hot.T > B.DischargeTmax - B.TaperK, "2C for an hour overheats an uncooled pack", Hot.T)
+	check(Cool.T < B.DischargeTmax - B.TaperK and Cool.T < Hot.T - 40, "a radiator loop keeps it below the limit", Cool.T)
+	if Verbose then print(("2C for an hour: %.1f °C uncooled, %.1f °C with a radiator loop (%.0f W/K)"):format(Hot.T, Cool.T, LoopG)) end
 end
 
 ------------------------------------------------------------------ battery: CC-CV and temperature limits

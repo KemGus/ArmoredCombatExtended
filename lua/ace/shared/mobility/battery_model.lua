@@ -59,7 +59,13 @@ end
 	CellCp: specific heat of the cells [J/(kg·K)], Steinhardt 2022 median for cylindrical cells.
 	CaseCp: steel housing [J/(kg·K)], Steinhardt 2022 table 3.
 	SkinH: natural convection from the pack's outer skin [W/(m²·K)]; Incropera table 1.1 gives
-	  2-25, the same 10 the engine skin uses (estimated). ACE packs have no cooling circuit.
+	  2-25, the same 10 the engine skin uses (estimated).
+	PlateH: cells to coolant through a liquid cold plate [W/(m²·K)] (estimated, inside the
+	  100-1000 range of forced liquid convection, Incropera table 1.1), over PlateShare of the
+	  pack's outer area (plates under the modules and fins between them: about a third,
+	  estimated).
+	LoopC: coolant flow of a battery loop as a capacity rate [W/K]: about 10 L/min of
+	  water-glycol (estimated from 8-15 L/min EV battery pumps) times 3.5 kJ/(L·K).
 	ChargeC: constant-current charge rate [1/h]. BU-409 describes the standard 1C charge; the
 	  M50 allows 0.7C continuous, EV packs accept more for short periods.
 	CVStart: state of charge where the cell reaches 4.2 V at 1C and the constant-voltage
@@ -74,6 +80,9 @@ Battery.Loss1C        = 0.03 * 5 / 3.63
 Battery.CellCp        = 912
 Battery.CaseCp        = 480
 Battery.SkinH         = 10
+Battery.PlateH        = 300
+Battery.PlateShare    = 1 / 3
+Battery.LoopC         = 10 / 60 * 3500
 Battery.ChargeC       = 1
 Battery.CVStart       = 0.85
 Battery.CutoffC       = 0.04
@@ -117,6 +126,7 @@ function Battery.Build(NominalWh, CellKg, CaseKg, AreaM2)
 		NominalWh = max(NominalWh, 1e-3),
 		C = max(CellKg * Battery.CellCp + CaseKg * Battery.CaseCp, 1),
 		G = max(AreaM2 or 0, 0) * Battery.SkinH,
+		PlateG = max(AreaM2 or 0, 0) * Battery.PlateShare * Battery.PlateH,
 	}
 end
 
@@ -265,6 +275,22 @@ function Battery.CalendarAge(State, SOC, Days)
 	State.DaysAged = State.DaysAged + Days
 end
 
+--- Conductance from the cells to the air through a liquid loop and linked radiators, [W/K].
+-- The cold plate and the radiators are in series; the coolant's own heat capacity is left out
+-- (a few litres against hundreds of kilograms of cells).
+-- @param Spec table Pack spec.
+-- @param Radiators table List of { UA = W/K, Cair = W/K } air sides, already shared out.
+-- @return number Conductance [W/K], and the radiators' part of it.
+function Battery.LoopG(Spec, Radiators)
+	local Gr = 0
+	for _, R in ipairs(Radiators) do
+		local Eps, Cmin = ACE.Mobility.Thermal.CrossFlowEffectiveness(R.UA, R.Cair, Battery.LoopC)
+		Gr = Gr + Eps * Cmin
+	end
+	if Gr <= 0 or (Spec.PlateG or 0) <= 0 then return 0, 0 end
+	return 1 / (1 / Spec.PlateG + 1 / Gr), Gr
+end
+
 --- Advances the pack's temperature: the loss heat collected since the last call goes in, the
 -- skin loses heat to the air. Exact for a constant heat input over the step.
 -- @param Spec table Pack spec.
@@ -272,7 +298,8 @@ end
 -- @param Dt number Real time since the last call [s].
 -- @param Ambient number Air temperature [°C].
 -- @param Scale number Heat time scale (ace_heat_timescale): heat moves this many times faster.
-function Battery.ThermalStep(Spec, State, Dt, Ambient, Scale)
+-- @param LoopG number|nil Extra conductance to the air through a cooling loop [W/K] (Battery.LoopG).
+function Battery.ThermalStep(Spec, State, Dt, Ambient, Scale, LoopG)
 	if Dt <= 0 then return end
 	Scale = Scale or 1
 	local H = Dt * Scale
@@ -281,9 +308,10 @@ function Battery.ThermalStep(Spec, State, Dt, Ambient, Scale)
 	local P = State.HeatJ / Dt
 	State.HeatJ = 0
 	local Ta = Ambient or 20
-	if Spec.G > 0 then
-		local Ts = Ta + P / Spec.G
-		State.T = Ts + (State.T - Ts) * exp(-Spec.G * H / Spec.C)
+	local G = Spec.G + (LoopG or 0)
+	if G > 0 then
+		local Ts = Ta + P / G
+		State.T = Ts + (State.T - Ts) * exp(-G * H / Spec.C)
 	else
 		State.T = State.T + P * H / Spec.C
 	end

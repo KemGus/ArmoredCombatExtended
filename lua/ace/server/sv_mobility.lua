@@ -192,17 +192,55 @@ local MeasuredGripConVar = CreateConVar("ace_mobility_measured_grip", "1", FCVAR
 local LockPedal = 0.3          -- brake fraction from which a stopped wheel is held statically
 local BrakeLocks = {}          -- [constraint] = wheel description, for cleanup
 
+-- Moment of inertia of a physics object about a world direction through its centre, kg·m².
+local function inertiaAbout(Phys, AxisWorld)
+	local A = Phys:WorldToLocalVector(AxisWorld)
+	local I = Phys:GetInertia()
+	return A.x * A.x * I.x + A.y * A.y * I.y + A.z * A.z * I.z
+end
+
 --[[
-	The body a wheel turns against: its Axis constraint's other end, else the chassis. A
-	parented entity's physics object is not simulated, so a constraint to it would hold
-	nothing: its physical parent is used.
+	A body with far less inertia about the axle than the wheel cannot hold the wheel's spin:
+	a constraint between them gives way, and a brake lock to it only spins it. The buggy's
+	rear wheels turn on a 25 kg axle rod with a hundredth of a wheel's inertia about its
+	length; locked to it, the rear axle and both wheels wound up to 9,000 deg/s. That rod is
+	itself held to the chassis about the axle, so the chassis stands in for it.
 ]]
-local function wheelHub(W)
+local function canHoldSpin(Hub, Wheel, AxisWorld)
+	local HubPhys, WheelPhys = Hub:GetPhysicsObject(), Wheel:GetPhysicsObject()
+	if not IsValid(HubPhys) or not IsValid(WheelPhys) or not AxisWorld then return true end
+	return inertiaAbout(HubPhys, AxisWorld) >= 0.25 * inertiaAbout(WheelPhys, AxisWorld)
+end
+
+--[[
+	The body a wheel turns against: its Axis constraint's other end, else the gearbox's
+	mounting, else (when that cannot hold the wheel's spin) the chassis. A parented entity's
+	physics object is not simulated, so a constraint to it would hold nothing: its physical
+	parent is used.
+]]
+local function wheelHub(W, Chassis)
+	local WheelPhys = W.Ent:GetPhysicsObject()
+	local WheelMass = IsValid(WheelPhys) and WheelPhys:GetMass() or 0
 	for _, C in ipairs(constraint.FindConstraints(W.Ent, "Axis")) do
 		local Other = C.Ent1 == W.Ent and C.Ent2 or C.Ent1
-		if IsValid(Other) and Other ~= W.Ent then return ACE.GetPhysicalParent(Other) or Other end
+		if IsValid(Other) and Other ~= W.Ent then
+			Other = ACE.GetPhysicalParent(Other) or Other
+			--[[
+				A prop much lighter than the wheel on an axis is a decoration turning with or
+				around it (a brake caliper, a hubcap), not what the wheel turns against: a brake
+				lock to it held nothing, as constraints give way between very different masses,
+				and the Taycan crawled on at 5 km/h with full brakes against a 1 kg caliper.
+			]]
+			local OtherPhys = Other:GetPhysicsObject()
+			if not IsValid(OtherPhys) or OtherPhys:GetMass() >= 0.5 * WheelMass then
+				if IsValid(Chassis) and not canHoldSpin(Other, W.Ent, W.AxisWorld) then return Chassis end
+				return Other
+			end
+		end
 	end
-	return ACE.GetPhysicalParent(W.Box)
+	local Mount = ACE.GetPhysicalParent(W.Box)
+	if IsValid(Mount) and IsValid(Chassis) and Mount ~= Chassis and not canHoldSpin(Mount, W.Ent, W.AxisWorld) then return Chassis end
+	return Mount
 end
 
 --[[
@@ -243,7 +281,7 @@ local function applyBrakeLock(W, Want)
 	if Want then
 		W.BrakeLockSeen = CurTime()
 		if IsValid(Lock) then return end
-		local Hub = IsValid(W.Ent) and wheelHub(W)
+		local Hub = IsValid(W.Ent) and (IsValid(W.Hub) and W.Hub or wheelHub(W))
 		if not IsValid(Hub) or Hub == W.Ent then return end
 		Lock = axleLock(W.Ent, Hub, W.AxisWorld)
 		if not IsValid(Lock) then return end
@@ -315,7 +353,7 @@ local function readWheel(Box, Link, BoxAngVel, Ctx)
 	]]
 	local Now = CurTime()
 	if not IsValid(Desc.Hub) or Now > (Desc.HubAt or 0) then
-		local Hub = wheelHub(Desc)
+		local Hub = wheelHub(Desc, Ctx.Chassis)
 		Desc.Hub = IsValid(Hub) and ACE.GetPhysicalParent(Hub) or nil
 		Desc.HubAt = Now + 2
 	end
@@ -767,7 +805,12 @@ local function solveGroup(Ctx, EngineDescs, Roots, PhysMass, TotalMass, Dt)
 			off, full brake). Track sprockets keep impulse braking: locking one mid-turn would
 			snap a brake-steered tank round.
 		]]
-		local Crawling = Speed < (IsValid(W.BrakeLock) and 4 or 3) and W.Grounded and not W.Meshed
+		--[[
+			A held lock does not let go because the ground trace missed for a tick: a wheel
+			bouncing on its suspension lost and found the ground every other tick, and its lock
+			was made and removed each time (buggy rear axle, 30 times in half a second).
+		]]
+		local Crawling = Speed < (IsValid(W.BrakeLock) and 4 or 3) and (W.Grounded or IsValid(W.BrakeLock)) and not W.Meshed
 		local PedalLock = M.BrakePedal(Pedal) >= LockPedal and (Stopped or Crawling)
 		-- Strictly true or false: nil means "leave the lock as it is", and a nil here (no engine
 		-- hold) left a released brake locked until the stale-lock timer dropped it 0.5 s later,
@@ -917,10 +960,13 @@ local function solveGroup(Ctx, EngineDescs, Roots, PhysMass, TotalMass, Dt)
 				prop ballsocketed to the chassis cannot pass torque about its own length, so the
 				reaction only spun the axle, until the physics engine deleted it (buggy: its rear
 				differential is parented to the axle). A real axle housing hands it to the chassis
-				through its suspension links.
+				through its suspension links. The same goes for any mounting too light about the
+				axle to hold the wheel's spin.
 			]]
 			local Root = ACE.GetPhysicalParent(W.Box)
-			if Root == W.Hub and IsValid(Ctx.Chassis) then Root = Ctx.Chassis end
+			if IsValid(Ctx.Chassis) and IsValid(Root) and Root ~= Ctx.Chassis and (Root == W.Hub or W.Hub == Ctx.Chassis) then
+				Root = Ctx.Chassis
+			end
 			local RootPhys = IsValid(Root) and Root:GetPhysicsObject()
 			if IsValid(RootPhys) then RootPhys:ApplyTorqueCenter(W.AxisWorld * Src) end
 		end

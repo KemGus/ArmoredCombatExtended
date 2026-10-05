@@ -21,7 +21,7 @@
 	    Steer, SteerRatio,  -- double differential steering input (-1..1) and ratio
 	    DriveCap,           -- torque the engaged gear's clutch pack can carry while shifting (nil = rigid)
 	    Efficiency,         -- mesh efficiency of the engaged path (0..1)
-	    SpinLoss,           -- constant churning/bearing drag at the input, N·m
+	    SpinLoss,           -- churning/bearing drag at the input at running speed, N·m
 	    Brake = {[0]=, [1]=},    -- brake torque per side at the wheels, N·m
 	    BrakeOnly,          -- can never transmit (every ratio is zero): brakes only, no drive
 	    Outputs = { {Side = 0|1, Wheel = Wheel} | {Side = 0|1, Gearbox = Gearbox} ... },
@@ -50,6 +50,24 @@ local TC = ACE.Mobility.TorqueConverter
 local abs = math.abs
 local min = math.min
 local max = math.max
+
+--[[
+	Drag that only exists while something turns fades in from standstill instead of acting at
+	full strength on the slightest motion. Gearbox no-load losses (oil churning, bearings) grow
+	with shaft speed (Naunheimer et al., Automotive Transmissions, 2nd ed., on load-independent
+	losses), and rolling resistance gets a smooth onset near zero speed, as tyre models give it
+	to stay well behaved at standstill (Pacejka, Tire and Vehicle Dynamics). Applied as full Coulomb
+	friction to a standing vehicle, the solver's drag on a shaft geared to the wheels went
+	through the wheels into the road, the tyre handed it back reversed, and the wheels turned
+	back and forth on their own (buggy, clutch pressed: 85 N·m of churning on each axle box
+	kept all four wheels creeping at 0.4 rad/s).
+]]
+local SpinLossFullW = 100 -- rad/s (about 950 rpm): churning reaches its rated value
+local RollFullSpeed = 0.5 -- m/s: rolling resistance is fully built up
+
+local function fadeIn(W, Full)
+	return min(abs(W) / Full, 1)
+end
 
 local function addConstraint(Sys, Bodies, Coefs, Cap, Target, Tag)
 	local C = Solver.Constraint(Bodies, Coefs, Cap, Target)
@@ -416,7 +434,7 @@ function Drivetrain.Step(Sys, Dt, Substeps, Iterations)
 			local Out = 0
 			for _, C in ipairs(Gearbox.Drive) do Out = Out + abs(C.Acc) end
 			local MeshLoss = (1 - (Gearbox.Efficiency or 0.97)) * Out / H
-			Solver.Drag(Gearbox.Body, (Gearbox.SpinLoss or 0) + MeshLoss, H)
+			Solver.Drag(Gearbox.Body, (Gearbox.SpinLoss or 0) * fadeIn(Gearbox.Body.W, SpinLossFullW) + MeshLoss, H)
 
 			if Gearbox.LSD then
 				-- Salisbury ramp: clamping force, and so locking torque, grows with input torque.
@@ -430,7 +448,7 @@ function Drivetrain.Step(Sys, Dt, Substeps, Iterations)
 
 		for _, B in ipairs(Sys.Wheels) do
 			local Roll = B.Wheel.RollDrag or 0
-			if Roll > 0 then Solver.Drag(B, Roll, H) end
+			if Roll > 0 then Solver.Drag(B, Roll * fadeIn(B.W * (B.Wheel.Radius or 0.3), RollFullSpeed), H) end
 		end
 
 		Solver.Step(Sys.Bodies, Sys.Constraints, H, Iterations or 6)

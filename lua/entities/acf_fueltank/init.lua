@@ -3,6 +3,8 @@ AddCSLuaFile("cl_init.lua")
 
 include("shared.lua")
 
+local BaseClass = baseclass.Get("ace_scalability")
+
 --don't forget:
 --armored tanks
 
@@ -73,6 +75,8 @@ do
 		Wire_TriggerOutput( self, "Entity", self )
 
 		self.Master = {} --engines linked to this tank
+		self.RadLink = {} --radiators cooling this battery
+		self.IsMaster = true --so the link tool asks the battery to link a radiator
 		ACE.FuelTanks = ACE.FuelTanks or {} --master list of acf fuel tanks
 
 		self.LastThink = 0
@@ -382,6 +386,9 @@ function ENT:UpdateOverlayText()
 		if State then
 			local Battery = ACE.Mobility.Battery
 			text = text .. "\n\nTemperature: " .. math.Round( State.T, 1 ) .. " °C"
+			if #(self.RadLink or {}) > 0 then
+				text = text .. "\nLiquid cooled by " .. #self.RadLink .. (#self.RadLink == 1 and " radiator" or " radiators")
+			end
 			text = text .. "\nHealth: " .. math.Round( Battery.Health(State) * 100, 2 ) .. " % of new capacity"
 			if State.T > Battery.DischargeTmax - Battery.TaperK then
 				text = text .. "\n- Too hot: output limited"
@@ -509,6 +516,100 @@ function ENT:StoreEnergy(KWh, Dt)
 	batteryTransfer(self, KWh, Dt)
 end
 
+--[[
+	Battery cooling loop. Real packs sit on liquid cold plates whose coolant runs through a
+	radiator; a battery linked to radiators gets that loop (Battery.LoopG). A radiator shared
+	with engines or other batteries gives each an equal share, as engines share them. Returns
+	the loop's conductance and writes the coolant temperature back to radiators no engine uses.
+]]
+local LoopFanOnTemp = 30 -- °C; battery loops run their fan far cooler than an engine's thermostat
+
+local function batteryLoop(Tank, CellT)
+	if not Tank.RadLink then return 0 end
+	local Rads = {}
+	for I = #Tank.RadLink, 1, -1 do
+		local Rad = Tank.RadLink[I]
+		if not IsValid(Rad) then
+			table.remove(Tank.RadLink, I)
+		elseif Rad.ThermalUA then
+			local Share = 1 / math.max(#Rad.Master + #(Rad.Batteries or {}), 1)
+			Rads[#Rads + 1] = { UA = Rad.ThermalUA * Share, Cair = Rad.ThermalCair * Share, Rad = Rad }
+			Rad.BatteryFanWanted = Tank.Active and CellT > LoopFanOnTemp or nil
+			Rad.FanBattery = Tank
+		end
+	end
+	if #Rads == 0 then return 0 end
+	local G, Gr = ACE.Mobility.Battery.LoopG(Tank.BatterySpec, Rads)
+	local Ambient = ACE.AmbientTemp
+	local Q = G * (CellT - Ambient)
+	for _, R in ipairs(Rads) do
+		-- Engines sharing the radiator write their own coolant temperature; batteries only fill in.
+		if #R.Rad.Master == 0 then
+			R.Rad.Heat = Gr > 0 and Ambient + Q / Gr or Ambient
+			R.Rad.HeatRejected = Q / #Rads
+		end
+	end
+	return G
+end
+
+--- Links a radiator to cool this battery.
+-- @param Target ace_radiator entity.
+-- @return boolean, string Success and message.
+function ENT:Link( Target )
+	if not IsValid( Target ) or Target:GetClass() ~= "ace_radiator" then
+		return false, "Batteries can only be linked to radiators!"
+	end
+	if self.FuelType ~= "Electric" then
+		return false, "Only batteries can be cooled by a radiator!"
+	end
+	self.RadLink = self.RadLink or {}
+	if table.HasValue( self.RadLink, Target ) then
+		return false, "That radiator is already linked to this battery!"
+	end
+	if self:GetPos():Distance( Target:GetPos() ) > 512 then
+		return false, "The radiator is too far away."
+	end
+	table.insert( self.RadLink, Target )
+	Target.Batteries = Target.Batteries or {}
+	table.insert( Target.Batteries, self )
+	self:UpdateOverlayText()
+	return true, "Link successful!"
+end
+
+--- Unlinks a radiator from this battery.
+-- @param Target ace_radiator entity.
+-- @return boolean, string Success and message.
+function ENT:Unlink( Target )
+	if not table.HasValue( self.RadLink or {}, Target ) then
+		return false, "That radiator is not linked to this battery!"
+	end
+	table.RemoveByValue( self.RadLink, Target )
+	if IsValid( Target ) and Target.Batteries then table.RemoveByValue( Target.Batteries, self ) end
+	self:UpdateOverlayText()
+	return true, "Unlink successful!"
+end
+
+function ENT:PreEntityCopy()
+	local Ids = {}
+	for _, Rad in ipairs( self.RadLink or {} ) do
+		if IsValid( Rad ) then Ids[#Ids + 1] = Rad:EntIndex() end
+	end
+	duplicator.StoreEntityModifier( self, "RadLink", { entities = Ids } )
+	if BaseClass.PreEntityCopy then BaseClass.PreEntityCopy( self ) end
+end
+
+function ENT:PostEntityPaste( Player, Ent, CreatedEntities )
+	local Mod = Ent.EntityMods and Ent.EntityMods.RadLink
+	if Mod and Mod.entities then
+		for _, Id in pairs( Mod.entities ) do
+			local Rad = CreatedEntities[Id]
+			if IsValid( Rad ) then self:Link( Rad ) end
+		end
+		Ent.EntityMods.RadLink = nil
+	end
+	if BaseClass.PostEntityPaste then BaseClass.PostEntityPaste( self, Player, Ent, CreatedEntities ) end
+end
+
 -- Heat, cooling and wear, every think. Heat follows ace_heat_timescale like the engines' coolant;
 -- calendar wear runs on real time.
 local function batteryThink(Tank, Dt)
@@ -518,7 +619,7 @@ local function batteryThink(Tank, Dt)
 	-- The first think after spawning measures from 0; tanks think about once a second.
 	Dt = math.min(Dt, 5)
 
-	Battery.ThermalStep(Tank.BatterySpec, State, Dt, ACE.AmbientTemp, ACE.ThermalTimeScale)
+	Battery.ThermalStep(Tank.BatterySpec, State, Dt, ACE.AmbientTemp, ACE.ThermalTimeScale, batteryLoop(Tank, State.T))
 	Battery.CalendarAge(State, Tank.Fuel / math.max(Tank.Capacity, 1e-6), Dt / 86400)
 
 	local Capacity = Tank.NominalCapacity * Battery.Health(State)
@@ -645,6 +746,10 @@ function ENT:Think()
 end
 
 function ENT:OnRemove()
+
+	for _, Rad in ipairs(table.Copy(self.RadLink or {})) do
+		self:Unlink(Rad)
+	end
 
 	for Key in pairs(self.Master) do
 		if IsValid( self.Master[Key] ) then

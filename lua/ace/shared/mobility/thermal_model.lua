@@ -110,7 +110,11 @@ Thermal.Kinds = {
 		LPerKW = 0.03, FluidC = GlycolC, BlockCp = 450, DeltaBlock = 40, PumpDeltaT = 5,
 		Open = -273, Full = -272, Boil = 120, FilmBoil = 0.2, ElectricPump = true,
 		DerateStart = 150, DerateEnd = 200, DerateMin = 0.5,
-		DamageStart = 180, DamageRate = 0.005, Builtin = 1,
+		-- No implicit cooler: a standalone motor is cooled only by the radiators linked to it,
+		-- and a motor housing with room for a core gets that core modelled as a real exchanger
+		-- (ENT:UpdateBuiltinCooler). An implicit one sized at half the rated heat kept every
+		-- motor cool with nothing linked.
+		DamageStart = 180, DamageRate = 0.005, Builtin = 0,
 	},
 	turbine = {
 		-- Air-cooled by its own through-flow; only bearing and gearbox oil is cooled (CoolantFrac

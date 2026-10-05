@@ -629,7 +629,7 @@ do
 		for I = #Exchangers, 1, -1 do Exchangers[I] = nil end
 		for _, Rad in pairs(Engine.RadLink or {}) do
 			if IsValid(Rad) and Rad.ThermalUA then
-				local Share = 1 / math.max(#Rad.Master, 1)
+				local Share = 1 / math.max(#Rad.Master + #(Rad.Batteries or {}), 1)
 				Exchangers[#Exchangers + 1] = { UA = Rad.ThermalUA * Share, Cair = Rad.ThermalCair * Share, Rad = Rad }
 				ExtraC = ExtraC + (Rad.Coolant or 0) * Thermal.CoolantCPerLitre * Share
 			end
