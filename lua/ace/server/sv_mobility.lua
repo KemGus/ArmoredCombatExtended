@@ -205,6 +205,39 @@ local function wheelHub(W)
 	return ACE.GetPhysicalParent(W.Box)
 end
 
+--[[
+	Only the spin about the axle is locked; the other two rotations stay free, so a wheel hung
+	on ballsockets (steering knuckles, suspension arms) keeps steering and travelling while it
+	is held. A ragdoll constraint's limits are about the axes of its own frame, which is the
+	constraint entity's angles when it spawns; constraint.AdvBallsocket leaves those at zero,
+	so its limits are world axes, and a lock made that way held a wheel only while the car
+	faced along a world axis that matched the axle. On a car facing 90 degrees off, it locked
+	a direction the wheel's own axle already holds and left the spin free: the brake did
+	nothing and the car rolled and swung on with the pedal down (measured: 0 vs 568 deg/s).
+	So the frame is built with its x axis along the axle and only x is limited.
+]]
+local function axleLock(Wheel, Hub, AxisWorld)
+	local WheelPhys, HubPhys = Wheel:GetPhysicsObject(), Hub:GetPhysicsObject()
+	if not IsValid(WheelPhys) or not IsValid(HubPhys) or not AxisWorld then return nil end
+	local Lock = ents.Create("phys_ragdollconstraint")
+	if not IsValid(Lock) then return nil end
+	Lock:SetPos(WheelPhys:GetPos())
+	Lock:SetAngles(AxisWorld:Angle())
+	Lock:SetKeyValue("xmin", -0.01)
+	Lock:SetKeyValue("xmax", 0.01)
+	Lock:SetKeyValue("ymin", -180)
+	Lock:SetKeyValue("ymax", 180)
+	Lock:SetKeyValue("zmin", -180)
+	Lock:SetKeyValue("zmax", 180)
+	Lock:SetKeyValue("spawnflags", 2) -- rotation only
+	Lock:SetPhysConstraintObjects(WheelPhys, HubPhys)
+	Lock:Spawn()
+	Lock:Activate()
+	Lock:SetTable({ Type = "AdvBallsocket", Ent1 = Wheel, Ent2 = Hub, Bone1 = 0, Bone2 = 0, onlyrotation = 1 })
+	constraint.AddConstraintTable(Wheel, Lock, Hub)
+	return Lock
+end
+
 local function applyBrakeLock(W, Want)
 	local Lock = W.BrakeLock
 	if Want then
@@ -212,27 +245,15 @@ local function applyBrakeLock(W, Want)
 		if IsValid(Lock) then return end
 		local Hub = IsValid(W.Ent) and wheelHub(W)
 		if not IsValid(Hub) or Hub == W.Ent then return end
-		--[[
-			Only the spin about the axle is locked; the other two rotations stay free, so a
-			wheel hung on ballsockets (steering knuckles, suspension arms) keeps steering and
-			travelling while it is held. The limits follow Source's angle order in the wheel's
-			frame (measured: the x limit is pitch, about local Y; y is yaw, about Z; z is roll,
-			about X), so the axle must be one of the wheel's local axes, as it is for wheel models.
-		]]
-		local Axis = W.Link and W.Link.Axis or Vector(0, 1, 0)
-		local AX, AY, AZ = abs(Axis.x), abs(Axis.y), abs(Axis.z)
-		local Tight = 0.01
-		local LX = (AY >= AX and AY >= AZ) and Tight or 180 -- pitch: axle along local Y
-		local LY = (AZ > AX and AZ > AY) and Tight or 180 -- yaw: axle along local Z
-		local LZ = (AX > AY and AX >= AZ) and Tight or 180 -- roll: axle along local X
-		Lock = constraint.AdvBallsocket(W.Ent, Hub, 0, 0, vector_origin, vector_origin, 0, 0,
-			-LX, -LY, -LZ, LX, LY, LZ, 0, 0, 0, 1, 0)
+		Lock = axleLock(W.Ent, Hub, W.AxisWorld)
 		if not IsValid(Lock) then return end
 		Lock.DoNotDuplicate = true
 		Lock.ACE_BrakeLock = true
 		W.BrakeLock = Lock
 		BrakeLocks[Lock] = W
+		if M.Log then M.Log.Event(W.Ent, "lock_on", (W.LockWhy or "?") .. " hub " .. tostring(Hub)) end
 	elseif Lock then
+		if M.Log then M.Log.Event(W.Ent, "lock_off", W.BrakeSlipped and "brake overpowered" or "no longer wanted") end
 		if IsValid(Lock) then Lock:Remove() end
 		BrakeLocks[Lock] = nil
 		W.BrakeLock = nil
@@ -259,6 +280,7 @@ timer.Create("ACE_Mobility_BrakeLocks", 0.5, 0, function()
 	local Now = CurTime()
 	for Lock, W in pairs(BrakeLocks) do
 		if not IsValid(Lock) or Now - (W.BrakeLockSeen or 0) > 0.5 then
+			if M.Log then M.Log.Event(W.Ent, "lock_off", IsValid(Lock) and "stale: drivetrain stopped updating it" or "constraint removed elsewhere") end
 			if IsValid(Lock) then Lock:Remove() end
 			BrakeLocks[Lock] = nil
 			if W.BrakeLock == Lock then W.BrakeLock = nil end
@@ -299,6 +321,21 @@ local function readWheel(Box, Link, BoxAngVel, Ctx)
 	end
 	local HubPhys = IsValid(Desc.Hub) and Desc.Hub:GetPhysicsObject()
 	local RefAngVel = IsValid(HubPhys) and HubPhys:LocalToWorldVector(HubPhys:GetAngleVelocity()) or BoxAngVel
+	--[[
+		A hub that turns about the wheel's own axle is not something the wheel turns against: a
+		solid axle prop between two wheels, ballsocketed to the chassis, is free to spin about
+		its length. Measured against it, its spin read as wheel spin, the drivetrain fought that
+		with impulses the axle picked up, and the axle ran away until the physics engine deleted
+		it with its constraints (buggy: 93,000 deg/s). A hub spinning about the axle more than
+		10 rad/s faster than the chassis (no suspension arm swings that fast) gives way to the
+		chassis.
+	]]
+	local Root = ACE.GetPhysicalParent(Box)
+	local RootPhys = IsValid(Root) and Root:GetPhysicsObject()
+	if IsValid(HubPhys) and IsValid(RootPhys) and RootPhys ~= HubPhys then
+		local RootAngVel = RootPhys:LocalToWorldVector(RootPhys:GetAngleVelocity())
+		if math.abs((RefAngVel - RootAngVel):Dot(AxisWorld)) * DegToRad > 10 then RefAngVel = RootAngVel end
+	end
 	local AngVel = Phys:LocalToWorldVector(Phys:GetAngleVelocity()) - RefAngVel
 	local PrevW, PrevOut, Applied = Desc.W, Desc.WOut, Desc.AppliedDW
 	Desc.W = -AngVel:Dot(AxisWorld) * DegToRad
@@ -316,6 +353,15 @@ local function readWheel(Box, Link, BoxAngVel, Ctx)
 		Desc.SlideCap = nil
 	end
 
+	-- Ground contact under the wheel.
+	local R = Desc.Radius
+	local Center = Phys:GetPos()
+	local Tr = util.TraceLine({
+		start = Center,
+		endpos = Center + Vector(0, 0, -1) * (R / InchToMeter + 4),
+		filter = Ctx.Filter,
+	})
+
 	--[[
 		Load detection for wheels the ground trace cannot see: tank sprockets and idlers ride
 		above the ground and drive through the track, so they are loaded by the whole vehicle
@@ -327,21 +373,54 @@ local function readWheel(Box, Link, BoxAngVel, Ctx)
 	-- A wheel spinning about a near-vertical axle (a rotor, a turret ring) cannot roll on the
 	-- ground, so whatever resists it is not the vehicle's weight.
 	local Upright = math.abs(AxisWorld.z) > 0.7
-	if Upright then
+	--[[
+		Nor is a wheel a player holds (physics gun, gravity gun, use key): the hold, not a track,
+		is what keeps it from following the drivetrain. Turning one wheel of a car frozen in the
+		air latched it as a sprocket in a few ticks, which also made it grounded, and a car in
+		gear with the engine off then locked it to its hub, so the other wheel never answered
+		through the differential.
+	]]
+	Desc.Held = Ent:IsPlayerHolding() or nil
+	if M.Log and Desc.Held and Desc.Loaded then M.Log.Event(Ent, "unloaded", "held by a player") end
+	if Upright or Desc.Held then
 		Desc.Loaded = false
 		Desc.LoadEMA = 1
+		Desc.FreeTicks = 0
 	elseif PrevW and PrevOut and Applied then
 		if not Desc.Loaded then
-			if math.abs(Applied) > 0.3 then
+			--[[
+				Only a wheel with nothing under it is tested: one standing on the ground is loaded
+				by it anyway, and a latch made there outlived the ground. Lifted and frozen in the
+				air after a drive, every wheel still counted as a sprocket driving the vehicle
+				through a track, so the parking hold locked them all and turning one wheel moved
+				nothing else (Volvo and Sputnik, engine off in gear).
+			]]
+			if not Tr.Hit and math.abs(Applied) > 0.3 then
 				local Kept = (Desc.W - PrevW) / Applied
 				Desc.LoadEMA = (Desc.LoadEMA or 1) * 0.7 + Kept * 0.3
-				if Desc.LoadEMA < 0.4 then Desc.Loaded = true end
+				if Desc.LoadEMA < 0.4 then
+					Desc.Loaded = true
+					if M.Log then M.Log.Event(Ent, "loaded", string.format("kept %.2f of the drivetrain's impulse", Desc.LoadEMA)) end
+				end
 			end
 		else
+			--[[
+				Only a wheel that keeps running past the prediction is spinning free. A sprocket
+				jumps a tooth of its track now and then, and one such tick used to drop it to a
+				free wheel that got only its own inertia's worth of torque, so a tank's tracks
+				rattled at a fraction of their drive (T-14 pivot turned 0 degrees).
+			]]
 			local Excess = Desc.W - PrevOut
 			if math.abs(Excess) > max(2, 3 * math.abs(PrevOut - PrevW)) and Excess * Applied > 0 then
+				Desc.FreeTicks = (Desc.FreeTicks or 0) + 1
+			else
+				Desc.FreeTicks = 0
+			end
+			if Desc.FreeTicks >= 10 then
+				if M.Log then M.Log.Event(Ent, "unloaded", "ran past the prediction for 10 ticks") end
 				Desc.Loaded = false
 				Desc.LoadEMA = 1
+				Desc.FreeTicks = 0
 			end
 		end
 	end
@@ -349,15 +428,6 @@ local function readWheel(Box, Link, BoxAngVel, Ctx)
 	-- Own inertia about the axle.
 	Desc.J = max((Link.Axis * Phys:GetInertia()):Length() * Units.SourceInertiaToSI, 1e-3)
 
-	-- Ground contact under the wheel.
-	local R = Desc.Radius
-	local Center = Phys:GetPos()
-	local Down = Vector(0, 0, -1)
-	local Tr = util.TraceLine({
-		start = Center,
-		endpos = Center + Down * (R / InchToMeter + 4),
-		filter = Ctx.Filter,
-	})
 	Desc.Grounded = not Upright and (Tr.Hit or Desc.Loaded == true)
 	Desc.Meshed = not Tr.Hit and Desc.Loaded == true
 	if Tr.Hit then
@@ -428,6 +498,7 @@ buildGearbox = function(Box, Ctx)
 	Desc.SpinLoss = 0.002 * Max
 	Desc.Dual = Box.Dual
 	Desc.ClutchCap = Box.MobClutchCap
+	Desc.ClutchFree = not Box.MobCapFull
 	local SideScale = Box.MobSideScale or 1
 	Desc.SideCap = { [0] = (Box.LClutch or Max) * SideScale, [1] = (Box.RClutch or Max) * SideScale }
 	Desc.DriveCap = Box.MobDriveCap
@@ -687,7 +758,22 @@ local function solveGroup(Ctx, EngineDescs, Roots, PhysMass, TotalMass, Dt)
 		local Speed = abs(W.GroundSpeed or 0)
 		local Stopped = Speed < (IsValid(W.BrakeLock) and 1.5 or 0.25)
 		local Parked = EngineHeld and EngineHeld[W] and W.Grounded
-		brakeLock(W, (M.BrakePedal(Pedal) >= LockPedal or Parked) and Stopped and not W.BrakeSlipped)
+		--[[
+			A firm pedal locks the wheel already at walking pace (below 3 m/s, let go past 4), and
+			the tyre then either grips or slides, as a real locked wheel does. Braked by impulses
+			instead, a car sliding slowly down a slope never got below the standstill threshold:
+			each step the brake knocked the wheel back, the tyre spun it forward again inside the
+			physics step, the contact never gripped and the car slid on at 2 km/h (Volvo, engine
+			off, full brake). Track sprockets keep impulse braking: locking one mid-turn would
+			snap a brake-steered tank round.
+		]]
+		local Crawling = Speed < (IsValid(W.BrakeLock) and 4 or 3) and W.Grounded and not W.Meshed
+		local PedalLock = M.BrakePedal(Pedal) >= LockPedal and (Stopped or Crawling)
+		-- Strictly true or false: nil means "leave the lock as it is", and a nil here (no engine
+		-- hold) left a released brake locked until the stale-lock timer dropped it 0.5 s later,
+		-- long enough to stall a truck pulling away.
+		brakeLock(W, (PedalLock or Parked and Stopped or false) and not W.BrakeSlipped)
+		W.LockWhy = PedalLock and (Stopped and "pedal at standstill" or "pedal while crawling") or Parked and Stopped and "parked in gear with the engine off" or nil
 		local Held = IsValid(W.BrakeLock) or (Pedal or 0) > 0 and Stopped and abs(W.W * W.Radius) < 0.5
 		--[[
 			A wheel locked to its hub is a fixed point for the drivetrain and gets no impulse.
@@ -696,6 +782,7 @@ local function solveGroup(Ctx, EngineDescs, Roots, PhysMass, TotalMass, Dt)
 			pedal: 4 m of jitter in 10 s). The torque the drivetrain puts through it is still
 			measured (AnchorTorque), so a pedal hold lets go once the engine overpowers the brake.
 		]]
+		W.HeldStill = Held or nil
 		W.Anchored = IsValid(W.BrakeLock) or nil
 		W.Braking = (Pedal or 0) > 0
 		W.Ground = not Held and Vehicle.Ground(Share, W.Radius, W.GroundSpeed, W.Mu, Share * Gravity, W.Grounded, W.W, W.Meshed) or nil
@@ -818,11 +905,22 @@ local function solveGroup(Ctx, EngineDescs, Roots, PhysMass, TotalMass, Dt)
 		local Lim = MaxW * (W.J or 0)
 		if abs(Imp) > Lim then Imp = Imp > 0 and Lim or -Lim end
 		W.AppliedDW = 0
+		W.ImpOut = 0
 		if Imp ~= 0 and Imp == Imp and ApplyConVar:GetBool() and IsValid(W.Phys) then
 			W.AppliedDW = Imp / max(W.J or 1, 1e-3)
+			W.ImpOut = Imp
 			local Src = Units.ToSourceAngularImpulse(Imp)
 			W.Phys:ApplyTorqueCenter(W.AxisWorld * -Src)
+			--[[
+				The reaction goes through the gearbox mounts, except when the gearbox rides on the
+				very body its wheels turn on and that body is not the engine's chassis: a solid axle
+				prop ballsocketed to the chassis cannot pass torque about its own length, so the
+				reaction only spun the axle, until the physics engine deleted it (buggy: its rear
+				differential is parented to the axle). A real axle housing hands it to the chassis
+				through its suspension links.
+			]]
 			local Root = ACE.GetPhysicalParent(W.Box)
+			if Root == W.Hub and IsValid(Ctx.Chassis) then Root = Ctx.Chassis end
 			local RootPhys = IsValid(Root) and Root:GetPhysicsObject()
 			if IsValid(RootPhys) then RootPhys:ApplyTorqueCenter(W.AxisWorld * Src) end
 		end
@@ -861,12 +959,17 @@ local function solvePhysics(Engine, Group, Dt)
 		Boxes = {}, BoxList = {},
 		Wheels = {}, WheelList = {},
 		Filter = contraptionFilter(Engine),
+		Chassis = ACE.GetPhysicalParent(Engine),
 	}
 
 	local EngineDescs = {}
 	local PhysMass, TotalMass = 0, 0
 	for _, E in ipairs(Group) do
 		local Desc = E:MobilityDesc(Ctx)
+		-- The engine measures its vehicle when switched on and at its legality checks; one never
+		-- switched on had no mass yet, which sized its brakes for an empty vehicle (31 N·m
+		-- instead of 9,300 on the Volvo) until the first check.
+		if Desc and (E.TotalMass or 0) <= 0 and E.CalcMassRatio then E:CalcMassRatio() end
 		if Desc then
 			EngineDescs[#EngineDescs + 1] = Desc
 			PhysMass = max(PhysMass, E.PhysMass or 0)
@@ -883,6 +986,7 @@ local function solvePhysics(Engine, Group, Dt)
 	]]
 	if #EngineDescs == 0 then return nil end
 	solveGroup(Ctx, EngineDescs, nil, PhysMass, TotalMass, Dt)
+	if M.Log then M.Log.Frame(M.InStep and "step" or "tick", Group, Ctx, Dt) end
 	return Ctx
 end
 
@@ -1048,7 +1152,12 @@ function M.Tick(Engine, Dt)
 		]]
 		-- Counted in ticks: at 16 tick the physics steps can fall in the tick before this Think.
 		local Ctx = Lead.MobStepCtx
-		if Ctx and engine.TickCount() - (Lead.MobStepTick or -10) <= 2 then
+		local Stepping = Ctx and engine.TickCount() - (Lead.MobStepTick or -10) <= 2 or false
+		if M.Log and Lead.MobLogStepping ~= Stepping then
+			M.Log.Event(Lead, Stepping and "instep" or "per_tick", Stepping and "solving inside the physics steps" or "no physics step ran (wheels asleep?), solving once per tick")
+		end
+		Lead.MobLogStepping = Stepping
+		if Stepping then
 			local StepDt = takeAccumulated(Group, Ctx)
 			if StepDt > 0 then finishGroup(Group, Ctx, StepDt) end
 			syncController(Lead, Ctx)
@@ -1127,10 +1236,12 @@ function M.TickStandalone(Box, Dt)
 		Boxes = {}, BoxList = {},
 		Wheels = {}, WheelList = {},
 		Filter = contraptionFilter(Box),
+		Chassis = ACE.GetPhysicalParent(Box),
 	}
 	local Desc = buildGearbox(Box, Ctx)
 	local PhysMass, TotalMass = contraptionMass(ACE.GetPhysicalParent(Box) or Box)
 	solveGroup(Ctx, {}, { Desc }, PhysMass, TotalMass, Dt)
+	if M.Log then M.Log.Frame("standalone", nil, Ctx, Dt) end
 	applyBrakeLocks(Ctx.WheelList)
 	for _, B in ipairs(Ctx.BoxList) do
 		B.MobDt = Dt

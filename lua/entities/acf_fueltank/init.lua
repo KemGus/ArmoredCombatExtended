@@ -16,9 +16,32 @@ do
 
 		--Outputs
 		["Fuel"]        = "Returns the current fuel level.",
-		["Capacity"]    = "Returns the max capacity of this fuel tank.",
-		["Leaking"]     = "Is the fuel tank leaking?"
+		["Capacity"]    = "Returns the max capacity of this fuel tank. Batteries: the capacity left after wear, in kWh.",
+		["Leaking"]     = "Is the fuel tank leaking?",
+		["Temperature"] = "Batteries only: cell temperature in °C. Charging stops at 50 °C, discharging at 60 °C.",
+		["Health"]      = "Batteries only: capacity left, in % of a new battery's."
 	}
+
+	local Names = { "Fuel", "Capacity", "Leaking" }
+
+	--- Wire outputs of a fuel tank; batteries add their temperature and health.
+	-- @param Electric boolean Whether the tank is a battery.
+	-- @return table Names, table Types.
+	function ACE.FuelTankOutputs(Electric)
+		local Out, Types = {}, {}
+		for _, Name in ipairs(Names) do
+			Out[#Out + 1] = Name .. " (" .. FueltankWireDescs[Name] .. ")"
+			Types[#Types + 1] = "NORMAL"
+		end
+		Out[#Out + 1], Types[#Types + 1] = "Entity", "ENTITY"
+		if Electric then
+			for _, Name in ipairs({ "Temperature", "Health" }) do
+				Out[#Out + 1] = Name .. " (" .. FueltankWireDescs[Name] .. ")"
+				Types[#Types + 1] = "NORMAL"
+			end
+		end
+		return Out, Types
+	end
 
 	function ENT:Initialize()
 
@@ -44,10 +67,7 @@ do
 		self.LegalIssues      = ""
 
 		self.Inputs = Wire_CreateInputs( self, { "Active", "Refuel Duty (" .. FueltankWireDescs["Refuel"] .. ")" } )
-		self.Outputs = WireLib.CreateSpecialOutputs( self,
-			{ "Fuel (" .. FueltankWireDescs["Fuel"] .. ")", "Capacity (" .. FueltankWireDescs["Capacity"] .. ")", "Leaking (" .. FueltankWireDescs["Leaking"] .. ")", "Entity" },
-			{ "NORMAL", "NORMAL", "NORMAL", "ENTITY" }
-		)
+		self.Outputs = WireLib.CreateSpecialOutputs( self, ACE.FuelTankOutputs(false) )
 		ACE.GetDefaultActiveInputState(self)
 		Wire_TriggerOutput( self, "Leaking", 0 )
 		Wire_TriggerOutput( self, "Entity", self )
@@ -307,16 +327,25 @@ function ENT:UpdateFuelTank(_, _, Data2)
 		gas	= Data2 .. " " .. TankData.name .. ( not TankData.notitle and " Fuel Tank" or "")
 	end
 
+	local WasElectric = self.FuelType == "Electric"
 	self.FuelType      = Data2
 	self.IsExplosive   = self.FuelType ~= "Electric" and false or true
 	self.NoLinks       = TankData and (TankData.nolinks == true) or false
 
 	if self.FuelType == "Electric" then
 		self.Liters   = self.Capacity --batteries capacity is different from internal volume
-		self.Capacity = self.Capacity * ACE.LiIonED
+		self.NominalCapacity = self.Capacity * ACE.LiIonED
+		self:UpdateBatterySpec()
+		self.Capacity = self.NominalCapacity * ACE.Mobility.Battery.Health(self.BatteryState)
 		self.Fuel     = pct * self.Capacity
 	else
+		self.BatterySpec, self.BatteryState, self.NominalCapacity = nil, nil, nil
 		self.Fuel	= pct * self.Capacity
+	end
+
+	if WasElectric ~= (self.FuelType == "Electric") then
+		WireLib.AdjustSpecialOutputs( self, ACE.FuelTankOutputs(self.FuelType == "Electric") )
+		Wire_TriggerOutput( self, "Entity", self )
 	end
 
 	self:UpdateFuelMass()
@@ -348,6 +377,18 @@ function ENT:UpdateOverlayText()
 		text = text .. "\nCurrent Charge Level:"
 		text = text .. "\n-  " .. math.Round( self.Fuel, 1 ) .. " / " .. math.Round( self.Capacity, 1 ) .. " kWh"
 		text = text .. "\n-  " .. math.Round( self.Fuel * 3.6, 1 ) .. " / " .. math.Round( self.Capacity * 3.6, 1) .. " MJ"
+
+		local State = self.BatteryState
+		if State then
+			local Battery = ACE.Mobility.Battery
+			text = text .. "\n\nTemperature: " .. math.Round( State.T, 1 ) .. " °C"
+			text = text .. "\nHealth: " .. math.Round( Battery.Health(State) * 100, 2 ) .. " % of new capacity"
+			if State.T > Battery.DischargeTmax - Battery.TaperK then
+				text = text .. "\n- Too hot: output limited"
+			elseif State.T > Battery.ChargeTmax - Battery.TaperK then
+				text = text .. "\n- Too hot to charge"
+			end
+		end
 
 	else
 
@@ -391,6 +432,103 @@ function ENT:UpdateFuelMass()
 
 	self:UpdateOverlayText()
 
+end
+
+--[[
+	Batteries. The cells are modelled in ace/shared/mobility/battery_model.lua: resistive losses
+	heat them, they cool to the air through the pack's skin, and they wear with time, heat,
+	charge level and cycling. The wear lives only on the entity: a duplicated battery is
+	pasted new.
+]]
+
+--- Rebuilds a battery's thermal description from its size, keeping its wear and temperature.
+function ENT:UpdateBatterySpec()
+	local Battery = ACE.Mobility.Battery
+
+	local AreaIn2
+	if self.IsScalable and self.Dimensions then
+		local D = self.Dimensions
+		AreaIn2 = 2 * (D.x * D.y + D.y * D.z + D.x * D.z)
+	else
+		local PhysObj = self:GetPhysicsObject()
+		AreaIn2 = IsValid(PhysObj) and PhysObj:GetSurfaceArea() or 0
+	end
+
+	local CellKg = (self.Liters or 0) * ACE.FuelDensity.Electric
+	self.BatterySpec = Battery.Build(self.NominalCapacity * 1000, CellKg, self.EmptyMass or 0, AreaIn2 * 0.00064516)
+	self.BatteryState = self.BatteryState or Battery.NewState(ACE.AmbientTemp)
+end
+
+--- Charging power this battery accepts right now (CC-CV and the charge temperature limit).
+-- @return number Watts; 0 for fuel tanks, and for batteries that are full, off or too hot.
+function ENT:ChargeAcceptW()
+	if self.FuelType ~= "Electric" or not self.BatteryState or not self.Active or not self.Legal then return 0 end
+	return ACE.Mobility.Battery.ChargeAcceptW(self.BatterySpec, self.BatteryState, self.Fuel / math.max(self.Capacity, 1e-6))
+end
+
+--- Share of full output the battery management allows at the cells' temperature.
+-- @return number 0..1; always 1 for fuel tanks.
+function ENT:DischargeDerate()
+	if not self.BatteryState then return 1 end
+	return ACE.Mobility.Battery.DischargeDerate(self.BatteryState)
+end
+
+-- Moves TerminalKWh through a battery's terminals (positive charges) over Dt seconds.
+local function batteryTransfer(Tank, TerminalKWh, Dt)
+	local Battery = ACE.Mobility.Battery
+	local State = Tank.BatteryState
+	local Stored = Battery.Transfer(Tank.BatterySpec, State, TerminalKWh * 1000, Dt) / 1000
+	local Before = Tank.Fuel
+	Tank.Fuel = math.Clamp(Tank.Fuel + Stored, 0, Tank.Capacity)
+	local Moved = Tank.Fuel - Before
+	Battery.AddThroughput(State, Moved / math.max(Tank.NominalCapacity, 1e-6), Tank.Fuel / math.max(Tank.Capacity, 1e-6))
+	return Moved
+end
+
+--- Takes energy out of a tank. Batteries also lose their internal resistance loss (heat) on top.
+-- @param KWh number Energy delivered, kWh (fuel tanks: litres).
+-- @param Dt number Time it took, s.
+function ENT:DrawEnergy(KWh, Dt)
+	if KWh <= 0 then return end
+	if not self.BatteryState then
+		self.Fuel = math.max(self.Fuel - KWh, 0)
+		return
+	end
+	batteryTransfer(self, -KWh, Dt)
+end
+
+--- Charges a battery. Only the input less the resistive loss is stored.
+-- @param KWh number Energy put in at the terminals, kWh.
+-- @param Dt number Time it took, s.
+function ENT:StoreEnergy(KWh, Dt)
+	if KWh <= 0 then return end
+	if not self.BatteryState then
+		self.Fuel = math.min(self.Fuel + KWh, self.Capacity)
+		return
+	end
+	batteryTransfer(self, KWh, Dt)
+end
+
+-- Heat, cooling and wear, every think. Heat follows ace_heat_timescale like the engines' coolant;
+-- calendar wear runs on real time.
+local function batteryThink(Tank, Dt)
+	local Battery = ACE.Mobility.Battery
+	local State = Tank.BatteryState
+	if not State or Dt <= 0 then return end
+	-- The first think after spawning measures from 0; tanks think about once a second.
+	Dt = math.min(Dt, 5)
+
+	Battery.ThermalStep(Tank.BatterySpec, State, Dt, ACE.AmbientTemp, ACE.ThermalTimeScale)
+	Battery.CalendarAge(State, Tank.Fuel / math.max(Tank.Capacity, 1e-6), Dt / 86400)
+
+	local Capacity = Tank.NominalCapacity * Battery.Health(State)
+	if math.abs(Capacity - Tank.Capacity) > 1e-6 then
+		Tank.Capacity = Capacity
+		Tank.Fuel = math.min(Tank.Fuel, Capacity)
+		Wire_TriggerOutput( Tank, "Capacity", math.Round(Capacity, 2) )
+	end
+	Wire_TriggerOutput( Tank, "Temperature", State.T )
+	Wire_TriggerOutput( Tank, "Health", Battery.Health(State) * 100 )
 end
 
 function ENT:Update( ArgsTable )
@@ -463,8 +601,19 @@ function ENT:Think()
 				if dist < ACE.RefillDistance and (Tank.Capacity - Tank.Fuel > 0.1) then
 					local exchange = ((self.FuelType == "Electric") and 1 or 15) / 200
 					exchange = math.min(exchange, self.Fuel, Tank.Capacity - Tank.Fuel)
-					self.Fuel = self.Fuel - exchange
-					Tank.Fuel = Tank.Fuel + exchange
+					if self.FuelType == "Electric" then
+						-- A charger follows the receiving pack's CC-CV acceptance and the supplying
+						-- pack's own temperature limit.
+						local Dt = math.max(CurTime() - self.LastThink, engine.TickInterval())
+						exchange = math.min(exchange, Tank:ChargeAcceptW() * Dt / 3.6e6 * self:DischargeDerate())
+						if exchange > 0 then
+							self:DrawEnergy(exchange, Dt)
+							Tank:StoreEnergy(exchange, Dt)
+						end
+					else
+						self.Fuel = self.Fuel - exchange
+						Tank.Fuel = Tank.Fuel + exchange
+					end
 
 					if Tank.FuelType == "Electric" then
 						if not Tank.PlayedSound and CurTime() > (Tank.NextSoundTime or 0) then
@@ -482,6 +631,8 @@ function ENT:Think()
 			end
 		end
 	end
+
+	batteryThink(self, CurTime() - self.LastThink)
 
 	self:UpdateFuelMass()
 

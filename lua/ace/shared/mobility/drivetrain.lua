@@ -11,6 +11,7 @@
 	    Ratio,              -- signed reduction (input/output speed); 0 = neutral
 	    InputJ,             -- input shaft + clutch disc inertia, kg·m²
 	    ClutchCap,          -- main clutch capacity N·m (nil = rigid, used by dual-clutch boxes)
+	    ClutchFree,         -- the main clutch is not fully engaged (it can slip)
 	    Converter,          -- torque converter (from TorqueConverter.New) or nil
 	    LockupCap,          -- converter lock-up clutch capacity when engaged, N·m
 	    Dual,               -- per-side clutches instead of a main clutch
@@ -25,9 +26,11 @@
 	    BrakeOnly,          -- can never transmit (every ratio is zero): brakes only, no drive
 	    Outputs = { {Side = 0|1, Wheel = Wheel} | {Side = 0|1, Gearbox = Gearbox} ... },
 	  }
-	  Wheel   = { Key, J, W, RollDrag, Ground }
+	  Wheel   = { Key, J, W, RollDrag, Ground, Anchored, Held }
 	    J is the wheel's own inertia; Ground = { J, W, Cap } from Vehicle.Ground couples it to
-	    its share of the vehicle through tyre friction (nil when airborne).
+	    its share of the vehicle through tyre friction (nil when airborne). Anchored = locked to
+	    its hub (fixed at rest); Held = turned by something outside the drivetrain (a player's
+	    physics gun), so it keeps its measured speed.
 
 	After Step, every Wheel has .Impulse (total angular impulse to apply to the wheel, N·m·s),
 	.GroundImpulse (the part passed to the road, N·m·s) and .WOut,
@@ -61,6 +64,15 @@ local function wheelBody(Sys, Wheel)
 	-- An anchored wheel (held to its hub by a parking lock) is fixed: infinite inertia, no spin.
 	if Wheel.Anchored then
 		B = Solver.Body(math.huge, 0)
+	elseif Wheel.Held then
+		--[[
+			A wheel a player turns with the physics gun goes at the speed the player gives it
+			whatever the drivetrain does, so the rest of the drivetrain has to follow it: as a
+			light free wheel the solver slowed it instead (the gun undid that at once) and the
+			engine and the other wheels barely moved (Volvo, locked differentials, engine off in
+			gear: the other wheels turned at 162 deg/s against the held wheel's 360).
+		]]
+		B = Solver.Body(math.huge, Wheel.W)
 	else
 		B = Solver.Body(Wheel.J, Wheel.W)
 	end
@@ -107,6 +119,11 @@ local function kinematicInputW(Gearbox)
 	for _, Out in ipairs(Gearbox.Outputs or {}) do
 		if not (Out.Gearbox and Out.Gearbox.BrakeOnly) then
 			local W
+			-- A chained box is geared rigidly only through a fully engaged clutch. Behind an open one
+			-- (a rotor clutch the pilot's controller has released), starting from the stopped
+			-- rotor's speed dragged the engines to it every tick (turbines held at 323 rpm on full
+			-- throttle).
+			if Out.Gearbox and Out.Gearbox.ClutchFree then return nil end
 			if Out.Wheel then W = Out.Wheel.Anchored and 0 or Out.Wheel.W elseif Out.Gearbox then W = kinematicInputW(Out.Gearbox) end
 			if W == nil then return nil end
 			local S = Out.Side == 0 and 0 or 1

@@ -14,6 +14,7 @@ do
 		--Inputs
 		["Throttle"]    = "Controls the amount of fuel which will be displaced to the engine.\n Increasing it will also increase RPM, Power and fuel consumption. Values go from 0-100.\n Electric motors also take -100 to 0: regenerative braking strength, 0 is none and -100 is full.",
 		["Exhaust"]     = "Optional exhaust entity: sound banks marked 'Play at exhaust' play from it, and exhaust smoke comes out along its forward axis.",
+		["Reverse"]     = "Electric motors only: 1 drives the motor backwards, so a vehicle can reverse without a reverse gear. Switched while moving, the motor is braked to a stop first, charging the battery, and then driven the other way.",
 
 		--Outputs
 		["RPM"]         = "Returns the current RPM.",
@@ -62,7 +63,7 @@ do
 
 		self.LastDamageTime = CurTime()
 
-		self.Inputs = WireLib.CreateSpecialInputs( self, { "Active", "Throttle (" .. EngineWireDescs["Throttle"] .. ")", "Exhaust (" .. EngineWireDescs["Exhaust"] .. ")" }, { "NORMAL", "NORMAL", "ENTITY" } ) --use fuel input?
+		self.Inputs = WireLib.CreateSpecialInputs( self, ACE.EngineInputs(false) )
 		self.Outputs = WireLib.CreateSpecialOutputs( self,  { "RPM (" .. EngineWireDescs["RPM"] .. ")", "Torque (" .. EngineWireDescs["Torque"] .. ")", "Power (" .. EngineWireDescs["Power"] .. ")", "Fuel Use (" .. EngineWireDescs["Fuel Use"] .. ")", "Total Fuel" , "Entity", "Mass", "Physical Mass" , "EngineHeat (" .. EngineWireDescs["EngineHeat"] .. ")", "Stalled (" .. EngineWireDescs["Stalled"] .. ")"},
 														{ "NORMAL","NORMAL","NORMAL", "NORMAL", "NORMAL", "ENTITY", "NORMAL", "NORMAL", "NORMAL", "NORMAL" } )
 
@@ -73,6 +74,19 @@ do
 
 		self.CanLegalCheck = true
 
+	end
+
+	--- Wire inputs of an engine; electric motors add Reverse.
+	-- @param Electric boolean Whether the engine is an electric motor.
+	-- @return table Names, table Types.
+	function ACE.EngineInputs(Electric)
+		local Names = { "Active", "Throttle (" .. EngineWireDescs["Throttle"] .. ")", "Exhaust (" .. EngineWireDescs["Exhaust"] .. ")" }
+		local Types = { "NORMAL", "NORMAL", "ENTITY" }
+		if Electric then
+			Names[#Names + 1] = "Reverse (" .. EngineWireDescs["Reverse"] .. ")"
+			Types[#Types + 1] = "NORMAL"
+		end
+		return Names, Types
 	end
 
 end
@@ -177,6 +191,11 @@ do
 			Engine.ModelInertia = 0.99 * phys:GetInertia() / phys:GetMass() -- giving a little wiggle room
 		end
 
+		if Engine.FuelType == "Electric" then
+			WireLib.AdjustSpecialInputs( Engine, ACE.EngineInputs(true) )
+		end
+		Engine:UpdateBuiltinCooler( Lookup )
+
 		Engine:SetNWString( "WireName", Lookup.name )
 		Engine:UpdateOverlayText()
 
@@ -258,6 +277,7 @@ function ENT:Update( ArgsTable )
 	if IsValid( phys ) then
 		phys:SetMass( self.Weight )
 	end
+	self:UpdateBuiltinCooler( Lookup )
 
 	self:SetNWString( "WireName", Lookup.name )
 	self:UpdateOverlayText()
@@ -266,6 +286,35 @@ function ENT:Update( ArgsTable )
 	if ACE.PointsInputChanged then ACE.PointsInputChanged( self, "engine-updated" ) end
 
 	return true, "Engine updated successfully!" .. Feedback
+end
+
+--[[
+	Built-in cooler. Some motor models are a housing much larger than the motor itself (the old
+	"integrated battery" motors). That space holds a radiator core: its volume is the housing's
+	collision volume less the bare motor's (definition field motorvolume, in³), its depth along the
+	airflow the housing's thinnest side, and its face whatever area that leaves. The core cools
+	the motor's coolant through the same heat exchanger model as a radiator entity
+	(ACE.EngineThermalThink), with a fan that runs off the battery.
+]]
+
+--- Works out the built-in radiator core of a motor whose housing has room for one.
+-- @param Lookup table Engine definition.
+function ENT:UpdateBuiltinCooler( Lookup )
+	self.BuiltinCoreFrontM2, self.BuiltinCoreDepthM, self.BuiltinCoreFanW = nil, nil, nil
+	if not Lookup or not Lookup.motorvolume then return end
+
+	local PhysObj = self:GetPhysicsObject()
+	if not IsValid( PhysObj ) then return end
+
+	local CoreIn3 = ( PhysObj:GetVolume() or 0 ) - Lookup.motorvolume
+	if CoreIn3 <= 0 then return end
+
+	local Size = self:OBBMaxs() - self:OBBMins()
+	local DepthIn = math.max( math.min( Size.x, Size.y, Size.z ), 1 )
+	self.BuiltinCoreDepthM = DepthIn * 0.0254
+	self.BuiltinCoreFrontM2 = CoreIn3 / DepthIn * 0.00064516
+	-- Fan power as the radiator entity sizes it: 30 W per litre of core.
+	self.BuiltinCoreFanW = CoreIn3 * ACE.CuIToLiter * 30
 end
 
 function ENT:UpdateOverlayText()
@@ -285,6 +334,12 @@ function ENT:UpdateOverlayText()
 	text = text .. "Powerband: " .. (math.Round(pbmin / 10) * 10) .. " - " .. (math.Round(pbmax / 10) * 10) .. " RPM\n"
 	text = text .. "Redline: " .. self.LimitRPM .. " RPM\n\n"
 	text = text .. "Temp: " .. math.Round(self.Heat) .. " °C / " .. math.Round((self.Heat * (9 / 5)) + 32) .. " °F\n"
+	if self.BuiltinCoreFrontM2 then
+		text = text .. "Built-in radiator: " .. math.Round(self.BuiltinCoreFrontM2, 2) .. " m^2 face, " .. math.Round(self.BuiltinCoreDepthM * 100) .. " cm deep\n"
+	end
+	if self.ReverseInput and self.FuelType == "Electric" then
+		text = text .. "Direction: reverse\n"
+	end
 	if self.CoolantBoiling then
 		text = text .. "Coolant boiling - engine at " .. math.Round(self.BlockHeat or self.Heat) .. " °C\n"
 	end
@@ -383,6 +438,14 @@ function ENT:TriggerInput( iname, value )
 
 	if iname == "Exhaust" then
 		ACE.EngineSound.SetExhaust( self, value )
+		return
+	end
+
+	if iname == "Reverse" then
+		-- Selects the direction the motor controller drives in; ENT:MobilityDesc hands it to the
+		-- motor model, which brakes a motor still turning the old way before driving it.
+		self.ReverseInput = value ~= 0
+		self:UpdateOverlayText()
 		return
 	end
 
@@ -680,12 +743,13 @@ function ENT:GetMaxFuel()
 end
 
 --- Returns the first linked battery that can take charge from regenerative braking.
--- @return An active, legal Electric acf_fueltank below its capacity, or nil.
+-- @return An active, legal Electric acf_fueltank that accepts charge (CC-CV, not too hot), and
+-- the power it accepts in W; or nil.
 function ENT:GetChargeTank()
 	for _, Tank in ipairs(self.FuelLink) do
-		if IsValid(Tank) and Tank.Active and Tank.Legal and Tank.FuelType == "Electric"
-			and Tank.Fuel < Tank.Capacity then
-			return Tank
+		if IsValid(Tank) and Tank.FuelType == "Electric" and Tank.ChargeAcceptW then
+			local Accept = Tank:ChargeAcceptW()
+			if Accept > 0 then return Tank, Accept end
 		end
 	end
 end
@@ -734,6 +798,10 @@ function ENT:CalcRPM()
 	self.TorqueMult = math.Clamp(((1 - self.TorqueScale) / 0.5) * ((self.ACE.Health / self.ACE.MaxHealth) - 1) + 1, self.TorqueScale, 1)
 	-- An overheated engine also loses torque (ACE.EngineThermalThink).
 	self.PeakTorque = self.BaseTorque * self.TorqueMult * DriverBoost * (self.ThermalDerate or 1)
+	-- A hot battery pack is held back by its management system (battery_model.lua).
+	if self.FuelType == "Electric" and IsValid(Tank) and Tank.DischargeDerate then
+		self.PeakTorque = self.PeakTorque * Tank:DischargeDerate()
+	end
 
 	local HealthRatio = self.ACE.Health / self.ACE.MaxHealth
 	if HealthRatio < 0.995 then
@@ -787,11 +855,12 @@ function ENT:MobilityDesc(Ctx)
 	Desc.TorqueMul = self.PeakTorque / self.BaseTorque
 	Desc.Gearboxes = Gearboxes
 	if self.FuelType == "Electric" and self.MobState then
-		-- Regenerative braking needs somewhere to put the charge: none once every linked battery
-		-- is full.
-		local ChargeTank = self:GetChargeTank()
+		-- Regenerative braking needs somewhere to put the charge, and a battery only takes as
+		-- much as its CC-CV charge acceptance allows: nothing once every linked battery is full.
+		local ChargeTank, Accept = self:GetChargeTank()
 		self.MobChargeTank = ChargeTank
-		self.MobState.RegenLimitW = not IsValid(ChargeTank) and 0 or nil
+		self.MobState.RegenLimitW = IsValid(ChargeTank) and Accept or 0
+		self.MobState.Direction = self.ReverseInput and -1 or 1
 	end
 	-- Belt-driven accessories such as a radiator fan.
 	-- Radiators add their fan load between Thinks; MobilityApply holds it for every physics step
@@ -816,7 +885,8 @@ function ENT:MobilityApply()
 	self.AccessoryTorque = 0
 
 	local RPM = State.W * 30 / math.pi
-	self.FlyRPM = math.max(RPM, 0)
+	-- Only electric motors turn backwards; RPM and sound follow the speed either way.
+	self.FlyRPM = self.FuelType == "Electric" and math.abs(RPM) or math.max(RPM, 0)
 	self.Torque = Desc.AvgTorque or 0
 
 	local Dt = self.MobDt or engine.TickInterval()
@@ -826,17 +896,18 @@ function ENT:MobilityApply()
 		local Used
 		if self.FuelType == "Electric" then
 			Used = FuelKg / 3.6e6 -- electric "fuel" is energy: J to kWh
+			Tank:DrawEnergy(Used, Dt) -- the battery also loses its resistive heat
 		else
 			Used = FuelKg / (ACE.FuelDensity[Tank.FuelType] or 0.745) -- kg to litres
+			Tank.Fuel = math.max(Tank.Fuel - Used, 0)
 		end
-		Tank.Fuel = math.max(Tank.Fuel - Used, 0)
 		Wire_TriggerOutput(self, "Fuel Use", math.Round(60 * Used / Dt, 3))
 	elseif self.Active and FuelKg < 0 and self.FuelType == "Electric" then
 		-- Regenerative braking: the motor returned energy, which charges a battery with room.
 		local ChargeTank = self.MobChargeTank
 		local Charged = -FuelKg / 3.6e6
 		if IsValid(ChargeTank) then
-			ChargeTank.Fuel = math.min(ChargeTank.Fuel + Charged, ChargeTank.Capacity)
+			ChargeTank:StoreEnergy(Charged, Dt)
 		end
 		Wire_TriggerOutput(self, "Fuel Use", -math.Round(60 * Charged / Dt, 3))
 	end
@@ -862,7 +933,8 @@ function ENT:MobilityApply()
 		ACE.EngineSound.Stop( self )
 	end
 
-	local Power = self.Torque * self.FlyRPM / 9548.8
+	-- Signed: a motor driving backwards has negative torque and speed, positive power.
+	local Power = self.Torque * (self.FuelType == "Electric" and RPM or self.FlyRPM) / 9548.8
 	Wire_TriggerOutput(self, "Torque", math.Round(self.Torque))
 	Wire_TriggerOutput(self, "Power", math.Round(Power))
 	Wire_TriggerOutput(self, "RPM", math.Round(self.FlyRPM))

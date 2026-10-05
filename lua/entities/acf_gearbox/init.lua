@@ -609,6 +609,29 @@ local function autoShift(self, Throttle)
 	end
 end
 
+--[[
+	A box driving one gearbox on each side, the two sitting side by side along their axles (one
+	per track or per wheel side), is a steering transmission's cross-shaft: tanks with a gearbox
+	per side (T-72, T-14, clutch-brake designs) drive both from one solid shaft, and steer with
+	the side gearboxes' gears, clutches and brakes. As an open differential it handed all the
+	drive to whichever side slipped, so a pivot with one side in reverse never turned. Boxes
+	feeding a front and a rear axle stay open centre differentials.
+]]
+
+--- Whether this gearbox is a cross-shaft between two side gearboxes.
+-- @return boolean
+function ENT:IsCrossShaft()
+	local L, R
+	for _, Link in pairs(self.WheelLink) do
+		local Ent = Link.Ent
+		if not IsValid(Ent) or not Ent.IsGeartrain then return false end
+		if Link.Side == 0 then L = Ent else R = Ent end
+	end
+	if not (L and R) then return false end
+	local Apart = R:GetPos() - L:GetPos()
+	return math.abs(Apart:Dot(L:GetRight())) > 0.7 * Apart:Length()
+end
+
 -- Decides the engaged ratio and clutch capacity for this tick. Called by ACE.Mobility.Tick
 -- before the gearbox description is built.
 function ENT:MobilityControl(Dt)
@@ -642,7 +665,7 @@ function ENT:MobilityControl(Dt)
 		self.MobDiff = "locked"
 	elseif (self.LSDPreload or 0) > 0 or (self.LSDRamp or 0) > 0 then
 		self.MobDiff = "lsd"
-	elseif self.Category == "Transfer" then
+	elseif self.Category == "Transfer" or self:IsCrossShaft() then
 		self.MobDiff = "locked"
 	else
 		self.MobDiff = "open"
@@ -687,7 +710,7 @@ function ENT:MobilityControl(Dt)
 			governor the converter settles around 80 % and the vehicle stops gaining speed.
 		]]
 		local SR = 0
-		if IsValid(Engine) and Engine.MobState and Engine.MobState.W > 1 then
+		if IsValid(Engine) and Engine.MobState and math.abs(Engine.MobState.W) > 1 then
 			SR = (Mob.InputW or 0) / Engine.MobState.W
 		end
 		local Lock = self.Gear >= 2 and not Shifting and (SR > 0.75 or (self.MobLockupCap or 0) > 0 and SR > 0.6)
@@ -769,7 +792,12 @@ function ENT:MobilityControl(Dt)
 				for _, Master in pairs(self.Master or {}) do
 					local State, Spec = IsValid(Master) and Master.MobState, IsValid(Master) and Master.MobSpec
 					if State and Spec and Master:GetClass() == "acf_engine" and State.Running then
-						State.W = math.Clamp(math.abs(Need), Spec.IdleW, Spec.LimitW)
+						-- An electric motor turning backwards (Reverse input) is matched in its own direction.
+						if Spec.Kind == "electric" then
+							State.W = math.Clamp(Need, -Spec.LimitW, Spec.LimitW)
+						else
+							State.W = math.Clamp(math.abs(Need), Spec.IdleW, Spec.LimitW)
+						end
 					end
 				end
 			end
@@ -803,6 +831,15 @@ function ENT:MobilityControl(Dt)
 		-- Automatic clutch: fully out while shifting, eased back in afterwards, and slipped
 		-- like a centrifugal clutch at launch so the engine cannot stall.
 		local Launch = ACE.Mobility.Vehicle.AssistedClutch(Engine.MobState, Engine.MobSpec, Rated, Pedal, Throttle)
+		--[[
+			With the engine off (and not cranking) the clutch is let in, as a driver parks a
+			manual in gear: the stopped engine holds the car. Left out, every assisted car was in
+			neutral whenever its engine was off and rolled or rocked on its suspension.
+		]]
+		local State = Engine.MobState
+		if not State.Running and (State.Cranking or 0) <= 0 then
+			Launch = Rated * (1 - math.Clamp(Pedal, 0, 1))
+		end
 		local Since = Now - (self.EngagedAt or 0)
 		local Ease = math.Clamp(Since / 0.3, 0, 1)
 		Cap = (Shifting or self.PendingEngage) and 0 or math.min(Launch, Rated * Ease) * Fade
@@ -928,7 +965,7 @@ function ENT:MobilityApply()
 	if self.MobConverter then
 		for _, Master in pairs(self.Master or {}) do
 			local State = IsValid(Master) and Master.MobState
-			if State and State.W > 1 then
+			if State and math.abs(State.W) > 1 then
 				self.ConverterRatio = math.Clamp((Mob.InputW or 0) / State.W, 0, 1)
 				break
 			end

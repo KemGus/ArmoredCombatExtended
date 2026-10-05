@@ -369,6 +369,7 @@ function Engine.NewState(Spec)
 		FuelRate = 0,        -- kg/s
 		HeatRate = 0,        -- W into the engine block / coolant
 		Stalled  = false,
+		Direction = 1,       -- electric motors: selected direction, +1 forward, -1 reverse
 		Spec     = Spec,
 	}
 end
@@ -404,11 +405,28 @@ local function idleAir(Spec, State, Dt)
 	return clamp(State.IdleInt + Err * 1.5, 0, Auth)
 end
 
+--- Limits a motor's generating (braking) torque to the charging power the battery accepts.
+-- @param Spec Electric engine spec.
+-- @param State Engine state. State.RegenLimitW is the most charging power the battery takes
+-- (set by the entity from the battery's charge acceptance); nil means no limit.
+-- @param Torque Braking torque magnitude wanted, N·m.
+-- @param Speed Shaft speed magnitude, rad/s.
+-- @return Braking torque magnitude allowed, N·m.
+function Engine.GeneratorLimit(Spec, State, Torque, Speed)
+	local Limit = State.RegenLimitW
+	if not Limit or Torque <= 0 then return Torque end
+	-- Power reaching the battery: shaft power less the motor and inverter losses.
+	local Charge = Torque * Speed - Engine.MotorLoss(Spec, Torque)
+	if Charge > Limit then return Torque * max(Limit, 0) / Charge end
+	return Torque
+end
+
 --- Advances the engine's own control state and returns the torque it applies to the crank.
 -- Call this once per solver substep with the crank speed the drivetrain solver left.
 -- @param State Engine state.
 -- @param Throttle Pedal 0..1. Electric motors also take -1..0: a regenerative braking command
--- (fraction of the motor's torque envelope). 0 is no regen.
+-- (fraction of the motor's torque envelope). 0 is no regen. A motor drives in the direction
+-- State.Direction selects (+1 forward, -1 reverse); other engines only turn forwards.
 -- @param Dt Substep length in seconds.
 -- @param Opts Optional { NoStall = bool, HasFuel = bool }.
 -- @return Drive torque (combustion, starter or motor) in N·m, and loss torque magnitude in N·m
@@ -427,23 +445,34 @@ function Engine.Step(State, Throttle, Dt, Opts)
 		local Pedal = clamp(Throttle, 0, 1)
 		local Speed = abs(W)
 		local Envelope = Spec.BrakeWOT(Speed)
-		-- The inverter stops driving past the rated top speed.
-		local Drive = (On and Speed <= Spec.LimitW) and Pedal * Envelope or 0
+		local Dir = State.Direction == -1 and -1 or 1
+
+		--[[
+			The inverter commands torque in the selected direction (State.Direction, +1 forward,
+			-1 reverse). A motor turning the selected way is driven up to its rated top speed. One
+			still turning the other way (reverse selected while rolling forward) gets the same
+			torque, which now opposes its rotation: a four-quadrant drive brakes it as a generator
+			down to standstill and then drives it the new way, so the rotor and everything geared
+			to it slow through zero instead of reversing at once. At speed the braking charges the
+			battery and is limited to what the battery accepts, like regen; near standstill it
+			draws power (plugging), which is how a controller finishes the stop.
+		]]
+		local Drive = 0
+		if On and Pedal > 0 then
+			if W * Dir >= 0 then
+				if Speed <= Spec.LimitW then Drive = Dir * Pedal * Envelope end
+			else
+				Drive = Dir * Engine.GeneratorLimit(Spec, State, Pedal * Envelope, Speed)
+			end
+		end
 
 		-- Regenerative braking on a negative throttle: the motor brakes as a generator and
-		-- charges the battery. It is applied as drag, so it slows the crank but can never spin
-		-- it backwards.
+		-- charges the battery, in either direction of rotation. It is applied as drag, so it
+		-- slows the crank but can never spin it backwards.
 		local Regen = 0
 		if On and Throttle < 0 then
 			local Fade = clamp(Speed / (K.RegenFadeFrac * Spec.LimitW), 0, 1)
-			Regen = clamp(-Throttle, 0, 1) * Envelope * Fade
-			-- A full (or refusing) battery takes no charge: State.RegenLimitW is the most
-			-- charging power it accepts, set by the entity; nil means no limit.
-			local Limit = State.RegenLimitW
-			if Limit and Regen > 0 then
-				local Charge = Regen * Speed - Engine.MotorLoss(Spec, Regen)
-				if Charge > Limit then Regen = Regen * max(Limit, 0) / Charge end
-			end
+			Regen = Engine.GeneratorLimit(Spec, State, clamp(-Throttle, 0, 1) * Envelope * Fade, Speed)
 		end
 
 		local Friction = Engine.FrictionTorque(Spec, W, 0)

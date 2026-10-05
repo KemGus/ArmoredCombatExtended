@@ -5,6 +5,7 @@ local Files = {
 	"units.lua",
 	"engine_model.lua",
 	"thermal_model.lua",
+	"battery_model.lua",
 	"solver.lua",
 	"torque_converter.lua",
 	"drivetrain.lua",

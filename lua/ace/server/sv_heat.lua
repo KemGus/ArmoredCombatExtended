@@ -563,6 +563,8 @@ end
 ]]---------------------------------------------------------------------------------------
 do
 	local Thermal = ACE.Mobility.Thermal
+	-- Coolant temperature above which a motor's built-in radiator fan runs [°C] (estimated).
+	local BuiltinFanOnTemp = 50
 
 	--- Returns (building when needed) an engine's thermal spec.
 	-- @param Engine acf_engine entity.
@@ -633,6 +635,24 @@ do
 			end
 		end
 
+		--[[
+			A motor housing with a built-in radiator core (ENT:UpdateBuiltinCooler): ram air from
+			the vehicle's speed plus a fan that runs off the battery while the motor is on and its
+			coolant is warm.
+		]]
+		if Engine.BuiltinCoreFrontM2 then
+			local Fan = Engine.Active and T.Tc > BuiltinFanOnTemp
+			local Parent = ACE.GetPhysicalParent and ACE.GetPhysicalParent(Engine) or Engine
+			local SpeedMS = IsValid(Parent) and Parent:GetVelocity():Length() * 0.01905 or 0 -- units/s to m/s
+			local Face = Thermal.FaceVelocity(Engine.BuiltinCoreDepthM, SpeedMS, Fan and 1 or 0)
+			local UA, Cair = Thermal.RadiatorAir(Engine.BuiltinCoreFrontM2, Engine.BuiltinCoreDepthM, Face)
+			Exchangers[#Exchangers + 1] = { UA = UA, Cair = Cair }
+			local Tank = Engine.MobTank
+			if Fan and IsValid(Tank) and Tank.DrawEnergy then
+				Tank:DrawEnergy(Engine.BuiltinCoreFanW * Dt / 3.6e6, Dt)
+			end
+		end
+
 		local Scale = ACE.ThermalTimeScale
 		local W = Engine.MobState and Engine.MobState.W or 0
 		Thermal.Step(T, TS, HeatW, W, Dt * Scale, {
@@ -645,8 +665,10 @@ do
 		Engine.ThermalDerate = Thermal.Derate(TS, T.Tb)
 
 		for _, X in ipairs(Exchangers) do
-			X.Rad.Heat = T.Tc
-			X.Rad.HeatRejected = (X.G or 0) * (T.Tc - Ambient)
+			if X.Rad then
+				X.Rad.Heat = T.Tc
+				X.Rad.HeatRejected = (X.G or 0) * (T.Tc - Ambient)
+			end
 		end
 
 		-- Overheating: past its damage temperature the engine wears itself out (scuffed liners,

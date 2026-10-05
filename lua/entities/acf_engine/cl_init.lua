@@ -186,7 +186,7 @@ function ACE.EngineGUI_Update( Table )
 		-- Battery power at peak power: shaft power plus the motor and inverter losses there.
 		local Torque = Spec.RatedPower / Spec.RatedW
 		local Kw = ( Spec.RatedPower + EngineModel.MotorLoss( Spec, Torque ) ) / 1000
-		acemenupanel:CPanelText("FuelCons", "Battery draw at peak power: " .. math.Round(Kw, 1) .. " kW / " .. math.Round(Kw / 60, 2) .. " kWh/min\nRegenerates when the throttle is released")
+		acemenupanel:CPanelText("FuelCons", "Battery draw at peak power: " .. math.Round(Kw, 1) .. " kW / " .. math.Round(Kw / 60, 2) .. " kWh/min\nRegenerates on a negative throttle; the Reverse input drives it backwards")
 	elseif Spec and Spec.Kind == "turbine" then
 		-- A turbine burns fuel for its gas generator whatever the output shaft does.
 		local Full = EngineModel.TurbineFuelRate( Spec, 1 ) * 60

@@ -5,6 +5,10 @@ ACE.DefineEngine( "Electric-Small", {
 	name				= "Electric motor, Small",
 	desc				= "A small electric motor, loads of torque, but low power\n\nElectric motors provide huge amounts of torque, but are very heavy",
 	model			= "models/engines/emotorsmall.mdl",
+	-- The housing's space beyond the motor is a built-in radiator core (ENT:UpdateBuiltinCooler).
+	-- motorvolume: collision-hull volume of the matching standalone motor model, emotor-standalone-sml.mdl,
+	-- measured from its .phy (in³).
+	motorvolume		= 2796,
 	sound			= "acf_engines/electric_small.wav",
 	category			= "Electric",
 	fuel				= "Electric",
@@ -22,6 +26,10 @@ ACE.DefineEngine( "Electric-Medium", {
 	name				= "Electric motor, Medium",
 	desc				= "A medium electric motor, loads of torque, but low power\n\nElectric motors provide huge amounts of torque, but are very heavy",
 	model			= "models/engines/emotormed.mdl",
+	-- The housing's space beyond the motor is a built-in radiator core (ENT:UpdateBuiltinCooler).
+	-- motorvolume: collision-hull volume of the matching standalone motor model, emotor-standalone-mid.mdl,
+	-- measured from its .phy (in³).
+	motorvolume		= 6634,
 	sound			= "acf_engines/electric_medium.wav",
 	category			= "Electric",
 	fuel				= "Electric",
@@ -40,6 +48,10 @@ ACE.DefineEngine( "Electric-Large", {
 	name				= "Electric motor, Large",
 	desc				= "A huge electric motor, loads of torque, but low power\n\nElectric motors provide huge amounts of torque, but are very heavy",
 	model			= "models/engines/emotorlarge.mdl",
+	-- The housing's space beyond the motor is a built-in radiator core (ENT:UpdateBuiltinCooler).
+	-- motorvolume: collision-hull volume of the matching standalone motor model, emotor-standalone-big.mdl,
+	-- measured from its .phy (in³).
+	motorvolume		= 12960,
 	sound			= "acf_engines/electric_large.wav",
 	category			= "Electric",
 	fuel				= "Electric",
@@ -56,7 +68,7 @@ ACE.DefineEngine( "Electric-Large", {
 
 ACE.DefineEngine( "Electric-Tiny-NoBatt", {
 	name = "Electric motor, Tiny, Standalone",
-	desc = "Basically a Nissan Leaf motor.  Can power electric razors, desk fans, or your hopes and dreams\n\nElectric motors provide huge amounts of torque, but are very heavy.\n\nStandalone electric motors don't have integrated batteries, saving on weight and volume, but require you to supply your own batteries.",
+	desc = "Basically a Nissan Leaf motor.  Can power electric razors, desk fans, or your hopes and dreams\n\nElectric motors provide huge amounts of torque, but are very heavy.\n\nStandalone electric motors have no built-in radiator, saving on weight and volume: link a radiator to keep them cool under sustained load.",
 	model = "models/engines/emotor-standalone-tiny.mdl",
 	sound = "acf_engines/electric_small.wav",
 	category = "Electric",
@@ -77,7 +89,7 @@ ACE.DefineEngine( "Electric-Tiny-NoBatt", {
 
 ACE.DefineEngine( "Electric-Small-NoBatt", {
 	name = "Electric motor, Small, Standalone",
-	desc = "A small electric motor, loads of torque, but low power\n\nElectric motors provide huge amounts of torque, but are very heavy.\n\nStandalone electric motors don't have integrated batteries, saving on weight and volume, but require you to supply your own batteries.",
+	desc = "A small electric motor, loads of torque, but low power\n\nElectric motors provide huge amounts of torque, but are very heavy.\n\nStandalone electric motors have no built-in radiator, saving on weight and volume: link a radiator to keep them cool under sustained load.",
 	model = "models/engines/emotor-standalone-sml.mdl",
 	sound = "acf_engines/electric_small.wav",
 	category = "Electric",
@@ -94,7 +106,7 @@ ACE.DefineEngine( "Electric-Small-NoBatt", {
 
 ACE.DefineEngine( "Electric-Medium-NoBatt", {
 	name = "Electric motor, Medium, Standalone",
-	desc = "A medium electric motor, loads of torque, but low power\n\nElectric motors provide huge amounts of torque, but are very heavy.\n\nStandalone electric motors don't have integrated batteries, saving on weight and volume, but require you to supply your own batteries.",
+	desc = "A medium electric motor, loads of torque, but low power\n\nElectric motors provide huge amounts of torque, but are very heavy.\n\nStandalone electric motors have no built-in radiator, saving on weight and volume: link a radiator to keep them cool under sustained load.",
 	model = "models/engines/emotor-standalone-mid.mdl",
 	sound = "acf_engines/electric_medium.wav",
 	category = "Electric",
@@ -111,7 +123,7 @@ ACE.DefineEngine( "Electric-Medium-NoBatt", {
 
 ACE.DefineEngine( "Electric-Large-NoBatt", {
 	name = "Electric motor, Large, Standalone",
-	desc = "A huge electric motor, loads of torque, but low power\n\nElectric motors provide huge amounts of torque, but are very heavy.\n\nStandalone electric motors don't have integrated batteries, saving on weight and volume, but require you to supply your own batteries.",
+	desc = "A huge electric motor, loads of torque, but low power\n\nElectric motors provide huge amounts of torque, but are very heavy.\n\nStandalone electric motors have no built-in radiator, saving on weight and volume: link a radiator to keep them cool under sustained load.",
 	model = "models/engines/emotor-standalone-big.mdl",
 	sound = "acf_engines/electric_large.wav",
 	category = "Electric",

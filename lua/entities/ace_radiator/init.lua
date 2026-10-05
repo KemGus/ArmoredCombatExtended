@@ -415,7 +415,10 @@ function ENT:Think()
 		local Ent = self.Master[Key]
 		if FanWanted and IsValid( Ent ) and Ent.Active then
 			local Spec, State = Ent.MobSpec, Ent.MobState
-			local Omega = math.max(State and State.W or 0, Spec and Spec.IdleW or 80)
+			-- Electric motors idle at 0 rpm and can turn backwards: their fan load is taken at no
+			-- less than 80 rad/s.
+			local Idle = Spec and Spec.IdleW or 0
+			local Omega = math.max(math.abs(State and State.W or 0), Idle > 0 and Idle or 80)
 			-- The fan is a load on the crank; the drivetrain solve takes it from the engine.
 			Ent.AccessoryTorque = (Ent.AccessoryTorque or 0) + self.ActiveTorqueDemand / math.max(ECount, 1) / Omega
 

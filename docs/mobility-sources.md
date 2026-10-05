@@ -130,6 +130,34 @@ Digitised charts were read from rendered PDF pages. Expect about ±1% error on t
   Veh. J.* 16 (2025) 484, doi:10.3390/wevj16090484. Pack level: NMC 140-180 Wh/kg, NCA 150-174,
   LFP 125-145; pack volumetric 110-305 Wh/L depending on cell format.
 
+### Batteries (battery_model.lua)
+
+- **[Schmalstieg 2014]** J. Schmalstieg, S. Käbitz, M. Ecker, D. U. Sauer, "A holistic aging
+  model for Li(NiMnCo)O2 based 18650 lithium-ion batteries", *J. Power Sources* 257 (2014)
+  325-334, doi:10.1016/j.jpowsour.2014.02.012. Sanyo UR18650E (NMC/graphite, 2.05 Ah).
+  Calendar tests varied SOC at 50 °C and temperature at 50 % SOC; cycle tests varied depth
+  and mean SOC at 35 °C and 1C.
+- **[BLAST-Lite]** NREL, BLAST-Lite, `blast/models/nmc111_gr_Sanyo2Ah_2014.py`,
+  https://github.com/NREL/BLAST-Lite : the [Schmalstieg 2014] model as code. Capacity:
+  calendar α = (7.543·V − 23.75)·10⁶·e^(−6976/T) with loss α·t^0.75 (t in days, T in K);
+  cycling β = 7.348·10⁻³·(V − 3.667)² + 7.6·10⁻⁴ + 4.081·10⁻³·DOD with loss β·√Q (Q in Ah
+  per cell, counting charge and discharge). Resistance: α_R = (5.270·V − 16.32)·10⁵·e^(−5986/T)
+  with t^0.75; β_R = 2.153·10⁻⁴·(V − 3.725)² − 1.521·10⁻⁵ + 2.798·10⁻⁴·DOD, linear in Q.
+  Cell 2.15 Ah; OCV table 3.331 V (0 %) to 4.162 V (100 %), from [Schmalstieg 2014] fig. 1 and
+  Ecker et al. 2014. Notes that the cycling terms do not depend on temperature or C-rate.
+- **[LG M50]** LG Chem INR21700-M50 product specification, as summarised by Battery Design,
+  https://www.batterydesign.net/lg-21700-m50/ : 5.0 Ah, 3.63 V nominal, 4.20 V max; DCIR
+  30 ± 6 mΩ (30 s, 0.5C); charge 0.7C max at 25-50 °C, charge range 0-50 °C; discharge to
+  60 °C; 500 cycles at C/3.
+- **[BU-409]** Battery University, "BU-409: Charging Lithium-ion",
+  https://batteryuniversity.com/article/bu-409-charging-lithium-ion : CC-CV; table 2, at
+  4.20 V/cell the CV stage starts at ~85 % capacity; the charge is complete when the current
+  falls to 3-5 % of the Ah rating; standard 1C charge.
+- **[Steinhardt 2022]** M. Steinhardt et al., "Meta-analysis of experimental results for heat
+  capacity and thermal conductivity in lithium-ion batteries: A critical review", *J. Power
+  Sources* 522 (2022) 230829. Full-cell specific heat, medians: cylindrical 912, prismatic
+  1,041, pouch 1,168 J/(kg·K); steel housings 480 J/(kg·K).
+
 ### Gas turbines (vehicle)
 
 - **[GS M1]** GlobalSecurity.org, *M1 Abrams Main Battle Tank - Specifications*,
@@ -262,7 +290,8 @@ Definitions with their own `inertia`: AGT1500 7.93 ([FI AGT1500]), Electric-Tiny
 | Motor bearing drag | 0.2% of peak torque | **Estimated** |
 | Regen command | Throttle 0 = none, -100 = the full torque envelope | Behaviour: regen only on a negative throttle, no lift-off regen. For scale, Nissan's e-Pedal (0.2 g on the 2018 LEAF [e-Pedal]) works out at 0.2·9.81·1,700 kg·0.323 m / 8.19 final drive = 131 N·m, about -40 on a 320 N·m motor |
 | Regen low-speed fade | 5% of top speed | **Estimated**. The fade speed is where the fitted losses equal the recovered power at regen torque, so below it regen would drain the battery. Real EVs blend in friction brakes there |
-| Regen charge limit | 0 when every linked battery is full, otherwise none | Behaviour. No C-rate limit is modelled: charge acceptance data per pack size was not found |
+| Regen charge limit | the linked battery's CC-CV charge acceptance (`ENT:ChargeAcceptW`) | See Batteries below. The limit is applied to the power reaching the battery; the torque is scaled down linearly when it is exceeded (`Engine.GeneratorLimit`) |
+| Direction (Reverse input) | +1 / −1; the inverter commands torque in the selected direction | Behaviour of a four-quadrant drive: a motor turning against the selected direction is braked by that torque (generating, limited like regen) down through zero, then driven the other way. No reversal is instant: the rotor and the vehicle geared to it pass through standstill. Regen on a negative throttle works in either direction |
 | CoolantFrac | 0.28 / 0.25 / 0.30 / 0.02 (SI / diesel / rotary / turbine) | [Heywood] table 12.1 for SI and diesel, **not re-verified**. The others are **estimated**. Motors put all of their losses (copper, inverter, core, bearings) into the engine's heat instead |
 | LHV petrol (SI, rotary) | 43.3 MJ/kg (was 43.4) | **Sourced**: [EPA-TNGA] EPA test gasoline 43.31 MJ/kg |
 | LHV diesel / turbine fuel | 42.6 / 42.8 MJ/kg | [Heywood] App. D, **not re-verified** |
@@ -296,9 +325,48 @@ battery (30-40 Wh/kg) would need a separate fuel type.
 
 When every linked battery is empty the engine switches off (`ACE.EnginesRequireFuel`), like an
 EV at 0% charge; regen cannot recover a flat pack because the motor is off. Regen charges the
-first linked battery with room left (`ENT:GetChargeTank`); with all of them full it is disabled.
-Not modelled: pack power limits (a small battery can feed any motor), battery internal
-resistance loss, and charge-rate limits on regen.
+first linked battery that accepts charge (`ENT:GetChargeTank`).
+
+### Battery model (lua/ace/shared/mobility/battery_model.lua)
+
+Each battery is one lumped thermal mass with resistive losses, CC-CV charging, BMS temperature
+limits and wear. Wear is kept only on the entity (`BatteryState`), so a duplicated or pasted
+battery is new. Heat follows `ace_heat_timescale` like engine coolant; calendar wear runs on
+real time; cycle wear follows charge throughput, so it is independent of any time scale.
+
+| Quantity | Value | Source / status |
+|---|---|---|
+| Resistive loss | P_loss = Loss1C · R · P² / E_nom, Loss1C = 0.03 Ω × 5 A / 3.63 V = 0.041 | **Sourced**: [LG M50] DCIR, capacity, voltage. Taken from the stored energy on discharge and from the input on charge, and heats the cells |
+| Cell heat capacity | 912 J/(kg·K) on the fill mass (1.35 kg/L); housing 480 J/(kg·K) | [Steinhardt 2022] |
+| Cooling | natural convection, h = 10 W/(m²·K) on the box's outer area, exact exponential step | [Incropera] range 2-25; 10 as for the engine skin, **Estimated**. ACE batteries have no liquid loop, so a pack worked hard stays hot for a long time |
+| CC-CV acceptance | 1C constant current to 85 % charge, then C·(1 − SOC)/0.15 (the exponential CV taper) until it falls below 0.04C, where the pack reads full (99.4 %) | CC rate 1C from [BU-409] (the M50 allows 0.7C continuous, so 1C is at the generous end of a cell rating); CV point and cut-off [BU-409]. Applies to regen, to reverse braking and to Refuel Duty transfers between batteries. The taper shape is the usual first-order approximation, **Estimated** |
+| Charge temperature limit | 50 °C, tapering from 45 °C | Limit [LG M50]; 5 K taper **Estimated** |
+| Discharge temperature limit | 60 °C, tapering from 55 °C (motor torque × derate) | Limit [LG M50]; 5 K taper **Estimated** |
+| Calendar fade and resistance growth | α·t^0.75 and α_R·t^0.75 with the [BLAST-Lite] coefficients, V from the OCV table at the pack's charge, T the cell temperature | **Sourced** [Schmalstieg 2014] / [BLAST-Lite]. Continued step by step in the equivalent-time form, so conditions may change between steps. At 25 °C a year held at 50 % costs 2.4 %, held full 4.4 %, held full at 45 °C 19 % (self-test). Above the tested 50 °C the Arrhenius term is extrapolated |
+| Cycle fade and resistance growth | β·√Q and β_R·Q, Q scaled to one 2.15 Ah cell (moving the whole capacity once = 2.15 Ah), DOD = the charge swing of the current half cycle (a run of charging or of discharging), V = OCV at its mid point | **Sourced** coefficients [BLAST-Lite]. Cycle counting by half cycles is a simplification of rainflow counting, **Estimated**. 500 full cycles: 22 % fade, resistance ×1.57; the same throughput in 10 % cycles: 6 % fade (self-test). [LG M50] rates 500 C/3 cycles, and [Schmalstieg 2014]'s cells behave in the same range |
+| Capacity | new capacity × (1 − calendar − cycle fade) | The Capacity wire output reports it |
+| Outputs | Temperature (°C), Health (% of new capacity) | Batteries only |
+
+Not modelled: discharge power limits by C-rate (a small battery can still feed any motor; it
+only heats up doing it), cold-temperature effects (ACE's ambient is 20 °C), lithium plating,
+thermal runaway, and SEI decomposition above ~80 °C (the BMS limits stop the cells from heating
+themselves that far).
+
+### Built-in radiator of the Electric-Small / -Medium / -Large motors
+
+These models were described as having integrated batteries, which the code never modelled
+(they always needed linked batteries). Their housing is much larger than the motor, and that
+space is now a radiator core (`ENT:UpdateBuiltinCooler`, `ACE.EngineThermalThink`):
+
+| Quantity | Value | Source / status |
+|---|---|---|
+| Core volume | housing collision volume (`PhysObj:GetVolume()`) − `motorvolume` | `motorvolume` is the collision-hull volume of the standalone motor model of the same size (emotor-standalone-sml / -mid / -big: 2,796 / 6,634 / 12,960 in³), **measured** from the .phy files. The housings measure 21,952 / 55,986 / 152,957 in³, leaving 19,156 / 49,352 / 139,997 in³ of core (314 / 809 / 2,294 L) |
+| Core depth / face | depth = the housing's thinnest side; face = volume / depth | Same geometry rule as the radiator entity (face × depth = the box), **Estimated** for a housing |
+| Air side | the radiator entity's model: `Thermal.RadiatorAir` at `Thermal.FaceVelocity` (ram air plus fan) | See thermal_model.lua below |
+| Fan | 30 W per litre of core, drawn from the battery while the motor is on and its coolant is above 50 °C | 30 W/L as the radiator entity; 50 °C switch point **Estimated** |
+
+The core is far larger than a motor needs, so these motors run cool at any load: the coolant
+flow (`PumpC`), not the core, limits what they reject.
 
 ## torque_converter.lua
 
@@ -360,6 +428,7 @@ up; hot metal costs torque and, past the damage temperature, health.
 | Face velocity | fan 4 m/s; ram 0.4 × speed × √(5 cm / depth); still air 0.3 m/s; fan and ram added as pressures | [Padmaraman 2021] discharge 0.75 (halved for installation, **Estimated**); fan 4 m/s from the existing 30 W/L fan power, **Estimated** |
 | ε-NTU | cross-flow, both unmixed | [Padmaraman 2021] eq. 8 / [Incropera] |
 | Built-in cooling | `ace_engine_builtin_cooling` (default 0.5) × kind multiplier (turbine 3) of rated heat at 100 °C / 20 °C | Gameplay setting: ACE builds may have no radiator entity |
+| Built-in radiator core (Electric-Small/-Medium/-Large) | an extra heat exchanger from the housing's spare volume | See Batteries > Built-in radiator |
 | Derate | from 150 °C metal (140 petrol) to ×0.6 (×0.5 petrol, ×0.5 motor) at 250 °C (200 motor) | **Estimated** shape |
 | Damage | from 200 °C metal (180 motor windings), 0.5% of max health per s per 50 K | Onset [MIT 2.61] oil film limit / [IEC 60085]; rate **Estimated** |
 
