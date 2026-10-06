@@ -306,6 +306,9 @@ function ENT:Update( ArgsTable )
 		self.RangeRatio, self.SplitRatio = Spec.Range, Spec.Split
 	end
 
+	-- Updating the gearbox fits a new clutch.
+	self.ClutchLife, self.ClutchBurnt, self.ClutchTemp = nil, nil, nil
+
 	if self.Id ~= Id then
 
 		local Spec = ACE.GearboxSize.Resolve( GearboxData )
@@ -470,7 +473,12 @@ function ENT:UpdateOverlayText()
 		text = text .. "\nClutch: " .. math.Round( self.ClutchSetup, 1 ) .. "x engine torque" .. ( ( self.ClutchPlates or 1 ) > 1 and ", twin plate" or "" )
 		if self.ClutchHousingLimited then text = text .. "\nClutch limited by gearbox size: " .. math.Round( self.MobClutchRated or 0 ) .. " Nm" end
 	end
-	if self.OverTorque then
+	if self.ClutchBurnt then
+		text = text .. "\nClutch burnt out - update the gearbox to replace it"
+	elseif ( self.ClutchLife or 1 ) < 1 then
+		text = text .. "\nClutch facing: " .. math.Round( self.ClutchLife * 100 ) .. " % left"
+	end
+	if self.OverTorque and not self.ClutchBurnt then
 		text = text .. "\n" .. self:OverTorqueReason()
 	end
 	if self.GearOverload then text = text .. "\nGears overloaded - wearing" end
@@ -630,6 +638,16 @@ local ClutchFadeStart = 250           -- °C
 local ClutchFadeEnd = 450             -- °C, capacity down to the fade floor
 local ClutchFadeFloor = 0.35
 local ClutchDamageTemp = 350          -- °C
+--[[
+	Past ClutchDamageTemp the facings char and wear away. The facing life lost per second per
+	100 K of overheat is ClutchBurnRate (estimated: a clutch held near 450 °C, slipping hard,
+	is gone in under a minute, as a clutch cooked on a hill start or a stuck vehicle is). Worn
+	below ClutchWornLife the facing grips less and less, and with none left the clutch is burnt
+	out: it carries no torque, so it makes no more heat and cools down. A new clutch is fitted
+	by updating the gearbox with the menu tool.
+]]
+local ClutchBurnRate = 0.02
+local ClutchWornLife = 0.25
 
 -- The engine driving this gearbox, directly or through parent gearboxes.
 local function masterEngine(Box, Depth)
@@ -660,11 +678,16 @@ local function outputSpeed(Box)
 	return Count > 0 and Sum / Count or 0
 end
 
+--- Share of its rated torque the clutch can carry now: hot facings fade, worn ones slip, a
+-- burnt-out clutch carries none.
+-- @return number 0..1
 function ENT:ClutchCapacityScale()
+	if self.ClutchBurnt then return 0 end
+	local Worn = math.Clamp((self.ClutchLife or 1) / ClutchWornLife, 0, 1)
 	local T = self.ClutchTemp or ACE.AmbientTemp
-	if T <= ClutchFadeStart then return 1 end
+	if T <= ClutchFadeStart then return Worn end
 	local F = math.Clamp((T - ClutchFadeStart) / (ClutchFadeEnd - ClutchFadeStart), 0, 1)
-	return 1 - F * (1 - ClutchFadeFloor)
+	return (1 - F * (1 - ClutchFadeFloor)) * Worn
 end
 
 -- Automatic shift schedule: the builder's speed points, pushed up by throttle (kickdown).
@@ -769,10 +792,13 @@ function ENT:MobilityControl(Dt)
 
 		-- Clutch-to-clutch shift: the new ratio is engaged at once, its clutch pack picks up the
 		-- torque over the shift time while the old one releases.
-		self.MobRatio = TargetR
+		-- Burnt-out clutch packs hold no gear.
+		self.MobRatio = self.ClutchBurnt and 0 or TargetR
 		if Shifting then
 			local Frac = 1 - math.Clamp((self.ChangeFinished - Now) / math.max(self.SwitchTime, 0.05), 0, 1)
-			self.MobDriveCap = Max * (0.25 + 0.75 * Frac)
+			self.MobDriveCap = Max * (0.25 + 0.75 * Frac) * Fade
+		elseif Fade < 1 then
+			self.MobDriveCap = Max * Fade
 		end
 
 		--[[
@@ -786,9 +812,10 @@ function ENT:MobilityControl(Dt)
 			SR = (Mob.InputW or 0) / Engine.MobState.W
 		end
 		local Lock = self.Gear >= 2 and not Shifting and (SR > 0.75 or (self.MobLockupCap or 0) > 0 and SR > 0.6)
-		self.MobLockupCap = Lock and Max or 0
+		self.MobLockupCap = Lock and Max * Fade or 0
 		-- Until the converter is sized (no engine spec yet) the box is coupled by a plain clutch.
-		self.MobClutchCap = self.MobConverter and nil or Max
+		self.MobClutchCap = self.MobConverter and nil or Max * Fade
+		self.MobFade = Fade
 		self.MobSideScale = 1
 		self.MobCapFull = false
 		return
@@ -1011,7 +1038,9 @@ end
 --- Player-facing explanation of why the gearbox clutch is slipping under full engagement.
 -- @return string
 function ENT:OverTorqueReason()
-	if self.MobRatingLimited then
+	if self.ClutchBurnt then
+		return "Gearbox clutch burnt out - it carries no torque. Update the gearbox with the menu tool to fit a new one"
+	elseif self.MobRatingLimited then
 		-- The clutch carries the engine's torque plus what it takes to speed up or slow down the
 		-- engine's rotating mass (shifts, wheels gripping again, braking in gear), so a rating
 		-- only a little above the engine's peak still slips. Clutches are sized 1.2-2 times peak.
@@ -1038,13 +1067,16 @@ function ENT:MobilityApply()
 		Clutch temperature: slip heat in, cooling out. The heat sink of a dry clutch is its
 		pressure plate and flywheel face, roughly 5-8 kg for a 300 N·m car clutch and 30-40 kg for
 		a 2500-3000 N·m heavy-truck clutch (pressure plate masses from heavy-duty clutch catalogues),
-		air cooled with a ~20 s time constant. Dual (steering) boxes use wet multi-plate clutches
-		running in the transmission oil, which carries heat away several times faster.
+		sized by the clutch's own rating, not the gearbox's. It is air cooled inside the bell
+		housing and takes minutes to cool: a 120 s time constant (estimated; at 20 s a car clutch
+		shed 150 kW at 350 °C and could slip at full power for ever without burning out). Dual
+		(steering) boxes use wet multi-plate clutches running in the transmission oil, which
+		carries heat away much faster.
 		The global heat time scale (ace_heat_timescale) speeds heating, cooling and wear alike.
 	]]
 	local HeatRate = ACE.GetHeatRate()
-	local Mass = 4 + math.max(self.MaxTorque or 0, self.MobClutchRated or 0) / 100
-	local Tau = self.Dual and 6 or 20
+	local Mass = 4 + (self.MobClutchRated or self.MaxTorque or 0) / 100
+	local Tau = self.Dual and 6 or 120
 	local T = self.ClutchTemp or ACE.AmbientTemp
 	T = T + (Mob.ClutchHeatJ or 0) * HeatRate / (ClutchSpecificHeat * Mass)
 	T = T - (T - ACE.AmbientTemp) * (1 - math.exp(-Dt * HeatRate / Tau))
@@ -1054,6 +1086,13 @@ function ENT:MobilityApply()
 		-- A cooked clutch wears its facings away: lose health in proportion to the overheat.
 		local Wear = (T - ClutchDamageTemp) / 100 * Dt * HeatRate * 0.01 * self.ACE.MaxHealth
 		self.ACE.Health = math.max(self.ACE.Health - Wear, self.ACE.MaxHealth * 0.05)
+	end
+	if T > ClutchDamageTemp and not self.ClutchBurnt then
+		self.ClutchLife = math.max((self.ClutchLife or 1) - (T - ClutchDamageTemp) / 100 * ClutchBurnRate * Dt * HeatRate, 0)
+		if self.ClutchLife <= 0 then
+			self.ClutchBurnt = true
+			self:UpdateOverlayText()
+		end
 	end
 
 	self:UpdateOverTorque(Mob, Dt)
