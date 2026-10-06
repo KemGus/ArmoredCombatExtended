@@ -5,6 +5,17 @@ include("shared.lua")
 
 local GearboxTable = ACE.Weapons.Gearboxes
 
+--[[
+	Custom clutch capacity, as a multiple of the linked engines' peak torque (the reserve
+	factor clutch makers size with: about 1.2-1.5 for cars, 1.5-2 for diesels and trucks,
+	Naunheimer et al., Automotive Transmissions, clutch dimensioning - recalled, not re-checked).
+	The disc has to fit the gearbox's bell housing, which grows with the gearbox: one plate the
+	size the housing takes carries the gearbox's own rating. Past that a second plate is added
+	(twin-plate clutches, as on heavy trucks and tanks), up to twice the rating; no more fits.
+]]
+local ClutchSetupMin, ClutchSetupMax = 1.2, 2.5
+local ClutchMaxPlates = 2
+
 do
 
 	local GearboxWireDescs = {
@@ -12,7 +23,12 @@ do
 		["GearUp"]		= "Increases one gear above the current one.",
 		["GearDown"]	= "Decreases one gear below the current one.",
 		["Clutch"]		= "Applies Clutch to gearbox. Values from 0 to 1.",
-		["Brake"]		= "Brake pedal, 0 to 1. 1 is full braking, which locks the wheels."
+		["Brake"]		= "Brake pedal, 0 to 1. 1 is full braking, which locks the wheels.",
+		["HoldGear"]	= "Automatics: 1 stops upshifts, for climbing or towing. Downshifts still happen.",
+		["ShiftScale"]	= "Automatics: multiplies every upshift speed, 0.1 to 1.5. 1 shifts at the speeds set in the menu, 0.5 at half of them - earlier shifts for light throttle.",
+		["Drive"]		= "Automatics: 1 is Drive, 2 is Reverse, 0 is Neutral.",
+		["CVTRatio"]	= "CVTs: 0 lets the box pick its ratio from the target RPM; above 0 sets the ratio by hand, 0 to 1.",
+		["SteerRate"]	= "Double differentials: -1 to 1, steering direction and strength. Works in neutral for a pivot turn."
 	}
 
 	function ENT:Initialize()
@@ -54,7 +70,7 @@ do
 
 	end
 
-	function ACE.MakeGearbox(Owner, Pos, Angle, Id, Data1, Data2, Data3, Data4, Data5, Data6, Data7, Data8, Data9, Data10)
+	function ACE.MakeGearbox(Owner, Pos, Angle, Id, Data1, Data2, Data3, Data4, Data5, Data6, Data7, Data8, Data9, Data10, Data11, Data12, Data13, Data14, Data15)
 
 		if not Owner:CheckLimit("_ace_misc") then return false end
 
@@ -69,6 +85,7 @@ do
 		end
 
 		local GearboxData = GearboxTable[Id]
+		local Spec = ACE.GearboxSize.Resolve( GearboxData, Data11, Data12, Data13, Data14, Data15 )
 
 		Gearbox:SetAngles(Angle)
 		Gearbox:SetPos(Pos)
@@ -77,11 +94,19 @@ do
 		Gearbox:CPPISetOwner(Owner)
 		Gearbox.Id		= Id
 		Gearbox.Model	= GearboxData.model
-		Gearbox.Mass		= GearboxData.weight		or 1
-		Gearbox.SwitchTime  = GearboxData.switch
-		Gearbox.MaxTorque	= GearboxData.maxtq		or 0
-		Gearbox.Gears	= GearboxData.gears		or 2 --hmmmmmm ok? just if everything fails
-		Gearbox.Dual		= GearboxData.doubleclutch	or false
+		Gearbox.Mass		= Spec.Mass
+		Gearbox.SwitchTime  = Spec.Switch
+		Gearbox.MaxTorque	= Spec.MaxTorque
+		Gearbox.Gears	= Spec.Gears
+		Gearbox.Dual		= Spec.Dual
+		Gearbox.InputJ	= Spec.InputJ
+		-- Kept for duplication (Data11-13); legacy ids keep nil so they paste as before.
+		Gearbox.GearboxScale = GearboxData.scalable and Spec.Scale or nil
+		Gearbox.GearCount	= GearboxData.scalable and Spec.Gears or nil
+		Gearbox.DualSetup	= GearboxData.scalable and ( Spec.Dual and 1 or 0 ) or nil
+		Gearbox.MainGears	= Spec.Gears
+		Gearbox.RangeRatio	= Spec.Range
+		Gearbox.SplitRatio	= Spec.Split
 		Gearbox.CVT		= GearboxData.cvt			or false
 		Gearbox.DoubleDiff  = GearboxData.doublediff	or false
 		Gearbox.Auto		= GearboxData.auto			or false
@@ -107,6 +132,7 @@ do
 			Gearbox.GearTable[8] = Data8
 			Gearbox.GearTable[9] = Data9
 			Gearbox.GearTable[0] = GearboxData.geartable[0]
+		Gearbox:ExpandGears()
 
 			Gearbox.Gear0 = Data10
 			Gearbox.Gear1 = Data1
@@ -133,14 +159,14 @@ do
 
 		Gearbox:SetModel( Gearbox.Model )
 
-		local Inputs = {"Gear (" .. GearboxWireDescs["Gear"] .. ")","Gear Up (" .. GearboxWireDescs["GearUp"] .. ")","Gear Down (" .. GearboxWireDescs["GearDown"] .. ")"}
+		local Inputs = {Gearbox.Auto and "Gear (" .. GearboxWireDescs["Drive"] .. ")" or "Gear (" .. GearboxWireDescs["Gear"] .. ")","Gear Up (" .. GearboxWireDescs["GearUp"] .. ")","Gear Down (" .. GearboxWireDescs["GearDown"] .. ")"}
 		if Gearbox.CVT then
-			table.insert(Inputs,"CVT Ratio")
+			table.insert(Inputs,"CVT Ratio (" .. GearboxWireDescs["CVTRatio"] .. ")")
 		elseif Gearbox.DoubleDiff then
-			table.insert(Inputs, "Steer Rate")
+			table.insert(Inputs, "Steer Rate (" .. GearboxWireDescs["SteerRate"] .. ")")
 		elseif Gearbox.Auto then
-			table.insert(Inputs, "Hold Gear")
-			table.insert(Inputs, "Shift Speed Scale")
+			table.insert(Inputs, "Hold Gear (" .. GearboxWireDescs["HoldGear"] .. ")")
+			table.insert(Inputs, "Shift Speed Scale (" .. GearboxWireDescs["ShiftScale"] .. ")")
 			Gearbox.Hold = false
 		end
 
@@ -181,15 +207,30 @@ do
 		Gearbox:SetMoveType( MOVETYPE_VPHYSICS )
 		Gearbox:SetSolid( SOLID_VPHYSICS )
 
+		-- Link points come from the model's attachments; a scaled box scales them with it.
+		local AttScale = Spec.Scaled and Spec.Scale or 1
+		Gearbox.In = Gearbox:WorldToLocal(Gearbox:GetAttachment(Gearbox:LookupAttachment( "input" )).Pos) * AttScale
+		Gearbox.OutL = Gearbox:WorldToLocal(Gearbox:GetAttachment(Gearbox:LookupAttachment( "driveshaftL" )).Pos) * AttScale
+		Gearbox.OutR = Gearbox:WorldToLocal(Gearbox:GetAttachment(Gearbox:LookupAttachment( "driveshaftR" )).Pos) * AttScale
+
+		if Spec.Scaled then
+			local Phys = Gearbox:GetPhysicsObject()
+			if IsValid( Phys ) then
+				Gearbox.ScaleData = {
+					Mesh = Phys:GetMeshConvexes(),
+					Scale = Vector( Spec.Scale, Spec.Scale, Spec.Scale ),
+					Size = 1,
+				}
+				Gearbox.IsScalable = true
+				Gearbox:ACE_SetScale( Gearbox.ScaleData )
+			end
+		end
+
 		local phys = Gearbox:GetPhysicsObject()
 		if IsValid( phys ) then
 			phys:SetMass( Gearbox.Mass )
 			Gearbox.ModelInertia = 0.99 * phys:GetInertia() / phys:GetMass() -- giving a little wiggle room
 		end
-
-		Gearbox.In = Gearbox:WorldToLocal(Gearbox:GetAttachment(Gearbox:LookupAttachment( "input" )).Pos)
-		Gearbox.OutL = Gearbox:WorldToLocal(Gearbox:GetAttachment(Gearbox:LookupAttachment( "driveshaftL" )).Pos)
-		Gearbox.OutR = Gearbox:WorldToLocal(Gearbox:GetAttachment(Gearbox:LookupAttachment( "driveshaftR" )).Pos)
 
 		Owner:AddCount("_ace_misc", Gearbox)
 		Owner:AddCleanup( "acemenu", Gearbox )
@@ -202,7 +243,7 @@ do
 			Gearbox:SetBodygroup(1, 0)
 		end
 
-		Gearbox:SetNWString( "WireName", GearboxData.name )
+		Gearbox:SetNWString( "WireName", ACE.GearboxSize.DisplayName( GearboxData, Spec ) )
 		Gearbox:UpdateOverlayText()
 
 		ACE.Activate( Gearbox, 0 )
@@ -212,7 +253,8 @@ do
 	--- Applies a gearbox's drivetrain setup and stores it so it survives duplication.
 	-- @param Setup Table: Diff ("open", "locked" or "lsd"), LSDPreload (N*m), LSDRamp (0-1,
 	-- share of the input torque that locks the differential), Assisted (bool), DCT (bool,
-	-- dual-clutch shifting: the next gear takes the torque over with no interruption).
+	-- dual-clutch shifting: the next gear takes the torque over with no interruption), Clutch
+	-- (clutch capacity as a multiple of the linked engines' peak torque, 0 = matched to the box).
 	function ENT:SetMobilitySetup( Setup )
 		Setup = istable( Setup ) and Setup or {}
 		local Diff = ( Setup.Diff == "locked" or Setup.Diff == "lsd" ) and Setup.Diff or "open"
@@ -223,10 +265,12 @@ do
 		self.LSDRamp = Diff == "lsd" and math.Clamp( tonumber( Setup.LSDRamp ) or 0, 0, 1 ) or 0
 		self.AssistedSetup = tobool( Setup.Assisted )
 		self.DCT = tobool( Setup.DCT ) and not self.Auto and not self.CVT and ( self.Gears or 0 ) > 1
+		local Clutch = tonumber( Setup.Clutch ) or 0
+		self.ClutchSetup = Clutch > 0 and math.Round( math.Clamp( Clutch, ClutchSetupMin, ClutchSetupMax ), 1 ) or nil
 
 		duplicator.StoreEntityModifier( self, "ACE_GearboxSetup", {
 			Diff = Diff, LSDPreload = self.LSDPreload, LSDRamp = self.LSDRamp,
-			Assisted = self.AssistedSetup, DCT = self.DCT
+			Assisted = self.AssistedSetup, DCT = self.DCT, Clutch = self.ClutchSetup
 		} )
 		self:UpdateOverlayText()
 	end
@@ -236,7 +280,7 @@ do
 	end )
 
 	list.Set( "ACFCvars", "acf_gearbox", {"id", "data1", "data2", "data3", "data4", "data5", "data6", "data7", "data8", "data9", "data10", "data11", "data12", "data13", "data14", "data15"} )
-	duplicator.RegisterEntityClass("acf_gearbox", ACE.MakeGearbox, "Pos", "Angle", "Id", "Gear1", "Gear2", "Gear3", "Gear4", "Gear5", "Gear6", "Gear7", "Gear8", "Gear9", "Gear0" )
+	duplicator.RegisterEntityClass("acf_gearbox", ACE.MakeGearbox, "Pos", "Angle", "Id", "Gear1", "Gear2", "Gear3", "Gear4", "Gear5", "Gear6", "Gear7", "Gear8", "Gear9", "Gear0", "GearboxScale", "GearCount", "DualSetup", "RangeRatio", "SplitRatio" )
 
 end
 
@@ -251,14 +295,27 @@ function ENT:Update( ArgsTable )
 		return false, "The new gearbox must have the same model!"
 	end
 
+	-- Size, gear count and clutch layout set the mass, collision mesh and wire inputs; changing
+	-- them means a new gearbox.
+	if GearboxData.scalable or self.GearboxScale then
+		local Spec = ACE.GearboxSize.Resolve( GearboxData, ArgsTable[15], ArgsTable[16], ArgsTable[17], ArgsTable[18], ArgsTable[19] )
+		if self.Id ~= Id or math.abs( Spec.Scale - ( self.GearboxScale or 1 ) ) > 1e-3 or Spec.Gears ~= ( self.MainGears or self.Gears ) or Spec.Dual ~= self.Dual
+			or ( Spec.Range ~= nil ) ~= ( self.RangeRatio ~= nil ) or ( Spec.Split ~= nil ) ~= ( self.SplitRatio ~= nil ) then
+			return false, "Size, gear count, range, splitter and dual clutch can't be changed on a placed gearbox - spawn a new one."
+		end
+		self.RangeRatio, self.SplitRatio = Spec.Range, Spec.Split
+	end
+
 	if self.Id ~= Id then
 
+		local Spec = ACE.GearboxSize.Resolve( GearboxData )
 		self.Id		= Id
-		self.Mass	= GearboxData.weight		or 1
-		self.SwitchTime = GearboxData.switch
-		self.MaxTorque  = GearboxData.maxtq		or 0
-		self.Gears	= GearboxData.gears		or 2
-		self.Dual	= GearboxData.doubleclutch	or false
+		self.Mass	= Spec.Mass
+		self.SwitchTime = Spec.Switch
+		self.MaxTorque  = Spec.MaxTorque
+		self.InputJ	= Spec.InputJ
+		self.Gears	= Spec.Gears
+		self.Dual	= Spec.Dual
 		self.CVT		= GearboxData.cvt			or false
 		self.DoubleDiff = GearboxData.doublediff	or false
 		self.Auto	= GearboxData.auto			or false
@@ -326,6 +383,7 @@ function ENT:Update( ArgsTable )
 	self.GearTable[8] = ArgsTable[12]
 	self.GearTable[9] = ArgsTable[13]
 	self.GearTable[0] = GearboxData.geartable[0]
+	self:ExpandGears()
 
 	self.Gear0 = ArgsTable[14]
 	self.Gear1 = ArgsTable[5]
@@ -362,7 +420,7 @@ function ENT:Update( ArgsTable )
 		self:SetBodygroup(1, 0)
 	end
 
-	self:SetNWString( "WireName", GearboxData.name )
+	self:SetNWString( "WireName", ACE.GearboxSize.DisplayName( GearboxData, ACE.GearboxSize.Resolve( GearboxData, self.GearboxScale, self.MainGears or self.Gears, self.Dual, self.RangeRatio, self.SplitRatio ) ) )
 	self:UpdateOverlayText()
 
 	ACE.Activate( self, 1 )
@@ -381,6 +439,13 @@ function ENT:UpdateOverlayText()
 		for i = 1, self.Gears do
 			text = text .. "Gear " .. i .. ": " .. math.Round( self.GearTable[ i ], 2 ) .. ", Upshift @ " .. math.Round( self.ShiftPoints[i] / 10.936, 1 ) .. " kph / " .. math.Round( self.ShiftPoints[i] / 17.6 ,1 ) .. " mph\n"
 		end
+	elseif self.Speeds then
+		for i = 1, self.MainGears do
+			text = text .. "Main gear " .. i .. ": " .. math.Round( self[ "Gear" .. i ] or 0, 2 ) .. "\n"
+		end
+		if self.RangeRatio then text = text .. "Range: " .. self.RangeRatio .. ":1 low, direct high\n" end
+		if self.SplitRatio then text = text .. "Splitter: " .. self.SplitRatio .. ":1 low, direct high\n" end
+		text = text .. "Speeds: " .. self.Gears .. " (Gear input 1-" .. self.Gears .. ", slowest first, reverses last)\n"
 	else
 		for i = 1, self.Gears do
 			text = text .. "Gear " .. i .. ": " .. math.Round( self.GearTable[ i ], 2 ) .. "\n"
@@ -392,6 +457,7 @@ function ENT:UpdateOverlayText()
 
 	text = text .. "Final Drive: " .. math.Round( self.Gear0, 2 ) .. "\n"
 	text = text .. "Torque Rating: " .. self.MaxTorque .. " Nm / " .. math.Round( self.MaxTorque * 0.73 ) .. " ft-lb"
+	text = text .. "\nWeight: " .. math.Round( self.Mass ) .. " kg" .. ( self.GearboxScale and ( ", size " .. self.GearboxScale ) or "" )
 	if self.DiffLockSetup then
 		text = text .. "\nDifferential: locked"
 	elseif ( self.LSDPreload or 0 ) > 0 or ( self.LSDRamp or 0 ) > 0 then
@@ -400,9 +466,14 @@ function ENT:UpdateOverlayText()
 	if self.DCT then text = text .. "\nDual-clutch shifting" end
 	if self.AssistedSetup then text = text .. "\nAssisted" end
 
+	if self.ClutchSetup then
+		text = text .. "\nClutch: " .. math.Round( self.ClutchSetup, 1 ) .. "x engine torque" .. ( ( self.ClutchPlates or 1 ) > 1 and ", twin plate" or "" )
+		if self.ClutchHousingLimited then text = text .. "\nClutch limited by gearbox size: " .. math.Round( self.MobClutchRated or 0 ) .. " Nm" end
+	end
 	if self.OverTorque then
 		text = text .. "\n" .. self:OverTorqueReason()
 	end
+	if self.GearOverload then text = text .. "\nGears overloaded - wearing" end
 
 	if not self.Legal then
 		text = text .. "\nNot legal, disabled for " .. math.ceil(self.NextLegalCheck - ACE.CurTime) .. "s\nIssues: " .. self.LegalIssues
@@ -661,6 +732,7 @@ function ENT:MobilityControl(Dt)
 	-- full drive. Driven straight it is an open differential, so wheeled builds corner freely.
 	local Steering = self.Dual and (math.abs((self.LClutch or Max) - (self.RClutch or Max)) > 0.02 * Max
 		or math.abs(ACE.Mobility.BrakePedal(self.LBrake) - ACE.Mobility.BrakePedal(self.RBrake)) > 0.02)
+	self.MobSteering = Steering or nil
 	if self.DiffLockInput or self.DiffLockSetup or Steering then
 		self.MobDiff = "locked"
 	elseif (self.LSDPreload or 0) > 0 or (self.LSDRamp or 0) > 0 then
@@ -823,6 +895,29 @@ function ENT:MobilityControl(Dt)
 		if IsValid(Master) and Master:GetClass() == "acf_engine" then EngineTorque = EngineTorque + (Master.PeakTorque or 0) end
 	end
 	if EngineTorque > 0 then Rated = math.min(Max, 1.5 * EngineTorque) end
+	--[[
+		A custom clutch is sized to the engine, not the gearbox: it can be made stronger than the
+		gears behind it (they then wear when overloaded, see MobilityApply) or weaker. Clutch
+		capacity T = mu * F * r * n (Shigley ch. 16): at the same facing pressure the torque grows
+		with the disc radius cubed, so the driven disc's inertia (mass r^2, thickness kept) grows
+		with T^(4/3). A 300 N·m car clutch's driven disc is about 0.005 kg·m² (estimated). That
+		inertia must be stopped and spun up by the synchronisers at every shift, so a strong
+		clutch shifts slower and grinds sooner; its heat sink grows with it.
+	]]
+	local ClutchJ = 0
+	self.ClutchPlates, self.ClutchHousingLimited = 1, false
+	if self.ClutchSetup and EngineTorque > 0 and Max > 0 then
+		local Want = self.ClutchSetup * EngineTorque
+		Rated = math.min(Want, Max * ClutchMaxPlates)
+		self.ClutchHousingLimited = Want > Rated + 1
+		local Plates = Rated > Max and 2 or 1
+		self.ClutchPlates = Plates
+		-- Each plate's disc inertia grows with its capacity to the 4/3 power (see above).
+		local Matched = math.min(Max, 1.5 * EngineTorque)
+		ClutchJ = math.max(0.005 * (Plates * (Rated / Plates / 300) ^ (4 / 3) - (Matched / 300) ^ (4 / 3)), 0)
+	end
+	self.MobClutchJ = ClutchJ
+	self.MobClutchRated = Rated
 	local RateScale = Max > 0 and Rated / Max or 1
 
 	local Cap = (self.LClutch or Max) * RateScale * Fade
@@ -893,7 +988,7 @@ function ENT:UpdateOverTorque(Mob, Dt)
 		if Over and CurTime() > (self.NextOverTorqueHint or 0) then
 			self.NextOverTorqueHint = CurTime() + 15
 			local Owner = self.CPPIGetOwner and self:CPPIGetOwner()
-			if IsValid(Owner) and Owner:IsPlayer() then
+			if ACE.WantsEngineHints(Owner) then
 				ACE.SendNotification(Owner, self:OverTorqueReason(), 8)
 			end
 		end
@@ -948,7 +1043,7 @@ function ENT:MobilityApply()
 		The global heat time scale (ace_heat_timescale) speeds heating, cooling and wear alike.
 	]]
 	local HeatRate = ACE.GetHeatRate()
-	local Mass = 4 + (self.MaxTorque or 0) / 100
+	local Mass = 4 + math.max(self.MaxTorque or 0, self.MobClutchRated or 0) / 100
 	local Tau = self.Dual and 6 or 20
 	local T = self.ClutchTemp or ACE.AmbientTemp
 	T = T + (Mob.ClutchHeatJ or 0) * HeatRate / (ClutchSpecificHeat * Mass)
@@ -962,6 +1057,7 @@ function ENT:MobilityApply()
 	end
 
 	self:UpdateOverTorque(Mob, Dt)
+	self:UpdateGearOverload(Mob, Dt)
 
 	-- Torque converter speed ratio (turbine / pump), for the acfConverterRatio accessors.
 	self.ConverterRatio = nil
@@ -985,14 +1081,68 @@ function ENT:MobilityApply()
 	self.TotalReqTq = math.abs((Mob.OutputTorque or 0) * (self.GearRatio or 0))
 end
 
+--[[
+	Gear overload: the torque through the gears above their rating. The rating is a fatigue
+	limit (a tooth's bending stress, Lewis equation); past it the teeth and bearings wear fast.
+	Only a custom clutch stronger than the gearbox, or shock loads through a locked
+	clutch, can get there. Wear rate: 4 % of maximum health per second at twice the rating, in
+	proportion to the overload (estimated, for gameplay), stopping at 5 % like a cooked clutch.
+]]
+function ENT:UpdateGearOverload(Mob, Dt)
+	local Max = self.MaxTorque or 0
+	local Torque = math.abs((Mob.OutputTorque or 0) * (self.GearRatio or 0))
+	local Over = Max > 0 and Torque / Max - 1 or 0
+	local Overloaded = Over > 0.02
+	if Overloaded and self.ACE and self.ACE.Health then
+		local Wear = 0.04 * Over * Dt * self.ACE.MaxHealth
+		self.ACE.Health = math.max(self.ACE.Health - Wear, self.ACE.MaxHealth * 0.05)
+	end
+	self.GearOverloadTime = Overloaded and (self.GearOverloadTime or 0) + Dt or 0
+	local Show = self.GearOverloadTime > 0.25
+	if Show ~= (self.GearOverload or false) then
+		self.GearOverload = Show
+		self:UpdateOverlayText()
+		if Show and CurTime() > (self.NextOverloadHint or 0) then
+			self.NextOverloadHint = CurTime() + 15
+			local Owner = self.CPPIGetOwner and self:CPPIGetOwner()
+			if ACE.WantsEngineHints(Owner) then
+				ACE.SendNotification(Owner, string.format("Gearbox overloaded: %d Nm through gears rated %d Nm - they are wearing out. Use a bigger gearbox or a weaker clutch.", math.Round(Torque), math.Round(Max)), 8)
+			end
+		end
+	end
+end
+
+--- Turns a compound manual's main gears (GearTable 1..MainGears) into every speed its range
+-- section and splitter give, slowest first (see ACE.GearboxSize.Expand). Other boxes are left
+-- as they are.
+function ENT:ExpandGears()
+	if not ( self.RangeRatio or self.SplitRatio ) or self.Auto or self.CVT then
+		self.Speeds = nil
+		return
+	end
+	local Main = {}
+	for I = 1, self.MainGears do Main[I] = tonumber( self.GearTable[I] ) or 0 end
+	local Speeds = ACE.GearboxSize.Expand( Main, self.RangeRatio, self.SplitRatio )
+	for I = 1, math.max( #Speeds, 9 ) do
+		self.GearTable[I] = Speeds[I] and Speeds[I].Value or nil
+	end
+	self.Speeds = Speeds
+	self.Gears = #Speeds
+end
+
 function ENT:ChangeGear(value)
 
 	local new = math.Clamp(math.floor(value),0,self.Gears)
 	if self.Gear == new then return end
 
+	local Old = self.Gear
 	self.Gear = new
 	self.GearRatio = (self.GearTable[self.Gear] or 0) * self.GearTable.Final
-	self.ChangeFinished = CurTime() + self.SwitchTime
+	local Time = self.SwitchTime
+	if self.Speeds then
+		Time = ACE.GearboxSize.CompoundShiftTime( self.Speeds[Old], self.Speeds[new], self.SwitchTime )
+	end
+	self.ChangeFinished = CurTime() + Time
 	self.InGear = false
 
 	Wire_TriggerOutput(self, "Current Gear", self.Gear)

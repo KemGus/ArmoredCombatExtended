@@ -8,6 +8,7 @@ local Files = {
 	"battery_model.lua",
 	"solver.lua",
 	"torque_converter.lua",
+	"gearbox_size.lua",
 	"drivetrain.lua",
 	"vehicle.lua",
 }

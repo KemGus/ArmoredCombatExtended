@@ -41,7 +41,7 @@ end
 
 local RowHeight = 22
 
-local function SendBanks(Engine, Banks, Reset)
+local function SendBanks(Engine, Banks, Reset, Starter)
 	net.Start("ACE_EngineSound_MenuSet")
 	net.WriteEntity(Engine)
 	net.WriteBool(Reset)
@@ -50,6 +50,7 @@ local function SendBanks(Engine, Banks, Reset)
 		EngineSound.WriteBanks(Banks)
 	end
 
+	net.WriteString(Starter or "")
 	net.SendToServer()
 end
 
@@ -223,7 +224,8 @@ end
 -- @param IdleRPM number Engine idle RPM, shown as a hint.
 -- @param LimitRPM number Engine redline, shown as a hint.
 -- @param Banks table Current banks, or a single bank made from the legacy sound.
-function EngineSound.OpenEditor(Engine, IsLegacy, IdleRPM, LimitRPM, Banks)
+-- @param Starter string|nil The engine's starter sound path ("" = standard).
+function EngineSound.OpenEditor(Engine, IsLegacy, IdleRPM, LimitRPM, Banks, Starter)
 	if IsValid(Editor) then
 		Editor:Remove()
 	end
@@ -245,6 +247,29 @@ function EngineSound.OpenEditor(Engine, IsLegacy, IdleRPM, LimitRPM, Banks)
 	Info:SetWrap(true)
 	Info:SetText(("Idle %d RPM, redline %d RPM. %s Each sound is pitched by RPM / recorded RPM and crossfaded with its neighbours. Up to %d banks of %d sounds.")
 		:format(IdleRPM, LimitRPM, IsLegacy and "The engine uses its single sound; applying switches it to banks." or "", EngineSound.MaxBanks, EngineSound.MaxSounds))
+
+	-- Starter sound: one per engine, looped while it cranks.
+	local StarterRow = Frame:Add("DPanel")
+	StarterRow:Dock(TOP)
+	StarterRow:SetTall(RowHeight)
+	StarterRow:DockMargin(0, 4, 0, 0)
+	StarterRow:SetPaintBackground(false)
+
+	local StarterLabel = StarterRow:Add("DLabel")
+	StarterLabel:Dock(LEFT)
+	StarterLabel:SetWide(90)
+	StarterLabel:SetText("Starter sound")
+
+	local StarterEntry = StarterRow:Add("DTextEntry")
+	StarterEntry:SetValue(Starter or "")
+	StarterEntry:SetPlaceholderText("blank = standard (" .. (EngineSound.StarterSound or "") .. ")")
+	StarterEntry:SetTooltip("A .wav, .mp3 or .ogg path under sound/. It loops while the engine cranks;\nits pitch follows the crank speed, 100 at 250 rpm.")
+
+	AddButton(StarterRow, "", "icon16/sound.png", "Preview", function(Self)
+		local Path = string.Trim(StarterEntry:GetValue())
+		TogglePreview(Self, Path ~= "" and Path or EngineSound.StarterSound or "")
+	end):Dock(RIGHT)
+	StarterEntry:Dock(FILL)
 
 	local Footer = Frame:Add("DPanel")
 	Footer:Dock(BOTTOM)
@@ -281,7 +306,7 @@ function EngineSound.OpenEditor(Engine, IsLegacy, IdleRPM, LimitRPM, Banks)
 
 	local Reset = AddButton(Footer, "Use single sound", "icon16/arrow_undo.png", "Remove all banks and go back to the engine's single sound", function()
 		if IsValid(Engine) then
-			SendBanks(Engine, nil, true)
+			SendBanks(Engine, nil, true, string.Trim(StarterEntry:GetValue()))
 		end
 
 		Frame:Close()
@@ -300,7 +325,7 @@ function EngineSound.OpenEditor(Engine, IsLegacy, IdleRPM, LimitRPM, Banks)
 			return
 		end
 
-		SendBanks(Engine, Clean, false)
+		SendBanks(Engine, Clean, false, string.Trim(StarterEntry:GetValue()))
 	end)
 	Apply:Dock(RIGHT)
 	Apply:SetWide(130)
@@ -324,8 +349,9 @@ net.Receive("ACE_EngineSound_MenuData", function()
 	local IdleRPM  = net.ReadUInt(16)
 	local LimitRPM = net.ReadUInt(16)
 	local Banks    = EngineSound.ReadBanks() or {}
+	local Starter  = net.ReadString()
 
 	if not IsValid(Engine) then return end
 
-	EngineSound.OpenEditor(Engine, IsLegacy, IdleRPM, LimitRPM, Banks)
+	EngineSound.OpenEditor(Engine, IsLegacy, IdleRPM, LimitRPM, Banks, Starter)
 end)

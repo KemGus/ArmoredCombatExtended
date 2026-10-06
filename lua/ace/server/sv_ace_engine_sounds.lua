@@ -302,6 +302,29 @@ function EngineSound.SetBanks(Engine, Banks)
 	return Clean ~= nil
 end
 
+--- Sets an engine's starter sound and stores it for the duplicator.
+-- @param Engine Entity The acf_engine.
+-- @param Path string|nil Path under sound/; "" or nil for the standard starter sound.
+function EngineSound.SetStarterSound(Engine, Path)
+	if not IsValid(Engine) then return end
+
+	Path = EngineSound.CleanStarterPath(Path)
+	Engine.ACE_StarterSound = Path ~= "" and Path or nil
+	Engine:SetNWString("ACE_StarterSound", Path)
+
+	if Path ~= "" then
+		duplicator.StoreEntityModifier(Engine, "ace_enginestartersound", { Path = Path })
+	else
+		duplicator.ClearEntityModifier(Engine, "ace_enginestartersound")
+	end
+end
+
+duplicator.RegisterEntityModifier("ace_enginestartersound", function(_, Engine, Data)
+	if not IsValid(Engine) or not istable(Data) then return end
+
+	EngineSound.SetStarterSound(Engine, Data.Path)
+end)
+
 duplicator.RegisterEntityModifier("ace_enginesoundbanks", function(_, Engine, Data)
 	if not IsValid(Engine) or not istable(Data) then return end
 
@@ -380,6 +403,7 @@ net.Receive("ACE_EngineSound_MenuGet", function(_, Ply)
 	net.WriteUInt(Clamp(Round(Engine.IdleRPM or 0), 0, 65535), 16)
 	net.WriteUInt(Clamp(Round(Engine.LimitRPM or 0), 0, 65535), 16)
 	EngineSound.WriteBanks(Banks)
+	net.WriteString(Engine.ACE_StarterSound or "")
 	net.Send(Ply)
 end)
 
@@ -387,6 +411,7 @@ net.Receive("ACE_EngineSound_MenuSet", function(_, Ply)
 	local Engine = net.ReadEntity()
 	local Reset = net.ReadBool()
 	local Banks = not Reset and EngineSound.ReadBanks() or nil
+	local Starter = net.ReadString()
 
 	if not AllowRequest(Ply, "menuset", 0.5) then
 		ACE.SendNotify(Ply, false, "Slow down - wait a moment before applying again.")
@@ -397,6 +422,8 @@ net.Receive("ACE_EngineSound_MenuSet", function(_, Ply)
 		ACE.SendNotify(Ply, false, "You can't edit the sounds of that engine.")
 		return
 	end
+
+	EngineSound.SetStarterSound(Engine, Starter)
 
 	if Reset then
 		EngineSound.SetBanks(Engine, nil)

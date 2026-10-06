@@ -371,4 +371,86 @@ do
 	near(R - L, 0, 0.05, "dual-clutch box with diff lock is a solid axle")
 end
 
+------------------------------------------------------------------ cylinder gas springs
+do
+	-- A stopped engine holds a load below its compression peak and creeps as the charge leaks;
+	-- one past the peak turns it over. Crank plus a reflected vehicle, Coulomb friction.
+	local Spec = M.Engine.Build(Diesel, { 0.3, 0.6, 0.9, 1, 0.9 })
+	local function turn(Load, Secs)
+		local State = M.Engine.NewState(Spec)
+		local H, J, Angle = 0.015 / 8, 4, 0
+		for _ = 1, math.floor(Secs / H) do
+			local T = M.Engine.GasTorque(Spec, State, H)
+			local F = M.Engine.FrictionTorque(Spec, State.W, 0) + M.Engine.PumpingTorque(Spec, 0, State.W)
+			local W = State.W + (T - Load) * H / J
+			local Dw = F * H / J
+			if math.abs(W) <= Dw then W = 0 else W = W - (W > 0 and Dw or -Dw) end
+			State.W, Angle = W, Angle + W * H
+		end
+		return math.deg(-Angle)
+	end
+	local Light, Heavy = turn(100, 20), turn(1000, 20)
+	check(Light > 0 and Light < 180, "compression holds a light load, creeping", Light)
+	check(Heavy > 3600, "a load past the compression peak turns the engine over", Heavy)
+	-- Pumping is a flow loss: nothing at standstill, full at idle.
+	near(M.Engine.PumpingTorque(Spec, 0, 0), 0, 1e-9, "no pumping at standstill")
+	near(M.Engine.PumpingTorque(Spec, 0, Spec.IdleW), M.Engine.PumpingTorque(Spec, 0), 1e-9, "full pumping at idle")
+	-- Running engines leave it to the cycle-mean models.
+	local State = M.Engine.NewState(Spec)
+	State.Running, State.W = true, 1
+	near(M.Engine.GasTorque(Spec, State, 0.01), 0, 1e-12, "no gas spring while running")
+end
+
+------------------------------------------------------------------ locked axle on one road
+do
+	-- A locked axle in neutral whose wheels read opposite spins and whose ground under each side
+	-- moves differently (a car rocking in yaw): the drivetrain only evens the wheels out, it does
+	-- not push the two sides of the road apart (that scrub is the physics engine's contact).
+	local Box = {
+		Key = "axle", Ratio = 1, Diff = "locked", InputW = 0, Brake = { [0] = 0, [1] = 0 },
+		Outputs = {
+			{ Side = 0, Wheel = { Key = "L", J = 2, W = -3, Ground = { J = 40, W = 0.2, Cap = 5000 } } },
+			{ Side = 1, Wheel = { Key = "R", J = 2, W = 3, Ground = { J = 40, W = -0.2, Cap = 5000 } } },
+		},
+	}
+	local Sys = M.Drivetrain.Build({ Roots = { Box } })
+	M.Drivetrain.Step(Sys, 1 / 66, 8)
+	local L, R = Box.Outputs[1].Wheel, Box.Outputs[2].Wheel
+	near(L.WOut - R.WOut, 0, 1e-6, "locked axle turns both wheels together")
+	near(L.GroundImpulse + R.GroundImpulse, 0, 1e-6, "locked axle passes no net impulse to a still road")
+	check(math.abs(L.GroundImpulse) < 2 * 2 * 3, "locked axle does not push the road sides apart", L.GroundImpulse)
+end
+
+------------------------------------------------------------------ brake stall detection
+do
+	local Stalled = M.Drivetrain.BrakeStalled
+	local Dt = 0.015
+	-- A brake slowing the vehicle at 2 m/s² never stalls on the way down.
+	local S, V, Any = {}, 0.9, false
+	for _ = 1, 40 do
+		Any = Any or Stalled(S, true, V, Dt)
+		V = math.max(V - 2 * Dt, 0.3)
+		if V <= 0.3 then break end
+	end
+	check(not Any, "a decelerating vehicle is not stalled")
+	-- One that creeps on at a steady speed stalls after StallTime.
+	S = {}
+	local T, At = 0, nil
+	for _ = 1, 40 do
+		T = T + Dt
+		if Stalled(S, true, 0.5, Dt) and not At then At = T end
+	end
+	check(At and At >= M.Drivetrain.StallTime and At <= M.Drivetrain.StallTime + 3 * Dt, "a steady crawl stalls after StallTime", tostring(At))
+	-- Slowing slower than StallDecel still counts as stalled.
+	S, At, T = {}, nil, 0
+	for _ = 1, 40 do
+		T = T + Dt
+		if Stalled(S, true, 0.5 - 0.1 * T, Dt) and not At then At = T end
+	end
+	check(At ~= nil, "a brake slowing by less than StallDecel stalls")
+	-- Releasing the pedal resets it.
+	check(not Stalled(S, false, 0.5, Dt) and S.StallRef == nil, "released pedal resets the stall check")
+	check(not Stalled(S, true, 0.5, Dt), "the check starts again from the current speed")
+end
+
 print(("Mobility self-test: PASS (%d assertions)"):format(Passed))

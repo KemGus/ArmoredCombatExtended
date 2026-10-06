@@ -481,6 +481,8 @@ elseif CLIENT then
     include("ace/client/gui/cl_acfsetpermission.lua")
 
     CreateClientConVar("ace_mobility_rope_links", "1", true, true)
+    -- Engine and drivetrain hints in chat (ACE.SendEngineHint reads it on the server).
+    CreateClientConVar("ace_engine_hints", "1", true, true, "Show ACE engine and drivetrain hints in chat.", 0, 1)
 
 end
 

@@ -19,6 +19,7 @@
 	    Diff,               -- "open" | "lsd" | "locked"
 	    LSDPreload, LSDRamp,-- Salisbury limited-slip: bias = preload + ramp·|input torque|
 	    Steer, SteerRatio,  -- double differential steering input (-1..1) and ratio
+	    Steering,           -- a dual box whose sides are commanded differently (clutch-brake steering)
 	    DriveCap,           -- torque the engaged gear's clutch pack can carry while shifting (nil = rigid)
 	    Efficiency,         -- mesh efficiency of the engaged path (0..1)
 	    SpinLoss,           -- churning/bearing drag at the input at running speed, N·m
@@ -26,11 +27,12 @@
 	    BrakeOnly,          -- can never transmit (every ratio is zero): brakes only, no drive
 	    Outputs = { {Side = 0|1, Wheel = Wheel} | {Side = 0|1, Gearbox = Gearbox} ... },
 	  }
-	  Wheel   = { Key, J, W, RollDrag, Ground, Anchored, Held }
-	    J is the wheel's own inertia; Ground = { J, W, Cap } from Vehicle.Ground couples it to
-	    its share of the vehicle through tyre friction (nil when airborne). Anchored = locked to
-	    its hub (fixed at rest); Held = turned by something outside the drivetrain (a player's
-	    physics gun), so it keeps its measured speed.
+	  Wheel   = { Key, J, W, RollDrag, Ground, Anchored, ParkProbe, Held }
+	    J is the wheel's own inertia; Ground = { J, W, Cap, Torque } from Vehicle.Ground couples it
+	    to its share of the vehicle through tyre friction (nil when airborne), Torque being an
+	    outside torque on that share (the slope pulling it). Anchored = locked to its hub (fixed at
+	    rest), unless ParkProbe asks to solve whether that lock really holds; Held = turned by
+	    something outside the drivetrain (a player's physics gun), so it keeps its measured speed.
 
 	After Step, every Wheel has .Impulse (total angular impulse to apply to the wheel, N·m·s),
 	.GroundImpulse (the part passed to the road, N·m·s) and .WOut,
@@ -80,7 +82,7 @@ local function wheelBody(Sys, Wheel)
 	local B = Sys.WheelBodies[Wheel.Key]
 	if B then return B end
 	-- An anchored wheel (held to its hub by a parking lock) is fixed: infinite inertia, no spin.
-	if Wheel.Anchored then
+	if Wheel.Anchored and not Wheel.ParkProbe then
 		B = Solver.Body(math.huge, 0)
 	elseif Wheel.Held then
 		--[[
@@ -92,7 +94,7 @@ local function wheelBody(Sys, Wheel)
 		]]
 		B = Solver.Body(math.huge, Wheel.W)
 	else
-		B = Solver.Body(Wheel.J, Wheel.W)
+		B = Solver.Body(Wheel.J, Wheel.ParkProbe and 0 or Wheel.W)
 	end
 	B.Wheel = Wheel
 	B.W0 = B.W
@@ -109,7 +111,7 @@ local function wheelBody(Sys, Wheel)
 		GB.W0 = Ground.W
 		B.GroundBody = GB
 		Sys.Bodies[#Sys.Bodies + 1] = GB
-		addConstraint(Sys, { B, GB }, { 1, -1 }, Ground.Cap, 0, "tyre")
+		B.TyreC = addConstraint(Sys, { B, GB }, { 1, -1 }, Ground.Cap, 0, "tyre")
 	end
 	return B
 end
@@ -121,6 +123,7 @@ local function outputBody(Sys, Out)
 end
 
 local buildGearbox
+local shareRoad
 
 --[[
 	Input shaft speed that a gearbox's wheels dictate this tick, or nil when its outputs can
@@ -355,7 +358,8 @@ function Drivetrain.Build(Group)
 		end
 	end
 	-- Gearbox trees with no engine (a trailer, a braked axle): their input shaft turns freely.
-	for _, Gearbox in ipairs(Group.Roots or {}) do
+	local Roots = Group.Roots or {}
+	for _, Gearbox in ipairs(Roots) do
 		if not Sys.GearboxBodies[Gearbox.Key] then
 			local In = Solver.Body(max(Gearbox.InputJ or 0.02, 1e-4), kinematicInputW(Gearbox) or Gearbox.InputW or 0)
 			In.Gearbox = Gearbox
@@ -365,6 +369,22 @@ function Drivetrain.Build(Group)
 			Gearbox.Inputs = {}
 			buildGearbox(Sys, Gearbox)
 		end
+	end
+	for _, Gearbox in ipairs(Sys.Gearboxes) do
+		-- Not while a dual box steers: its two sides are meant to run at different speeds.
+		if false then shareRoad(Sys, Gearbox) end
+	end
+	--[[
+		Engine friction and gearbox losses are friction constraints on their shafts, solved with
+		everything geared to them. Applied as a drag on the shaft alone, each substep could only
+		stop the shaft's own inertia: the vehicle's weight, coupled through the gears, turned it
+		straight back, so a stopped engine left in gear could not hold even a gentle slope.
+	]]
+	for _, Crank in ipairs(Sys.Cranks) do
+		Crank.FrictionC = addConstraint(Sys, { Crank }, { 1 }, 0, 0, "engine friction")
+	end
+	for _, Gearbox in ipairs(Sys.Gearboxes) do
+		Gearbox.LossC = addConstraint(Sys, { Gearbox.Body }, { 1 }, 0, 0, "gearbox loss")
 	end
 	Sys.Crank = Sys.Cranks[1]
 	return Sys
@@ -394,6 +414,44 @@ local function converterStep(Gearbox, Crank, H)
 	Gearbox.ConverterTp, Gearbox.ConverterTt = Tp, Tt
 end
 
+--[[
+	The wheels of a locked axle stand on one road. A locked axle turns both wheels at one speed,
+	so whatever their contact patches would do differently (one side scrubbing round a turn, or
+	the car rocking in yaw on its suspension) is tyre slip, which the physics engine's own
+	contact handles. Coupled each to a separate share of the vehicle, the solver also pushed the
+	two wheels apart and together through their tyres to reconcile those shares, a second scrub
+	torque on top of the contact's. Standing still, where the road takes none of it, the
+	contact handed each push straight back, a little larger: a car in neutral with its diffs
+	locked rocked its wheels at 3-5 rad/s and its body at 3 deg/s of yaw (Volvo, buggy, MRAP).
+	So each locked axle's wheels share one road body, and the solver only carries the drive.
+]]
+shareRoad = function(Sys, Gearbox)
+	local Wheels = {}
+	for _, Out in ipairs(Gearbox.Outputs or {}) do
+		local B = Out.Wheel and Sys.WheelBodies[Out.Wheel.Key]
+		-- Track sprockets keep their own: a track's slip against the ground is left to the physics engine.
+		if B and B.GroundBody and B.TyreC and not Out.Wheel.Meshed then Wheels[#Wheels + 1] = B end
+	end
+	if #Wheels < 2 then return end
+	local J, Momentum = 0, 0
+	for _, B in ipairs(Wheels) do
+		J = J + B.GroundBody.J
+		Momentum = Momentum + B.GroundBody.J * B.GroundBody.W
+	end
+	local Road = Solver.Body(J, Momentum / J)
+	Road.W0 = Road.W
+	local Gone = {}
+	for _, B in ipairs(Wheels) do
+		Gone[B.GroundBody] = true
+		B.GroundBody = Road
+		B.TyreC.Bodies[2] = Road
+	end
+	for I = #Sys.Bodies, 1, -1 do
+		if Gone[Sys.Bodies[I]] then table.remove(Sys.Bodies, I) end
+	end
+	Sys.Bodies[#Sys.Bodies + 1] = Road
+end
+
 --- Advances the drivetrain by one tick.
 -- @param Sys System from Drivetrain.Build.
 -- @param Dt Tick length in seconds.
@@ -411,6 +469,7 @@ function Drivetrain.Step(Sys, Dt, Substeps, Iterations)
 		Crank.Opts = { NoStall = Engine.NoStall, HasFuel = Engine.HasFuel }
 	end
 	for _, Gearbox in ipairs(Sys.Gearboxes) do Gearbox.ClutchHeatJ = 0 end
+	for _, B in ipairs(Sys.Wheels) do B.TyreSum = 0 end
 
 	for _ = 1, Substeps do
 		for _, Crank in ipairs(Sys.Cranks) do
@@ -418,10 +477,11 @@ function Drivetrain.Step(Sys, Dt, Substeps, Iterations)
 			local State = Engine.State
 			State.W = Crank.W
 			local Drive, Loss = EngineModel.Step(State, Engine.Throttle or 0, H, Crank.Opts)
-			-- Damage and driver modifiers scale combustion, not the starter motor.
-			local Starter = State.StarterTorque or 0
-			Crank.Torque = Crank.Torque + (Drive - Starter) * (Engine.TorqueMul or 1) + Starter
-			Solver.Drag(Crank, Loss + (Engine.AccessoryTorque or 0), H)
+			-- Damage and driver modifiers scale combustion, not the starter motor or the air
+			-- trapped in the cylinders.
+			local Unscaled = (State.StarterTorque or 0) + (State.GasTorque or 0)
+			Crank.Torque = Crank.Torque + (Drive - Unscaled) * (Engine.TorqueMul or 1) + Unscaled
+			Crank.FrictionC.Cap = Loss + (Engine.AccessoryTorque or 0)
 			Engine.FuelKg = Engine.FuelKg + State.FuelRate * H
 			Engine.HeatJ = Engine.HeatJ + State.HeatRate * H
 			Engine.TorqueSum = Engine.TorqueSum + State.Torque
@@ -434,7 +494,7 @@ function Drivetrain.Step(Sys, Dt, Substeps, Iterations)
 			local Out = 0
 			for _, C in ipairs(Gearbox.Drive) do Out = Out + abs(C.Acc) end
 			local MeshLoss = (1 - (Gearbox.Efficiency or 0.97)) * Out / H
-			Solver.Drag(Gearbox.Body, (Gearbox.SpinLoss or 0) * fadeIn(Gearbox.Body.W, SpinLossFullW) + MeshLoss, H)
+			Gearbox.LossC.Cap = (Gearbox.SpinLoss or 0) * fadeIn(Gearbox.Body.W, SpinLossFullW) + MeshLoss
 
 			if Gearbox.LSD then
 				-- Salisbury ramp: clamping force, and so locking torque, grows with input torque.
@@ -451,7 +511,16 @@ function Drivetrain.Step(Sys, Dt, Substeps, Iterations)
 			if Roll > 0 then Solver.Drag(B, Roll * fadeIn(B.W * (B.Wheel.Radius or 0.3), RollFullSpeed), H) end
 		end
 
+		for _, B in ipairs(Sys.Wheels) do
+			local GB = B.GroundBody
+			local Tq = GB and B.Wheel.Ground.Torque
+			if Tq then GB.Torque = GB.Torque + Tq end
+		end
+
 		Solver.Step(Sys.Bodies, Sys.Constraints, H, Iterations or 6)
+		for _, B in ipairs(Sys.Wheels) do
+			if B.TyreC then B.TyreSum = B.TyreSum + B.TyreC.Acc end
+		end
 
 		for _, Gearbox in ipairs(Sys.Gearboxes) do
 			for _, C in ipairs(Gearbox.Inputs or {}) do
@@ -487,7 +556,8 @@ function Drivetrain.Step(Sys, Dt, Substeps, Iterations)
 
 	for _, B in ipairs(Sys.Wheels) do
 		local GB = B.GroundBody
-		local Ground = GB and GB.J * (GB.W - GB.W0) or 0
+		-- What this wheel's own tyre passed to the road (a locked axle's wheels share one road).
+		local Ground = GB and -B.TyreSum or 0
 		B.Wheel.GroundImpulse = Ground
 		B.Wheel.Impulse = B.InvJ == 0 and 0 or B.J * (B.W - B.W0) + Ground
 		B.Wheel.WOut = B.W
@@ -509,6 +579,32 @@ function Drivetrain.Step(Sys, Dt, Substeps, Iterations)
 			if abs(Slip) > abs(Gearbox.ClutchSlip or 0) then Gearbox.ClutchSlip = Slip end
 		end
 	end
+end
+
+Drivetrain.StallDecel = 0.2 -- m/s²: a firm pedal slowing a vehicle by less than this is not stopping it
+Drivetrain.StallTime = 0.1  -- s the vehicle must go without slowing that much
+
+--- Whether a firm brake pedal has stopped slowing a wheel's vehicle down.
+-- Tracks the ground speed while Active: the reference speed is renewed whenever the vehicle has
+-- slowed by StallDecel times the time since; once StallTime passes without that, the brake has
+-- stalled. Resets while not Active.
+-- @param State Per-wheel table that keeps the reference (StallRef, StallFor).
+-- @param Active Whether the pedal is firm and the vehicle crawling (the check applies).
+-- @param Speed Ground speed magnitude, m/s.
+-- @param Dt Seconds since the last call.
+-- @return true once the brake has stalled.
+function Drivetrain.BrakeStalled(State, Active, Speed, Dt)
+	if not Active then
+		State.StallRef, State.StallFor = nil, nil
+		return false
+	end
+	local For = (State.StallFor or 0) + Dt
+	if not State.StallRef or Speed <= State.StallRef - Drivetrain.StallDecel * For then
+		State.StallRef, State.StallFor = Speed, 0
+		return false
+	end
+	State.StallFor = For
+	return For >= Drivetrain.StallTime
 end
 
 return Drivetrain

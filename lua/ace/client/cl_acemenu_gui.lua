@@ -246,6 +246,9 @@ function PANEL:Init( )
 		--Creates the gearbox category
 		for _, GearboxData in pairs(FinalContainer["Gearboxes"]) do
 
+			-- The fixed-size items are kept for old contraptions only; the menu offers the scalable ones.
+			if not GearboxData.scalable then continue end
+
 			local category = GearboxData.category
 
 			if not GearboxCatNodes[category] then
@@ -259,6 +262,8 @@ function PANEL:Init( )
 
 		--Populates gearbox categories
 		for _, GearboxData in pairs(FinalContainer["Gearboxes"]) do
+
+			if not GearboxData.scalable then continue end
 
 			local name = GearboxData.name or "Missing Name"
 			local category = GearboxData.category or ""
@@ -743,6 +748,14 @@ function ACE.CLGUICreate()
 
 	acemenupanel.CustomDisplay:AddItem( Effects )
 
+	local Messages = vgui.Create( "DForm" )
+	Messages:SetName("Messages")
+
+	Messages:CheckBox("Show engine hints", "ace_engine_hints")
+	Messages:ControlHelp( "Tips your engines send to you in chat, such as a missing fuel tank or driver, a starter that overheated or a flat starter battery." )
+
+	acemenupanel.CustomDisplay:AddItem( Messages )
+
 	local DupeSection = vgui.Create( "DForm" )
 	DupeSection:SetName("Dupe Loader")
 
@@ -770,6 +783,20 @@ local function addHelpText(text, parent)
 	label:SetAutoStretchVertical(true)
 	label:DockMargin(34, 0, 34, 0)
 	label:SetColor(Color(47, 149, 241))
+	label:Dock(TOP)
+
+	return label
+end
+
+-- A short note under a setting, readable in a narrow menu: dark text, normal margins.
+local function addSettingNote(text, parent)
+	local label = vgui.Create("DLabel", parent)
+	label:SetText(text)
+	label:SetFont("DermaDefault")
+	label:SetWrap(true)
+	label:SetAutoStretchVertical(true)
+	label:DockMargin(12, 2, 10, 4)
+	label:SetDark(true)
 	label:Dock(TOP)
 
 	return label
@@ -940,20 +967,24 @@ function ACE.SVGUICreate()	--Serverside folder content
 	heat:SetLabel("Heat (this map)")
 	heat:SetExpanded(false)
 
-	heatStatus = addHelpText("Loading...", heat)
-	addHelpText("These are saved for the current map and applied every time it loads. Changes take effect at once.", heat)
+	heatStatus = addSettingNote("Loading...", heat)
+	addSettingNote("Saved for this map, applied at once and every time it loads.", heat)
 
-	addHeatControl(addSlider("Heat time scale (x real time)", 0.1, 60, 1, 2, "ace_heat_timescale", heat, setMapHeatSetting), "ace_heat_timescale",
-		"How many times faster than real time everything heats up and cools down. 1 is real time, 2 is the ACE default.")
-	addHelpText("Engines and radiators run at exactly this. Guns, gearbox clutches and missile radars heat and cool at their usual speed at 2, twice as fast at 4, and so on.", heat)
+	addHeatControl(addSlider("Air temperature (°C)", -50, 55, 0, 20, "ace_ambient_temp", heat, setMapHeatSetting), "ace_ambient_temp",
+		"Air temperature on the map. Everything that heats up starts at it and cools towards it; IR seekers look for heat above it.")
+	addSettingNote("Realistic: the map's climate. 15 is the standard atmosphere, 20 the ACE default.", heat)
 
-	addHeatControl(addSlider("Engine built-in cooling (x full-power heat)", 0, 4, 2, 0.5, "ace_engine_builtin_cooling", heat, setMapHeatSetting), "ace_engine_builtin_cooling",
-		"Cooling every engine has without a radiator, as a share of the heat it makes at full power.")
-	addHelpText("0 - engines need a radiator to cool at all, 1 - enough to run at full power without one.", heat)
+	addHeatControl(addSlider("Heat speed (x real time)", 0.1, 60, 1, 2, "ace_heat_timescale", heat, setMapHeatSetting), "ace_heat_timescale",
+		"How many times faster than real time everything heats up and cools down. Engines and radiators run at exactly this; guns, clutches and radars at their usual speed at 2.")
+	addSettingNote("Realistic: 1. ACE default: 2 (warm-up takes half as long).", heat)
+
+	addHeatControl(addSlider("Engine cooling without radiator", 0, 4, 2, 0.5, "ace_engine_builtin_cooling", heat, setMapHeatSetting), "ace_engine_builtin_cooling",
+		"Cooling every engine has without a radiator entity, as a share of the heat it makes at full power. 1 = enough to run at full power with no radiator.")
+	addSettingNote("Realistic: 0 (a water-cooled engine needs its radiator). ACE default: 0.5.", heat)
 
 	addHeatControl(addCheckbox("Overheated engines take damage", "ace_engine_overheat_damage", heat, setMapHeatSetting), "ace_engine_overheat_damage",
-		"When off, an overheated engine only loses power.")
-	addHelpText("Past its damage temperature an engine loses health. When off, it only loses power.", heat)
+		"Engines lose health once the block passes about 200 °C (180 °C for motor windings) or the oil passes 150 °C. When off, they only lose power.")
+	addSettingNote("Realistic: on.", heat)
 
 	local heatReset = vgui.Create("DButton", heat)
 	heatReset:SetText("Use the server defaults on this map")

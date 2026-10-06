@@ -8,6 +8,9 @@
 -- Bank format:
 --   { Exhaust = bool, OffVolume = 0-1, OnVolume = 0-1, Muffle = 0-1 (cabin muffling, 0 = off),
 --     Sounds = { { Path = string, RPM = number, Pitch = 1-255, Volume = 0-2, Width = 0-15 }, ... } }
+--
+-- The starter sound is set in the same editor but belongs to the engine, not to a bank: an
+-- engine on its single legacy sound can have one too.
 
 ACE = ACE or {}
 ACE.EngineSound = ACE.EngineSound or {}
@@ -88,6 +91,17 @@ local function CleanPath(Path)
 	if Path == "" or #Path > EngineSound.MaxPathLength then return end
 	if Path:find("..", 1, true) or Path:find("[^%w_%-%./ ]") then return end
 
+	return Path
+end
+
+local StarterSoundTypes = { wav = true, mp3 = true, ogg = true }
+
+--- Validates an engine's starter sound path (relative to sound/).
+-- @param Path string|nil
+-- @return string The clean path, or "" for none or an invalid one.
+function EngineSound.CleanStarterPath(Path)
+	Path = CleanPath(Path)
+	if not Path or not StarterSoundTypes[Path:match("%.(%w+)$") or ""] then return "" end
 	return Path
 end
 

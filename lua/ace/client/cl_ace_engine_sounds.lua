@@ -25,12 +25,15 @@ EngineSound.VelocitySmoothing = 0.15 -- seconds; time constant of the Doppler ve
 EngineSound.MuffleDSP      = 30
 EngineSound.MuffleDSPFrom  = 0.25 -- effective muffling at which the lowpass is switched on
 EngineSound.MaxMuffleCut   = 0.7 -- volume removed at muffling 1
-EngineSound.CabinCheckTime = 0.5 -- seconds between checks of whether an engine shares our vehicle
+EngineSound.CabinCheckTime = 0.5 -- seconds between checks of whether an engine shares our vehicle (first/third person is checked every frame)
+EngineSound.DSPCrossfade   = 0.05 -- seconds; old patches fade out and new ones in when the muffling switches
 EngineSound.ThirdPersonDistance = 48 -- units between the camera and the player's eyes that count as third person
 EngineSound.CabinOpening   = EngineSound.CabinOpening or 0 -- 0 closed .. 1 open, set by Starfall (acf.setCabinOpening)
 
 -- Starter motor. v8_start_loop1.wav is the HL2 jeep's cranking loop (hl2_sound_misc VPK, loops
 -- from 1.8 s to its end); at pitch 100 it is taken to be a crank turning at StarterRefRPM.
+-- An engine can carry its own starter sound (set in the sound bank editor of the sound replacer tool), networked as the
+-- "ACE_StarterSound" string; it is played the same way.
 EngineSound.StarterSound  = "vehicles/v8/v8_start_loop1.wav"
 EngineSound.StarterRefRPM = 250
 EngineSound.StarterLevel  = 75 -- SNDLVL_75dB ("busy traffic"); a starter is quieter than the engine
@@ -56,17 +59,18 @@ local Pending = {} -- [Entity] = time the last data request was sent
 -- Engines of the vehicle the local player last sat in, from the server's CFW contraption.
 local Cabin = { Vehicle = NULL, Known = false, Engines = {} }
 
-local function StopPatches(State)
+-- Stops an engine's sound patches; with Fade (seconds) they fade out instead of cutting off.
+local function StopPatches(State, Fade)
 	for _, Bank in ipairs(State.Playing or {}) do
 		for _, Entry in ipairs(Bank.Entries) do
-			Entry.Patch:Stop()
+			if Fade then Entry.Patch:FadeOut(Fade) else Entry.Patch:Stop() end
 		end
 	end
 
 	State.Playing = nil
 
 	if State.Starter then
-		State.Starter:Stop()
+		if Fade then State.Starter:FadeOut(Fade) else State.Starter:Stop() end
 		State.Starter = nil
 	end
 end
@@ -232,6 +236,7 @@ net.Receive("ACE_EngineSound_Create", function()
 		Cylinders = 4,
 		StarterPhase = 0,
 		Muffled  = Old and Old.Muffled or false,
+		InSeat   = Old and Old.InSeat or false,
 		NextCabinCheck = 0,
 		LastUpdate = RealTime(),
 		Fresh    = Old == nil, -- snap the smoothing to the first update instead of sweeping up from 0
@@ -442,10 +447,10 @@ local function BankPitchVolume(Bank, Snd, Index, RPM, Throttle)
 end
 
 -- Whether the local player sits in a seat of the engine's vehicle. Uses the server's contraption
--- list for the current seat when there is one, and also accepts a shared physical parent.
+-- list for the current seat when there is one, and also accepts a shared physical parent. The
+-- view (first or third person) is not part of this: it is checked every frame in the Think hook.
 local function InCabin(Ent, Seat)
 	if not IsValid(Seat) then return false end
-	if not FirstPerson(LocalPlayer()) then return false end
 	if Cabin.Known and Cabin.Vehicle == Seat and Cabin.Engines[Ent] then return true end
 
 	return ACE.GetPhysicalParent(Seat) == ACE.GetPhysicalParent(Ent)
@@ -465,8 +470,18 @@ local function UpdateStarter(Ent, State, Dt, Shift, Muffle)
 		return
 	end
 
+	-- The engine's own starter sound when it has one that this client can play.
+	local Path = Ent:GetNWString("ACE_StarterSound", "")
+	if Path == "" or not IsPlayable(Path) then Path = EngineSound.StarterSound end
+
+	if State.Starter and State.StarterPath ~= Path then
+		State.Starter:Stop()
+		State.Starter = nil
+	end
+
 	if not State.Starter then
-		State.Starter = NewPatch(Ent, EngineSound.StarterSound, math.min(EngineSound.StarterLevel, State.Level + 5), Muffle >= EngineSound.MuffleDSPFrom and EngineSound.MuffleDSP or nil)
+		State.Starter = NewPatch(Ent, Path, math.min(EngineSound.StarterLevel, State.Level + 5), Muffle >= EngineSound.MuffleDSPFrom and EngineSound.MuffleDSP or nil)
+		State.StarterPath = Path
 		State.StarterPhase = 0
 
 		if not State.Starter then return end
@@ -541,8 +556,9 @@ local function UpdateEngine(Ent, State, Alpha, Dt, Doppler)
 			end
 
 			if not Entry.Volume or abs(Volume - Entry.Volume) >= 0.005 then
+				-- A patch rebuilt for a muffling switch fades in over the crossfade.
+				Entry.Patch:ChangeVolume(Volume, (not Entry.Volume and State.FadeIn) and EngineSound.DSPCrossfade or 0)
 				Entry.Volume = Volume
-				Entry.Patch:ChangeVolume(Volume, 0)
 			end
 		end
 	end
@@ -550,6 +566,8 @@ local function UpdateEngine(Ent, State, Alpha, Dt, Doppler)
 	if State.Cranking or State.Starter then
 		UpdateStarter(Ent, State, Dt, Doppler and EngineSound.DopplerFactor(Ent) or 1, StarterMuffle)
 	end
+
+	State.FadeIn = nil
 end
 
 hook.Add("Think", "ACE_EngineSound_Think", function()
@@ -562,6 +580,8 @@ hook.Add("Think", "ACE_EngineSound_Think", function()
 	local MuffleOn = MuffleVar:GetBool()
 	local Ply = LocalPlayer()
 	local Seat = MuffleOn and IsValid(Ply) and Ply:GetVehicle() or NULL
+	-- First or third person, every frame: switching the view switches the muffling at once.
+	local Inside = IsValid(Seat) and FirstPerson(Ply)
 	local Smoke = ACE.ExhaustSmoke
 
 	for Ent, State in pairs(Engines) do
@@ -574,15 +594,20 @@ hook.Add("Think", "ACE_EngineSound_Think", function()
 				StopPatches(State)
 			end
 		else
+			-- Whether the engine shares our vehicle changes rarely and costs a parent walk, so it
+			-- is checked on a cadence; the view is not (see Inside above).
 			if Now >= State.NextCabinCheck then
 				State.NextCabinCheck = Now + EngineSound.CabinCheckTime
+				State.InSeat = InCabin(Ent, Seat)
+			end
 
-				State.Muffled = InCabin(Ent, Seat)
+			State.Muffled = Inside and State.InSeat or false
 
-				if State.Playing and DSPSignature(State) ~= State.DSPSig then
-					-- DSP is set when a patch is created, so rebuild the patches with the new one
-					StopPatches(State)
-				end
+			if State.Playing and DSPSignature(State) ~= State.DSPSig then
+				-- DSP is set when a patch is created, so rebuild the patches with the new one
+				-- this frame, crossfading over a few hundredths of a second.
+				StopPatches(State, EngineSound.DSPCrossfade)
+				State.FadeIn = true
 			end
 
 			if not State.Playing then

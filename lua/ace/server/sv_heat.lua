@@ -16,8 +16,8 @@
 	ACE menu (Server settings > Heat) and saved to data/ace/heat/<map>.txt, the same way the
 	default damage permission mode is saved per map in data/ace/permissions/.
 
-	ace_heat_timescale is how many times faster than real time heat moves. Engine coolant runs
-	at exactly this; the older, game-tuned heat models (gun barrels, clutches, missile radars,
+	ace_heat_timescale is how many times faster than real time heat moves. Engine coolant, oil
+	and metal run at exactly this; the older, game-tuned heat models (gun barrels, clutches, missile radars,
 	idle radiators) keep their tuning at the default and speed up or slow down in proportion.
 ]]---------------------------------------------------------------------------------------
 do
@@ -26,12 +26,14 @@ do
 
 	-- Order here is the order the menu lists them in.
 	ACE.HeatSettings = {
+		{ Name = "ace_ambient_temp", Default = 20, Min = -50, Max = 55,
+			Help = "Air temperature on the map in °C. Engines, radiators, batteries, clutches and guns start at it and cool towards it; IR seekers look for heat above it. 15 is the standard atmosphere." },
 		{ Name = "ace_heat_timescale", Default = DefaultTimeScale, Min = 0.1, Max = 60,
 			Help = "How many times faster than real time everything that heats up (engines, radiators, guns, clutches, radars) heats and cools. 1 is real time." },
 		{ Name = "ace_engine_builtin_cooling", Default = 0.5, Min = 0, Max = 4,
 			Help = "Cooling every engine has without a radiator entity, as a share of its full-power heat. 0 - none, 1 - enough for full power." },
 		{ Name = "ace_engine_overheat_damage", Default = 1, Min = 0, Max = 1,
-			Help = "1 - overheated engines lose health, 0 - they only lose power." },
+			Help = "1 - engines lose health when their block metal or oil overheats, 0 - they only lose power." },
 	}
 
 	local ByName = {}
@@ -62,6 +64,7 @@ do
 	-- ACE.ThermalTimeScale is read every think, so it holds the live value instead of a lookup.
 	local function applyHeatSettings()
 		ACE.ThermalTimeScale = ACE.GetHeatSetting("ace_heat_timescale")
+		ACE.AmbientTemp = ACE.GetHeatSetting("ace_ambient_temp")
 	end
 
 	local function getMapHeatFile()
@@ -555,11 +558,13 @@ end
 --AtmosphericHeatExchange with speed--
 
 --[[-------------------------------------------------------------------------------------
-	Engine cooling. The physics is in ace/shared/mobility/thermal_model.lua: engine metal and
-	coolant as two thermal masses, a thermostat, a water pump and radiators as cross-flow heat
-	exchangers. Engine.Heat is the coolant temperature (the EngineHeat wire output and what IR
-	sensors see); Engine.BlockHeat is the engine metal. Radiators take their air-side
-	conductance from ENT:Think in entities/ace_radiator.
+	Engine cooling. The physics is in ace/shared/mobility/thermal_model.lua: engine metal,
+	coolant and sump oil as three thermal masses, a thermostat, a water pump, an oil cooler and
+	radiators as cross-flow heat exchangers. Engine.Heat is the coolant temperature (the
+	EngineHeat wire output, and what IR sensors see); Engine.BlockHeat is the
+	engine metal and Engine.OilHeat the oil. The oil's temperature sets the engine's friction
+	through Spec.FrictionMul. Radiators take their air-side conductance from ENT:Think in
+	entities/ace_radiator.
 ]]---------------------------------------------------------------------------------------
 do
 	local Thermal = ACE.Mobility.Thermal
@@ -600,9 +605,10 @@ do
 	end
 
 	--- Advances an engine's cooling system by the time since its last call. Call every think.
-	-- Sets Engine.Heat (coolant, °C), Engine.BlockHeat (metal, °C), Engine.ThermalDerate
-	-- (torque multiplier) and Engine.CoolantBoiling, updates linked radiators' Heat, and
-	-- applies overheat damage.
+	-- Sets Engine.Heat (coolant, °C), Engine.BlockHeat (metal, °C), Engine.OilHeat (oil, °C;
+	-- nil for motors), Engine.ThermalDerate (torque multiplier), Engine.CoolantBoiling,
+	-- Engine.OilOverheating and the engine spec's FrictionMul, updates linked radiators' Heat,
+	-- and applies overheat damage.
 	-- @param Engine acf_engine entity.
 	function ACE.EngineThermalThink(Engine)
 		local Now = CurTime()
@@ -642,6 +648,7 @@ do
 		]]
 		if Engine.BuiltinCoreFrontM2 then
 			local Fan = Engine.Active and T.Tc > BuiltinFanOnTemp
+			Engine.BuiltinFanOn = Fan
 			local Parent = ACE.GetPhysicalParent and ACE.GetPhysicalParent(Engine) or Engine
 			local SpeedMS = IsValid(Parent) and Parent:GetVelocity():Length() * 0.01905 or 0 -- units/s to m/s
 			local Face = Thermal.FaceVelocity(Engine.BuiltinCoreDepthM, SpeedMS, Fan and 1 or 0)
@@ -654,15 +661,30 @@ do
 		end
 
 		local Scale = ACE.ThermalTimeScale
-		local W = Engine.MobState and Engine.MobState.W or 0
+		local MobState = Engine.MobState
+		local W = MobState and MobState.W or 0
+		-- Air-cooled fins also take ram air from the vehicle's or aircraft's speed.
+		local AirSpeed = 0
+		if TS.K.AirCooled then
+			local Parent = ACE.GetPhysicalParent and ACE.GetPhysicalParent(Engine) or Engine
+			AirSpeed = IsValid(Parent) and Parent:GetVelocity():Length() * 0.01905 or 0 -- units/s to m/s
+		end
 		Thermal.Step(T, TS, HeatW, W, Dt * Scale, {
 			Ambient = Ambient, Running = Engine.Active, Exchangers = Exchangers, ExtraC = ExtraC,
+			Load = MobState and MobState.Load or 0, AirSpeed = AirSpeed,
 		})
 
 		Engine.Heat = T.Tc
 		Engine.BlockHeat = T.Tb
+		Engine.OilHeat = T.To
 		Engine.CoolantBoiling = T.Boiling
+		Engine.OilOverheating = (TS.Co ~= nil or TS.K.AirCooled == true) and T.To ~= nil and T.To > TS.K.OilHot
+		Engine.AirCooled = TS.K.AirCooled or nil
+		Engine.FinAirSpeed = T.FinV
 		Engine.ThermalDerate = Thermal.Derate(TS, T.Tb)
+		Engine.ThermalHeatW = HeatW
+		-- Cold oil is viscous: the engine's rubbing friction follows the oil temperature.
+		TS.EngineSpec.FrictionMul = Thermal.FrictionMul(TS, T.To)
 
 		for _, X in ipairs(Exchangers) do
 			if X.Rad then
@@ -672,11 +694,89 @@ do
 		end
 
 		-- Overheating: past its damage temperature the engine wears itself out (scuffed liners,
-		-- a warped head), on the same accelerated clock as the heat.
-		local Rate = Thermal.DamageRate(TS, T.Tb)
+		-- a warped head, bearings running on thinned oil), on the same accelerated clock as the heat.
+		local Rate = Thermal.DamageRate(TS, T.Tb, T.To)
+		Engine.ThermalDamageRate = Rate
 		if Rate > 0 and ACE.GetHeatSetting("ace_engine_overheat_damage") ~= 0 and Engine.ACE and Engine.ACE.Health then
 			Engine.ACE.Health = math.max(Engine.ACE.Health - Engine.ACE.MaxHealth * Rate * Dt * Scale, 0)
 			if Engine.ACE.Health <= 0 and Engine.Active then Engine:TriggerInput("Active", 0) end
 		end
+	end
+
+	--[[
+		Engine debug readout for E2 (acfEngineDebug) and Starfall (acfEngineDebug): everything
+		the drivetrain and cooling models know about one engine, as plain numbers and booleans.
+		Units: RPM; torques in N·m (positive opposes rotation for Friction/Pumping, positive turns
+		the crank forward for Gas/Starter/Crank); temperatures in °C; heat flows in kW; FuelRate
+		in kg/s (electric motors: battery power in W); DamageRate in % of maximum health per real
+		second; Thermostat, Load, Derate, Health and fractions 0..1.
+	]]
+	local RadToRPM = 30 / math.pi
+
+	--- Collects an engine's full drivetrain and thermal state for debugging.
+	-- @param Engine acf_engine entity.
+	-- @return table Key-value table of numbers and booleans (see the comment above for units).
+	function ACE.EngineDebugInfo(Engine)
+		local St = Engine.MobState or {}
+		local Spec = Engine.MobSpec
+		local T = Engine.ThermalState or {}
+		local TS = Engine.ThermalSpec
+		local Model = ACE.Mobility.Engine
+		local W = St.W or 0
+		local Load = St.Load or 0
+
+		local Fans = Engine.BuiltinFanOn and 1 or 0
+		for _, Rad in pairs(Engine.RadLink or {}) do
+			if IsValid(Rad) and Rad.FanRunning == 1 then Fans = Fans + 1 end
+		end
+
+		-- Damage only counts while ace_engine_overheat_damage is on.
+		local DamageRate = (Engine.ThermalDamageRate or 0) * ACE.ThermalTimeScale * 100
+		if ACE.GetHeatSetting("ace_engine_overheat_damage") == 0 then DamageRate = 0 end
+
+		local Health = 1
+		if Engine.ACE and Engine.ACE.Health and (Engine.ACE.MaxHealth or 0) > 0 then
+			Health = Engine.ACE.Health / Engine.ACE.MaxHealth
+		end
+
+		return {
+			RPM = W * RadToRPM,
+			Load = Load,
+			Active = Engine.Active == true,
+			Running = St.Running == true,
+			Stalled = Engine.Stalled == true or St.Stalled == true,
+			Cranking = (St.Cranking or 0) > 0 and not St.Running,
+			Torque = Engine.Torque or 0,
+			CrankTorque = St.Torque or 0,
+			FrictionTorque = Spec and Model.FrictionTorque(Spec, W, Load) or 0,
+			PumpingTorque = Spec and Model.PumpingTorque(Spec, Load, W) or 0,
+			GasTorque = St.GasTorque or 0,
+			StarterTorque = St.StarterTorque or 0,
+			-- Starting (engine_model.lua): glow plug preheat left [s], glow plug heat and the
+			-- share of cycles firing (0-1), and the built-in starter battery's charge (0-1; -1
+			-- with a battery linked to the starter or no starter).
+			Preheat = St.StarterOn and St.PreheatLeft or 0,
+			Glow = St.Glow or 0,
+			Firing = St.Fire or 0,
+			StarterCharge = (Engine.StarterPack and not next(Engine.BatteryLink or {}))
+				and ACE.Mobility.Battery.StarterPackSOC(Engine.StarterPack) or -1,
+			FrictionMul = Spec and Spec.FrictionMul or 1,
+			CoolantTemp = Engine.Heat or ACE.AmbientTemp,
+			OilTemp = Engine.OilHeat or 0,
+			BlockTemp = Engine.BlockHeat or Engine.Heat or ACE.AmbientTemp,
+			OilViscosity = TS and Engine.OilHeat and Thermal.OilViscosity(TS, Engine.OilHeat) or 0,
+			Thermostat = T.Thermostat or 0,
+			Boiling = Engine.CoolantBoiling == true,
+			OilOverheating = Engine.OilOverheating == true,
+			HeatInput = (Engine.ThermalHeatW or 0) / 1000,
+			OilHeat = (T.OilHeat or 0) / 1000,
+			OilToCoolant = (T.OilToCoolant or 0) / 1000,
+			RadiatorHeat = (T.Qrad or 0) / 1000,
+			FansRunning = Fans,
+			Derate = Engine.ThermalDerate or 1,
+			DamageRate = DamageRate,
+			Health = Health,
+			FuelRate = St.FuelRate or 0,
+		}
 	end
 end

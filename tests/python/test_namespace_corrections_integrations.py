@@ -14,10 +14,10 @@ class IntegrationManifestTests(unittest.TestCase):
     def test_manifest_covers_current_e2_and_starfall_adapter_sources(self):
         manifest = build_manifest(REPO)
         self.assertEqual(manifest["schema"], 1)
-        self.assertEqual(manifest["e2"]["declarations"], 116)
-        self.assertEqual(len(manifest["e2"]["names"]), 112)
+        self.assertEqual(manifest["e2"]["declarations"], 127)
+        self.assertEqual(len(manifest["e2"]["names"]), 123)
         self.assertEqual(len(manifest["starfall"]["library_functions"]), 14)
-        self.assertEqual(len(manifest["starfall"]["entity_methods"]), 103)
+        self.assertEqual(len(manifest["starfall"]["entity_methods"]), 114)
         self.assertIn("acfIsRadar", manifest["e2"]["names"])
         self.assertIn("acfRadarData", manifest["e2"]["names"])
         self.assertIn("acfRadarData", manifest["starfall"]["entity_methods"])

@@ -169,6 +169,21 @@ Digitised charts were read from rendered PDF pages. Expect about ±1% error on t
   a certified turbine engine must go from ≤15% to 95% rated power in not over 5 s. Used only as an
   upper bound on spool-up time.
 
+### Starter motor and accessories
+
+- **[Chapman]** S. J. Chapman, *Electric Machinery Fundamentals*, 5th ed., McGraw-Hill, 2012, ch. 8
+  "The series DC motor": flux proportional to armature current below saturation, so T = K·I²
+  and the speed-torque curve is hyperbolic. *Not re-checked against the book in this pass.*
+- **[SAE J537]** SAE J537, *Storage Batteries*: cold cranking amps are the current a 12 V battery
+  delivers for 30 s at -18 °C while staying at or above 7.2 V. *Quoted from memory of the
+  standard, not re-checked.*
+- **[Delco Remy]** Delco Remy cranking motor service instructions: never crank more than 30 s
+  at a time, then let the motor cool for at least 2 minutes; heavy-duty models (e.g. 39MT) offer
+  an over-crank protection thermal switch. *Quoted from memory, not re-checked.*
+- **[Fan laws]** Fan affinity laws (e.g. ASHRAE Handbook, *HVAC Systems and Equipment*, Fans):
+  flow ∝ speed, pressure ∝ speed², power ∝ speed³, so shaft torque ∝ speed². Used for the
+  belt-driven radiator fan below idle (ace_radiator).
+
 ### Torque converter, gears, clutch, tyres (cited by the code; not re-verified in this pass)
 
 - **[SAE J643]** SAE J643, *Hydrodynamic Drive Test Code*: K = N/√T and TR vs SR convention.
@@ -209,6 +224,15 @@ Digitised charts were read from rendered PDF pages. Expect about ±1% error on t
 - **[MEGlobal]** MEGlobal, *Ethylene Glycol Product Guide*: 50% glycol near 90 °C, cp about
   3.5 kJ/(kg·K), density about 1.05 kg/L. *Values from memory of the tables, not re-checked.*
 - **[IEC 60085]** Thermal classes of electrical insulation: class H 180 °C.
+- **[ASTM D341]** ASTM D341, *Standard Practice for Viscosity-Temperature Equations and Charts
+  for Liquid Petroleum or Hydrocarbon Products*: the Walther relation
+  log log(ν + 0.7) = A − B·log T, fitted through two measured viscosities.
+- **[SAE J300]** SAE J300, *Engine Oil Viscosity Classification*: kinematic viscosity at 100 °C,
+  grade 30 9.3-12.5 mm²/s, grade 40 12.5-16.3 mm²/s. *From memory of the table, not re-checked.*
+- **[Incropera A.5]** Incropera et al., table A.5, unused engine oil: cp 1.91 / 2.12 / 2.34
+  kJ/(kg·K) and density 884 / 854 / 825 kg/m³ at 300 / 350 / 400 K. *Not re-checked.*
+- **[API IIIG]** API engine oil Sequence IIIG / IIIH high-temperature oxidation and deposit
+  tests run the oil at about 150 °C. *As recalled, not re-checked.*
 
 ## Torque curves
 
@@ -295,6 +319,14 @@ Definitions with their own `inertia`: AGT1500 7.93 ([FI AGT1500]), Electric-Tiny
 | CoolantFrac | 0.28 / 0.25 / 0.30 / 0.02 (SI / diesel / rotary / turbine) | [Heywood] table 12.1 for SI and diesel, **not re-verified**. The others are **estimated**. Motors put all of their losses (copper, inverter, core, bearings) into the engine's heat instead |
 | LHV petrol (SI, rotary) | 43.3 MJ/kg (was 43.4) | **Sourced**: [EPA-TNGA] EPA test gasoline 43.31 MJ/kg |
 | LHV diesel / turbine fuel | 42.6 / 42.8 MJ/kg | [Heywood] App. D, **not re-verified** |
+| Cylinder gas springs (`Engine.GasTorque`) | per cylinder, crank angle by crank angle, below 60 rpm (gone by 150) while not running | Physics: slider-crank kinematics, air trapped at ambient between intake closing and exhaust opening, adiabatic compression (gamma 1.4) relaxing to wall temperature. Holds a parked engine, creeps as the charge leaks, turns over past its peak |
+| CompressionRatio SI / diesel | 10 / 16 | [Heywood] 1.3 ranges (SI 8-12, diesel 12-24); the same values PmaxIdle already used. Definitions can override (`compression`) |
+| Valve timing | intake closes 45° after BDC, exhaust opens 45° before BDC | [Heywood] 6.3 typical 40-60° each, **estimated** midpoint |
+| Rod ratio | crank radius / rod 0.3 | [Heywood] 2.2: rod / crank radius 3-4. Definitions can override (`rodratio`) |
+| Blowby leak | 0.017 of a cylinder's charge per s per bar over ambient | **Derived**: ~1% of the charge per cycle ([Heywood] 8.6), lost over the 15 ms near peak pressure at 2,000 rpm, at ~40 bar: 0.01/0.015/40 |
+| Wall heat time constant | 0.2 s | **Estimated**: 0.6 g trapped air (0.43 J/K) against 0.02 m² of wall at 100 W/m²K ([Heywood] 12.4 motored low-speed range 100-300) |
+| Pumping at low speed | fades in linearly from 0 at standstill to full at idle | Physics: pumping is a flow loss, there is no manifold vacuum without air flow. It used to act in full at rest as static friction |
+| Starter stall torque | 4 × losses at rest (warm oil) + 1.5 × compression peak, at the rated terminal voltage | **Estimated** margin over breakaway torque (starter selection works from it, Bosch Automotive Handbook, starting systems). Sized with the oil-viscosity multiplier taken out: cold oil makes the starter crank slower, it does not make it stronger |
 | StallFrac, IdleAuthority | 0.35 / 0.45 SI, 0.4 / 1 diesel | **Estimated** (control behaviour, not physical data) |
 | Droop governor band | +6% above limit | **Estimated** |
 | IdleSpool (turbine) | 0.09 (was 0.12) | **Derived**: [GS M1] 10 gal/h basic idle = 30 kg/h JP-8 (0.80 kg/L), against 0.30 kg/kWh × 1,119 kW = 336 kg/h at full power [FI AGT1500]: 9%. The same fraction is used for every ACE turbine (**estimated** for the others) |
@@ -302,8 +334,13 @@ Definitions with their own `inertia`: AGT1500 7.93 ([FI AGT1500]), Electric-Tiny
 | SpoolTime (turbine) | 1.2 s | **Estimated**, bounded by [14 CFR 33.73]: idle (9%) to 95% power takes 2.9 × 1.2 = 3.5 s, inside the 5 s allowed. [FI AGT1500] gives the gas-producer inertia (0.074 kg·m²) but no spool-up time. The discrete update uses 1 − exp(−Δt/τ), exact for any step, so it is tickrate independent (tested at 16-528 Hz) |
 | Turbine friction | 1-2% of peak torque | **Estimated** |
 | Idle governor gains | Ki 2.5, Kp 1.5; start integrator 0.15 / 0.2; fast-idle authority 0.6 | **Estimated** (controller tuning) |
-| Start: catch speed / cranking time | 130 rpm / 3 s | [Heywood] 7.6 cranking 150-300 rpm, **not re-verified**. The 3 s is **estimated** |
-| Starter: free speed / stall torque | 450 rpm / 4 × motoring torque at 0 rpm | **Estimated** |
+| Start: when it catches / how long it cranks | no fixed catch speed any more: see "Starting" below / for as long as the start (Active) is held | The starter keeps cranking until the engine catches, Active goes to 0, its thermal cut-out opens or its battery is flat (the fixed 3 s attempt is gone). With the start held, a crank turned by the wheels fires the engine too (push start). The old rule (fires at 130 rpm, [Heywood] 7.6 cranking 150-300 rpm) is replaced by firing speed, compression temperature and a catch test, below |
+| Starter motor | series-wound DC: T = Tstall·x²/(1 + ω/ωk)², electrical power Pstall·x²/(1 + ω/ωk), winding loss Pstall·x²/(1 + ω/ωk)², Pstall = Tstall·ωk; x = terminal voltage / rated | Physics: series machine, T = c·I², I = U/(R + c·ω), unsaturated [Chapman]. Replaces a straight line from stall to a 450 rpm free speed, which was **estimated** |
+| Starter max-power speed ωk | 200 rpm at the crank | **Estimated**: starters are matched so their most power falls at the cranking speed, 150-300 rpm [Heywood] 7.6. Gives 6.7 kW electrical at stall for the 3.3 L V4 diesel (318 N·m at the crank) |
+| Starter rated supply | terminal voltage 80 % of open circuit at stall | **Estimated**: 12 V systems sit near 9.6-10 V while cranking; [SAE J537] lets a battery fall to 7.2 V at its cold cranking current. An engine with no battery linked now cranks on its own lead-acid battery, which is this rated battery when full and warm and runs down while cranking (see "Starting" below) |
+| Starter battery (a linked Electric tank) | open-circuit voltage OCV(SOC)/OCV(100 %) × BMS discharge derate; sag Loss1C·R·P/E at the starter's current, solved together with the motor's current | Same OCV table and loss model as the battery's own (see Batteries). A small pack sags more and cranks slower, a nearly empty one cranks slower, a flat, switched-off or illegal one not at all. The starter's energy is drawn from the battery (`ENT:StarterApply`) |
+| Starter duty / thermal cut-out | 30 s at the max-power point from cold opens the cut-out; cooling time constant 60 s; closes again at half heat | 30 s on, ~2 min rest: [Delco Remy] cranking motor instructions; heavy-duty starters carry an over-crank thermal switch. τ = 60 s (a 2-minute rest gets back within 14 % of cold) and the 50 % reset are **Estimated**. Heat follows the winding loss, so a locked starter cuts out after ~6 s and one cranking freely and fast heats slowly |
+| Radiator fan load on the crank (ace_radiator) | fan power / ω at idle and above; below idle the idle torque × (ω / ω_idle)² | [Fan laws]: a belt-driven fan turns with the crank and its torque goes with speed². It used to be held at its idle torque at any speed: a hot 3.3 L diesel with a 3.45 kW fan on cranked at 78 rpm against 55 N·m and never fired (recording 20261005_191524) |
 | Rev-limiter hysteresis | 150 rpm | **Estimated** |
 | Unknown displacement BMEP | 10 bar SI / 16 bar diesel | [Heywood] 2.7 typical, **not re-verified** |
 | Bore = stroke when no stroke given | square engine | **Estimated** |
@@ -401,13 +438,25 @@ flow (`PumpC`), not the core, limits what they reject.
 
 ## thermal_model.lua (engine cooling)
 
-Two thermal masses per engine, metal (Tb) and coolant (Tc), solved exactly over each step with
-the conductances frozen (so the result does not depend on tickrate):
+Three thermal masses per piston or rotary engine: metal (Tb), coolant (Tc) and sump oil (To).
+Metal and coolant are solved exactly over each step with the conductances frozen, the oil
+exactly against the coolant temperature at the start of the step (so the result does not
+depend on tickrate):
 
-    Cb·dTb/dt = Q_in - Gbc·(Tb - Tc) - Gs·(Tb - Ta)
-    Cc·dTc/dt = Gbc·(Tb - Tc) - Σ ε_i·Cmin_i·(Tc - Ta)
+    Cb·dTb/dt = Q_in - Q_oil - Gbc·(Tb - Tc) - Gs·(Tb - Ta)
+    Cc·dTc/dt = Gbc·(Tb - Tc) + Goc·(To - Tc) - Σ ε_i·Cmin_i·(Tc - Ta)
+    Co·dTo/dt = Q_oil - Goc·(To - Tc) - Gos·(To - Ta)
+
+Motors have no oil node; a turbine's coolant is its oil, so its oil temperature is the
+coolant's. "Engine temperature" is no longer one number: the overlay, wire outputs
+(`Coolant Temp`, `Oil Temp`, `Block Temp`; `EngineHeat` stays as the coolant) and E2/Starfall
+(`acfCoolantTemp`, `acfOilTemp`, `acfBlockTemp`, and `acfEngineDebug` for everything) name
+the part they measure.
 
 Q_in is `HeatRate` from engine_model.lua (fuel share plus friction), rescaled for load and speed.
+Q_oil is the part of it dissipated in the oil (`Thermal.OilHeat`); the oil's temperature sets
+its viscosity and, through `Spec.FrictionMul`, the engine's rubbing friction in
+`Engine.FrictionTorque`.
 Each heat exchanger (the engine's built-in cooler and every linked `ace_radiator`) gets a share
 of the pump flow through the thermostat and is solved with cross-flow ε-NTU. Coolant above its
 boiling point is vented as steam and held there, and film boiling cuts Gbc, so the metal heats
@@ -418,7 +467,7 @@ up; hot metal costs torque and, past the damage temperature, health.
 | Coolant share of fuel energy at part load | × BMEP^-0.2 · N^-0.2 on the full-load share, total ≤ 60% of fuel | [MIT 2.61] scaling, [FSAE wiki] cap |
 | Coolant volume | 0.15 L per kW rated (liquid), 0.03 (motor), 0.02 oil (turbine) | **Estimated** from [V-2] 0.16-0.25 and [Cummins QSB5.9] 0.19 L/kW; cars are lower |
 | Coolant heat capacity | 3.5 kJ/(kg·K) × 1.05 kg/L (50% glycol) | [MEGlobal], not re-checked |
-| Engine metal specific heat | 500 J/(kg·K) (450 motor) | **Estimated** from iron 460, steel 490, aluminium 900, oil 2,000 |
+| Engine metal specific heat | 500 J/(kg·K) (450 motor) | **Estimated** from iron 460, steel 490, aluminium 900 (the oil is now its own node) |
 | Metal above coolant at rated heat | 25 K (40 K motor windings, 30 K turbine) | **Estimated**; [MIT 2.61] head temperatures |
 | Coolant rise through the engine at rated heat | 7 K (sets pump flow ∝ rpm) | **Estimated** (usual 5-10 K design range) |
 | Thermostat | opens 82 °C, fully open 95 °C | [Hella] |
@@ -432,6 +481,16 @@ up; hot metal costs torque and, past the damage temperature, health.
 | Built-in radiator core (Electric-Small/-Medium/-Large) | an extra heat exchanger from the housing's spare volume | See Batteries > Built-in radiator |
 | Derate | from 150 °C metal (140 petrol) to ×0.6 (×0.5 petrol, ×0.5 motor) at 250 °C (200 motor) | **Estimated** shape |
 | Damage | from 200 °C metal (180 motor windings), 0.5% of max health per s per 50 K | Onset [MIT 2.61] oil film limit / [IEC 60085]; rate **Estimated** |
+| Sump oil volume | 2.0 L per litre of displacement (diesel), 1.5 (petrol, rotary); 0.1 L/kW without one | **Estimated** from service fill capacities (5.9 L Cummins B ~14 L, 15 L truck diesels ~40 L, 2 L petrol fours 4-4.5 L, 6 L V8s 5-8 L), from memory, not re-checked |
+| Oil heat capacity | 2.0 kJ/(kg·K) × 0.87 kg/L | [Incropera A.5] range |
+| Heat into the oil | 0.6 of the friction work + 0.05 of the rest, at most 0.5 of the engine's heat | **Estimated**: [Heywood] ch. 13 friction breakdown (about half pistons and rings, the rest bearings, valve train, auxiliaries); bearings and valve train heat the oil, about half of the ring friction heats the liner. UTD-20 class at rated: 82 of 323 kW |
+| Oil above coolant at rated heat | 20 K (sets the oil cooler / crankcase conductance Goc) | **Estimated** (sump oil commonly 100-120 °C at full load with coolant at 90-95 °C) |
+| Oil cooler with the engine stopped | 0.2 of Goc (the oil pump is crank-driven) | **Estimated** |
+| Oil cooler film boiling | Goc × 0.2 with the coolant boiling, as the water jacket | Same boiling-curve estimate as Gbc |
+| Oil pan | 1/6 of the engine skin (its bottom face), taken out of Gs | **Estimated** |
+| Oil viscosity | Walther fit through 110 / 14.5 mm²/s at 40 / 100 °C (SAE 15W-40, diesel), 70 / 10.5 (SAE 10W-30, petrol) | [ASTM D341] relation; 100 °C values mid-grade per [SAE J300]; 40 °C values typical data-sheet figures, **Estimated** |
+| Friction multiplier | (ν / ν at 90 °C)^0.24, clamped 0.8-4 | **Estimated** exponent (film friction rises with viscosity, boundary friction does not), giving ×2.0 at 20 °C, ×2.8 at 0 °C, ×0.87 at 115 °C; [Heywood] ch. 13: friction falls substantially as the oil warms. Reference 90 °C because the FMEP fits are of fully warm engines (**Estimated**) |
+| Hot oil | overlay warning from 130 °C; wear from 150 °C at 0.5% of max health per s per 50 K, on top of the block's | Onset [API IIIG] test temperature; 130 and the rate **Estimated** |
 
 Convars (server, archived): `ace_heat_timescale` (default 2; 1 is real time),
 `ace_engine_builtin_cooling` (default 0.5), `ace_engine_overheat_damage` (default 1).
@@ -448,13 +507,14 @@ Results for a BMP-2 class engine (15.8 L diesel, 240 kW, 665 kg) from
 
 | Case | Result |
 |---|---|
-| Heat to coolant at rated power | 323 kW (the engine model's CoolantFrac plus its friction) |
-| Full load, no radiator, default built-in cooling | 120 °C after 408 s real (204 s at timescale 2) |
-| Full load, no cooling at all | 120 °C after 156 s real |
-| 30 min boiling at full load | metal 240 °C, torque × 0.64, −0.4% health/s |
-| Full load, 0.6 m² × 10 cm radiator, standing with fan | 95 °C coolant, 120 °C metal |
-| Idle warm-up to 82 °C | 30 min real (15 min at timescale 2); idles at 82 °C |
-| Tickrate 16 to 128 | all checkpoints within 1 K |
+| Heat to coolant and oil at rated power | 323 kW (the engine model's CoolantFrac plus its friction), 82 kW of it into the oil |
+| Sump oil | 32 L, 55 kJ/K, 4.1 kW/K to the coolant at rated speed |
+| Full load, no radiator, default built-in cooling | 120 °C after 288 s real (144 s at timescale 2) |
+| Full load, no cooling at all | 120 °C after 129 s real |
+| 30 min boiling at full load | metal 210 °C, oil 218 °C, torque × 0.76, −0.8% health/s (0.1 block, 0.7 oil) |
+| Full load, 0.6 m² × 10 cm radiator, standing with fan | 95 °C coolant, 115 °C oil, 114 °C metal; friction × 0.87 |
+| Idle warm-up to 82 °C | 38 min real (19 min at timescale 2); idles at 82 °C; friction × 2.0 cold, × 1.03 warm |
+| Tickrate 16 to 128 | all checkpoints within 1 K (oil included) |
 
 ## Named engines (engine definitions)
 
@@ -478,3 +538,52 @@ maintainers' balance decision.
 
 The desc of 1.4-B4 ("nazi insects") points at the VW Type 1 family, but no 1.4 L Type 1
 existed, so nothing was applied. The 3TD entries in b4.lua are commented out.
+
+## Starting (engine_model.lua "Catching", battery_model.lua starter pack, acf_engine)
+
+References used here (in addition to [Heywood], [Chapman], [SAE J537], [Delco Remy] above):
+
+- **[Bosch]** Robert Bosch GmbH, *Automotive Handbook*, starting systems (starter characteristic
+  curves, pinion to ring gear ratios 1:10-1:15, starter battery sizing), alternators (claw-pole
+  efficiency) and engine management (crank/cam synchronisation, speed limitation). *Quoted from
+  memory of the handbook, not re-checked against a specific edition.*
+- **[Bosch glow]** Bosch / Beru glow plug product information: steel sheathed glow plugs reach
+  ~850 °C in 2-5 s, ceramic ones faster; preheat time is mapped against coolant temperature.
+  *Product literature, not re-checked.*
+- **[Aquino]** C. F. Aquino, "Transient A/F Control Characteristics of the 5 Liter Central Fuel
+  Injection Engine", SAE 810494, 1981: the x-τ fuel film (wall wetting) model.
+- **[KiBaM]** J. F. Manwell, J. G. McGowan, "Lead acid battery storage model for hybrid energy
+  systems", *Solar Energy* 50 (1993) 399-405: the kinetic battery model (available and bound
+  charge wells).
+- **[BU]** Battery University, BU-403 (charging lead acid: bulk 0.1-0.3 C, coulombic efficiency),
+  BU-502 (discharging at high and low temperature), BU-903 (state of charge from open-circuit
+  voltage, 12.7 V full to ~11.8 V empty). Web articles, secondary.
+
+| Constant | Value | Status / source |
+|---|---|---|
+| Synchronisation before the first injection / spark | 2 crank revolutions | **Estimated** from [Bosch] engine management: the controller finds top centre from the crank and cam sensors within two turns; a mechanical injection pump must fill its lines |
+| Firing speed band | none below 60 rpm, every cycle by 100 rpm; petrol +40 rpm when the charge is at -20 °C | **Estimated**, below the 150-300 rpm cranking speeds of [Heywood] 7.6 |
+| Petrol wall wetting | share of injected fuel reaching the charge 1 - exp(-t/τ), τ 0.3 s at a 55 °C charge, doubling every 35 K colder (0.6 s at 20 °C, 1.3 s at -20 °C) | Form from [Aquino]; time constants **estimated** inside Aquino's range (tenths of a second warm, seconds cold) |
+| Diesel compression temperature | T = (Tair + 0.5·(Tblock - Tair) + crank warming + glow)·rc^(n-1), n = 1.37 - 0.37·48 rpm/(N + 48 rpm) | Polytropic compression [Heywood] 10.6 (cold starting: slow cranking loses heat and blowby). The wall share 0.5 and the 48 rpm constant are **estimated**; the latter gives n ≈ 1.28 at 150 rpm, a 35 bar cranking compression for rc 16, inside the 28-35 bar of workshop compression tests |
+| Diesel ignition band | 700 K (no cycle fires) to 780 K (every cycle) | **Estimated** so that the 3.3 L test diesel without glow plugs starts in 0.8 s at 20 °C, 4.9 s at 0 °C, 9.7 s at -10 °C and not at all at -20 °C, the way direct-injection diesels behave |
+| Cranking wall warming | up to 40 K, time constant 5 s while cranking, cools with 60 s | **Estimated**: each compression leaves heat in the walls and residual gas, so a cold diesel that is cranked for a while gets closer to firing |
+| Glow plugs | +100 K equivalent charge temperature when hot; heat-up time constant 1.5 s; 150 W per cylinder | Heat-up: [Bosch glow] 850 °C in 2-5 s. Boost and power **estimated** (12 V plugs take 10-25 A heating, ~8 A hot) |
+| Preheat time | setting (default 5 s) at -20 °C coolant and below, 0 at 60 °C and above, linear between; 0 = no glow plugs | **Estimated** from typical preheat maps of ~2-20 s against coolant temperature [Bosch glow] |
+| Catch | runs once the fired cycles out-torque the losses (combustion > friction + pumping) above 1.15 × the stall speed | **Estimated** threshold; the test itself is physics (self-sustaining). Replaces "fires at 130 rpm" |
+| Unburnt fuel while misfiring | fuel is charged for every injected cycle, torque and heat only for the ones that fire | Behaviour |
+| Starter own drag | constant, 1/(1 + 2.5)² of stall torque: free speed 2.5 × the 200 rpm max-power speed | **Estimated** from [Bosch] starter characteristics (no-load speed 2-3 × max-power speed). Before it, a warm 3.3 L diesel cranked in neutral at 600 rpm (its idle speed); now ~380 rpm, a 5.7 L V8 ~330 rpm and the 27 L V12 ~250 rpm |
+| Starter size setting | 0.5-3 × standard; torque and current scale, max-power speed kept; adds 14.7 kg per kW of standard starter power per unit of size above 1 | Mass **estimated**: 2.2 kg/kW reduction-gear starter ([Bosch], [Delco Remy] catalogue masses) + 12.5 kg/kW of battery (0.5 Wh/W at 40 Wh/kg flooded lead-acid) |
+| Built-in starter battery capacity | 0.5 Wh per W of the starter's rated (most) power | **Estimated** from a car (1.4 kW starter, 12 V 60 Ah = 720 Wh) and a heavy truck (7 kW, 24 V 140 Ah = 3.4 kWh) [Bosch] |
+| Built-in battery wells | 30 % available, wells level out with a 10 min time constant | Form [KiBaM]; values **estimated** so that about a third of the charge comes out at cranking currents, as Peukert's law (exponent 1.2-1.3) gives for lead-acid, and a "dead" battery cranks again after a few minutes' rest |
+| Built-in battery voltage | 12.7 V full to 11.8 V empty, from the available well; flat (voltage collapse) at 2 % available, live again at 10 % | OCV [BU] BU-903. Flat and live levels **estimated** |
+| Built-in battery sag at stall | 20 % full and warm (the rated supply), × (1 + 1.5·(1 - level)), × (1 + (20 - T)/40) below 20 °C | **Estimated**; the cold factor doubles the sag at -20 °C, in line with lead-acid giving about half its power at -18 °C ([SAE J537] rating point, [BU] BU-502) |
+| Built-in battery charging | 0.25 C bulk, tapering to 0 as the available well fills from 80 %; 85 % charge efficiency | [BU] BU-403: bulk 0.1-0.3 C, lead-acid coulombic efficiency 80-90 %. No trickle charge while the engine is off |
+| Alternator | charges at up to 1.5 × the starter's rated power (in proportion to speed below idle), as much as the battery accepts; crank load = charging power / 0.55 / ω | Efficiency: [Bosch] claw-pole alternators 50-65 %. The 1.5 sizing is **estimated** (part of a real alternator's output feeds lights and electronics, which are not modelled). It also charges a linked ACE battery, through that battery's own charge acceptance |
+
+Resulting start times (engine alone in neutral, from Active = 1 to running; `Engine.SimulateStart`,
+also shown in the engine menu): 5.7 L V8 petrol 0.46 s warm, 0.59 s at 20 °C, 1.1 s at -20 °C;
+3.3 L V4 diesel 0.63 s warm, 3.2 s at 20 °C (2.5 s of it preheat), 5.9 s at -20 °C (5 s
+preheat); 27 L V12 diesel 1.3 s warm, 4.9 s at 20 °C, no start at -20 °C with the standard
+starter (frozen oil, 4 × friction, holds the crank below firing speed), 6.1 s with a 2 × starter.
+A held start with no fuel runs the 3.3 L diesel's built-in battery flat in about 10 minutes
+(cranking 30 s at a time between thermal cut-outs).

@@ -1763,6 +1763,39 @@ do
 		return this.CoolantBoiling == true
 	end
 
+	--- Returns the sump oil temperature of an ACF engine
+	-- @server
+	-- @return number Oil temperature in degrees C (0 for electric motors, which have no oil circuit)
+	function ents_methods:acfOilTemp()
+		local this = getent(self)
+
+		if not isEngine(this) then return 0 end
+		if restrictInfo(this) then return 0 end
+
+		return this.OilHeat or 0
+	end
+
+	--- Returns the full drivetrain and cooling state of an ACF engine, for debugging.
+	-- Keys: RPM, Load (0-1), Active, Running, Stalled, Cranking (booleans), Torque (output),
+	-- CrankTorque, FrictionTorque, PumpingTorque, GasTorque (cylinder compression), StarterTorque
+	-- (N m), Preheat (glow plug preheat left, s), Glow (glow plug heat 0-1), Firing (share of cycles
+	-- firing 0-1), StarterCharge (built-in starter battery charge 0-1, -1 with a linked battery),
+	-- FrictionMul (oil viscosity effect on friction), CoolantTemp, OilTemp, BlockTemp (degrees C),
+	-- OilViscosity (mm2/s), Thermostat (0-1), Boiling, OilOverheating (booleans), HeatInput,
+	-- OilHeat, OilToCoolant, RadiatorHeat (kW), FansRunning, Derate (torque multiplier),
+	-- DamageRate (% of max health per second), Health (0-1), FuelRate (kg/s; electric: battery W).
+	-- @server
+	-- @return table Engine state, empty if the engine is not valid or its info is restricted
+	function ents_methods:acfEngineDebug()
+		local this = getent(self)
+
+		if not isEngine(this) then return {} end
+		if restrictInfo(this) then return {} end
+		if not ACE.EngineDebugInfo then return {} end
+
+		return ACE.EngineDebugInfo(this)
+	end
+
 	--- Sets the gear ratio of a CVT, set to 0 to use built-in algorithm
 	-- @server
 	-- @param number ratio The ratio to set

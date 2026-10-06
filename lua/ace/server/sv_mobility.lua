@@ -54,10 +54,14 @@ end
 -- @param Engine acf_engine entity.
 -- @param FuelType Fuel currently being burned.
 function M.EngineSpec(Engine, FuelType)
-	local Key = FuelType or Engine.FuelType
+	local Key = (FuelType or Engine.FuelType or "") .. "|" .. (Engine.CoolingChoice or "")
 	if Engine.MobSpec and Engine.MobSpecKey == Key then return Engine.MobSpec end
 
 	local Def = ACE.Weapons.Engines[Engine.Id]
+	-- The engine menu's cooling choice (ENT:SetStarterSetup) stands in for the definition's.
+	if Def and Engine.CoolingChoice then
+		Def = setmetatable({ cooling = Engine.CoolingChoice }, { __index = Def })
+	end
 	local Curve = Engine.TorqueCurve
 
 	local Spec = EngineModel.Build(Def or {
@@ -190,6 +194,7 @@ local MeasuredGripConVar = CreateConVar("ace_mobility_measured_grip", "1", FCVAR
 	"1 = a sliding tyre is limited to the grip the physics engine actually gave it last tick. 0 = use the friction product (overestimates sliding grip).", 0, 1)
 
 local LockPedal = 0.3          -- brake fraction from which a stopped wheel is held statically
+local PedalRestSpeed = 0.05    -- m/s below which the pedal takes the static hold (see solveGroup)
 local BrakeLocks = {}          -- [constraint] = wheel description, for cleanup
 
 -- Moment of inertia of a physics object about a world direction through its centre, kg·m².
@@ -468,6 +473,7 @@ local function readWheel(Box, Link, BoxAngVel, Ctx)
 
 	Desc.Grounded = not Upright and (Tr.Hit or Desc.Loaded == true)
 	Desc.Meshed = not Tr.Hit and Desc.Loaded == true
+	Desc.GroundNormal = Tr.Hit and Tr.HitNormal or nil
 	if Tr.Hit then
 		Desc.Mu = contactMu(Phys, Tr.SurfaceProps)
 	elseif Desc.Grounded then
@@ -531,7 +537,7 @@ buildGearbox = function(Box, Ctx)
 		if abs((Box.GearTable[I] or 0) * Final) > 1e-6 then AnyGear = true break end
 	end
 	Desc.BrakeOnly = not AnyGear and not Box.CVT and BrakeOnlyConVar:GetBool()
-	Desc.InputJ = Box.InputJ or 0.02 + 0.00002 * Max
+	Desc.InputJ = (Box.InputJ or 0.02 + 0.00002 * Max) + (Box.MobClutchJ or 0)
 	Desc.Efficiency = Box.MobEfficiency or 0.97
 	Desc.SpinLoss = 0.002 * Max
 	Desc.Dual = Box.Dual
@@ -541,6 +547,7 @@ buildGearbox = function(Box, Ctx)
 	Desc.SideCap = { [0] = (Box.LClutch or Max) * SideScale, [1] = (Box.RClutch or Max) * SideScale }
 	Desc.DriveCap = Box.MobDriveCap
 	Desc.Diff = Box.MobDiff
+	Desc.Steering = Box.MobSteering
 	Desc.LSDPreload, Desc.LSDRamp = Box.LSDPreload, Box.LSDRamp
 	Desc.Converter = Box.MobConverter
 	Desc.LockupCap = Box.MobLockupCap
@@ -743,6 +750,63 @@ local function MaxWheelSpin()
 	return MaxSpin
 end
 
+--[[
+	Whether the holds can really take the load: a static friction contact sticks only while
+	what pulls it stays below what holds it (Karnopp). A lock is a fixed point for the physics
+	engine and would hold the vehicle on any slope, so this is solved instead: the whole
+	drivetrain from rest for one tick, every wheel free, each grounded wheel carrying its share
+	of the vehicle with the slope pulling, and the brakes, the engine (a stopped one through its
+	friction and pumping, a running one through the clutch) and everything geared to them
+	resisting. A wheel that stays put can be held; one that turns cannot. Sets W.HoldSlips.
+	It is solved apart from the real step so moving wheels do not drag held ones through the
+	differentials. A buggy parked in first with the engine off held on a 49 degree slope its
+	engine could hold a seventh of; tested inside the real step, the hold was taken and lost
+	every other tick and the buggy crept down instead of rolling.
+]]
+local HoldTolerance = 0.005 -- rad/s after one tick from rest: numerical noise, not motion
+
+local function staticHold(Ctx, EngineDescs, Roots, Dt)
+	local Any = false
+	for _, W in ipairs(Ctx.WheelList) do
+		W.HoldSlips = nil
+		if W.WantLock or IsValid(W.BrakeLock) then Any = true end
+	end
+	if not Any then return end
+
+	local SavedWheels, SavedStates, SavedInputs = {}, {}, {}
+	for _, W in ipairs(Ctx.WheelList) do
+		SavedWheels[W] = { W.Ground, W.Anchored }
+		W.Ground, W.Anchored, W.ParkProbe = W.RestGround, nil, true
+	end
+	for _, E in ipairs(EngineDescs) do
+		local Copy = {}
+		for K, V in pairs(E.State) do Copy[K] = V end
+		-- The cylinders' trapped air changes in place during the trial.
+		if E.State.Charge then Copy.Charge = table.Copy(E.State.Charge) end
+		SavedStates[E] = Copy
+	end
+	for _, Box in ipairs(Ctx.BoxList) do
+		local D = Box.Mob
+		if D then
+			SavedInputs[D] = D.InputW or false
+			D.InputW = 0
+		end
+	end
+
+	local Sys = Drivetrain.Build({ Engines = EngineDescs, Roots = Roots })
+	Drivetrain.Step(Sys, Dt, SubstepsConVar:GetInt())
+	for _, W in ipairs(Ctx.WheelList) do
+		W.HoldSlips = abs(W.WOut or 0) > HoldTolerance or nil
+	end
+
+	for W, S in pairs(SavedWheels) do W.Ground, W.Anchored, W.ParkProbe = S[1], S[2], nil end
+	for E, Copy in pairs(SavedStates) do
+		for K in pairs(E.State) do E.State[K] = nil end
+		for K, V in pairs(Copy) do E.State[K] = V end
+	end
+	for D, V in pairs(SavedInputs) do D.InputW = V or nil end
+end
+
 local function solveGroup(Ctx, EngineDescs, Roots, PhysMass, TotalMass, Dt)
 	TotalMass = max(TotalMass, PhysMass)
 	local RoadScale = TotalMass > 0 and PhysMass / TotalMass or 1
@@ -759,6 +823,8 @@ local function solveGroup(Ctx, EngineDescs, Roots, PhysMass, TotalMass, Dt)
 	-- like real brake systems, whether or not this wheel is touching the ground right now
 	-- (tank sprockets often ride above it and drive through the track).
 	local BrakeShare = TotalMass / max(#Ctx.WheelList, 1)
+	local ChassisPhys = IsValid(Ctx.Chassis) and Ctx.Chassis:GetPhysicsObject()
+	local ChassisFrozen = IsValid(ChassisPhys) and not ChassisPhys:IsMotionEnabled()
 	local EngineHeld = engineHeldWheels(EngineDescs)
 
 	--[[
@@ -795,15 +861,29 @@ local function solveGroup(Ctx, EngineDescs, Roots, PhysMass, TotalMass, Dt)
 		]]
 		local Speed = abs(W.GroundSpeed or 0)
 		local Stopped = Speed < (IsValid(W.BrakeLock) and 1.5 or 0.25)
-		local Parked = EngineHeld and EngineHeld[W] and W.Grounded
+		local Parked = EngineHeld and EngineHeld[W] and (W.Grounded or IsValid(W.BrakeLock))
 		--[[
-			A firm pedal locks the wheel already at walking pace (below 3 m/s, let go past 4), and
-			the tyre then either grips or slides, as a real locked wheel does. Braked by impulses
-			instead, a car sliding slowly down a slope never got below the standstill threshold:
-			each step the brake knocked the wheel back, the tyre spun it forward again inside the
-			physics step, the contact never gripped and the car slid on at 2 km/h (Volvo, engine
-			off, full brake). Track sprockets keep impulse braking: locking one mid-turn would
-			snap a brake-steered tank round.
+			A lock does not take the vehicle's momentum the way a brake does. It stops the wheel
+			dead, and the tyre goes from rolling to stuck in one step; the physics engine holds a
+			stuck contact with a spring that does not slip at tyre grip, so the vehicle's motion
+			winds that spring up and it throws the vehicle back with most of it. Locked at 0.85
+			m/s, the buggy stopped in 0.06 s and bounced back at 0.47 m/s with the pedal down (the
+			wheels stayed locked to the chassis; it was the tyres that slid back), then rocked to
+			and fro; locked at 0.24 m/s it came back at 0.21, at 0.05 m/s at 0.04. A brake is
+			friction: it takes the motion out and cannot give any back. So the pedal brakes
+			through the drivetrain's brake torque, which can only stop the wheel, and the lock is
+			only taken once the vehicle is at rest (below 0.05 m/s), to hold it there.
+		]]
+		local AtRest = Speed < (IsValid(W.BrakeLock) and 1.5 or PedalRestSpeed)
+		--[[
+			Except where the brake torque cannot get it there: braked by impulses, a car sliding
+			slowly down a slope never came to rest: each step the brake knocked the wheel back,
+			the tyre spun it forward again inside the physics step, the contact never gripped
+			and the car slid on at 2 km/h (Volvo, engine off, full brake). A firm pedal that has
+			not slowed a vehicle at walking pace (below 3 m/s) by StallDecel for StallTime is not
+			going to stop it, so the wheel is locked there and the tyre then grips or slides, as a
+			real locked wheel does. Track sprockets keep impulse braking: locking one mid-turn
+			would snap a brake-steered tank round.
 		]]
 		--[[
 			A held lock does not let go because the ground trace missed for a tick: a wheel
@@ -811,13 +891,16 @@ local function solveGroup(Ctx, EngineDescs, Roots, PhysMass, TotalMass, Dt)
 			was made and removed each time (buggy rear axle, 30 times in half a second).
 		]]
 		local Crawling = Speed < (IsValid(W.BrakeLock) and 4 or 3) and (W.Grounded or IsValid(W.BrakeLock)) and not W.Meshed
-		local PedalLock = M.BrakePedal(Pedal) >= LockPedal and (Stopped or Crawling)
+		local Firm = M.BrakePedal(Pedal) >= LockPedal
+		local Stalled = Drivetrain.BrakeStalled(W, Firm and Crawling and not IsValid(W.BrakeLock), Speed, Dt)
+		local PedalLock = Firm and (AtRest or Crawling and (IsValid(W.BrakeLock) or Stalled))
 		-- Strictly true or false: nil means "leave the lock as it is", and a nil here (no engine
 		-- hold) left a released brake locked until the stale-lock timer dropped it 0.5 s later,
 		-- long enough to stall a truck pulling away.
-		brakeLock(W, (PedalLock or Parked and Stopped or false) and not W.BrakeSlipped)
-		W.LockWhy = PedalLock and (Stopped and "pedal at standstill" or "pedal while crawling") or Parked and Stopped and "parked in gear with the engine off" or nil
-		local Held = IsValid(W.BrakeLock) or (Pedal or 0) > 0 and Stopped and abs(W.W * W.Radius) < 0.5
+		-- Whether the hold can really be taken is decided by staticHold below.
+		W.WantLock = PedalLock or Parked and Stopped or false
+		W.LockWhy = PedalLock and (AtRest and "pedal at standstill" or "pedal not slowing a crawling vehicle") or Parked and Stopped and "parked in gear with the engine off" or nil
+		local Held = IsValid(W.BrakeLock) or (Pedal or 0) > 0 and AtRest and abs(W.W * W.Radius) < 0.5
 		--[[
 			A wheel locked to its hub is a fixed point for the drivetrain and gets no impulse.
 			Solved as a free wheel, the solver pushed it every tick against the lock and the lock
@@ -829,6 +912,20 @@ local function solveGroup(Ctx, EngineDescs, Roots, PhysMass, TotalMass, Dt)
 		W.Anchored = IsValid(W.BrakeLock) or nil
 		W.Braking = (Pedal or 0) > 0
 		W.Ground = not Held and Vehicle.Ground(Share, W.Radius, W.GroundSpeed, W.Mu, Share * Gravity, W.Grounded, W.W, W.Meshed) or nil
+		-- The wheel's share of the vehicle standing on it with the slope pulling, for staticHold.
+		W.RestGround = nil
+		if W.Grounded and not W.Meshed and W.Radius > 0 then
+			local Rest = Vehicle.Ground(Share, W.Radius, 0, W.Mu, Share * Gravity, true, 0, false)
+			local Downhill = (-W.AxisWorld):Cross(W.GroundNormal or Vector(0, 0, 1))
+			if Rest and Downhill:LengthSqr() > 1e-6 then
+				Downhill:Normalize()
+				-- Along the physics engine's own gravity, which maps and addons can tilt. A frozen
+				-- chassis cannot roll anywhere, so then only the drivetrain pushes.
+				local Pull = ChassisFrozen and 0 or physenv.GetGravity():GetNormalized():Dot(Downhill)
+				Rest.Torque = Share * Gravity * Pull * W.Radius
+			end
+			W.RestGround = Rest
+		end
 		--[[
 			The friction product (and the generous load above) overestimate what a sliding tyre
 			passes: measured, the physics engine gives a spinning or locked wheel about 40-60 % of
@@ -878,6 +975,11 @@ local function solveGroup(Ctx, EngineDescs, Roots, PhysMass, TotalMass, Dt)
 		Desc.Brake[1] = BrakeR * MaxR
 	end
 
+	staticHold(Ctx, EngineDescs, Roots, Dt)
+	for _, W in ipairs(Ctx.WheelList) do
+		brakeLock(W, W.WantLock and not W.HoldSlips or false)
+	end
+
 	local Sys = Drivetrain.Build({ Engines = EngineDescs, Roots = Roots })
 	Drivetrain.Step(Sys, Dt, SubstepsConVar:GetInt())
 
@@ -887,9 +989,8 @@ local function solveGroup(Ctx, EngineDescs, Roots, PhysMass, TotalMass, Dt)
 		for _, C in ipairs(Gearbox.Brakes or {}) do
 			local W = C.Wheel
 			if W and W.Anchored then
-				-- A held wheel: the brake slips once the drivetrain pushes harder than it holds.
-				-- A parking hold (no pedal, engine off) only lets go when its conditions end.
-				W.BrakeSlipped = (C.Cap or 0) > 0 and abs(W.AnchorTorque or 0) > C.Cap or false
+				-- A held wheel lets go when the static check says the hold cannot carry the load.
+				W.BrakeSlipped = W.HoldSlips or false
 			elseif W then
 				W.BrakeSlipped = C.Max and C.Max > 0 and C.Max < math.huge and abs(C.Acc) >= 0.98 * C.Max or false
 			end
@@ -997,6 +1098,78 @@ local function finishGroup(Group, Ctx, Dt)
 end
 
 
+--[[
+	A physics gun makes what it holds far heavier while it holds it, for a steady grip (the
+	buggy's 250 kg chassis weighed about 45,700 kg). Weighed then, the vehicle came to 46 t, its
+	tyres were sized for 46 t, and the drivetrain spun its wheels at 40 rad/s while the gun held
+	it just off the ground. A held body counts with the mass it had before it was picked up.
+]]
+local function bodyMass(Ent, Phys)
+	if Ent:IsPlayerHolding() then return Ent.MobOwnMass or Phys:GetMass() end
+	Ent.MobOwnMass = Phys:GetMass()
+	return Ent.MobOwnMass
+end
+
+local function isFrozen(Ent)
+	local P = Ent:GetPhysicsObject()
+	return IsValid(P) and not P:IsMotionEnabled()
+end
+
+--[[
+	Bodies that move with the vehicle: everything constrained to the starting entities, without
+	going through frozen props. A frozen prop is part of the world, not the vehicle, and chip
+	steering often hangs the wheels on one (a frozen Starfall prop the chip turns), and anything
+	else constrained to that prop is another vehicle.
+]]
+local function movingBodies(Starts)
+	local Seen, Stack = {}, {}
+	for _, Ent in ipairs(Starts) do
+		if IsValid(Ent) and not Seen[Ent] then
+			Seen[Ent] = true
+			Stack[#Stack + 1] = Ent
+		end
+	end
+	while #Stack > 0 do
+		local Ent = table.remove(Stack)
+		for _, Con in ipairs(constraint.GetTable(Ent)) do
+			if Con.Type ~= "NoCollide" then
+				for _, E in pairs(Con.Entity) do
+					local Other = E.Entity
+					if IsValid(Other) and not Seen[Other] and not isFrozen(Other) then
+						Seen[Other] = true
+						Stack[#Stack + 1] = Other
+					end
+				end
+			end
+		end
+	end
+	return Seen
+end
+
+-- Mass of the bodies moving with Starts[1] (see movingBodies), and of those plus their parented
+-- props. Cached on Starts[1] for a few seconds.
+local function contraptionMass(Starts)
+	local Ent = Starts[1]
+	if Ent.MobMassAt and CurTime() < Ent.MobMassAt then return Ent.MobPhysMass, Ent.MobTotalMass end
+	local Bodies = movingBodies(Starts)
+	local All = {}
+	for V in pairs(Bodies) do
+		All[V] = true
+		for _, C in pairs(ACE.GetAllChildren(V)) do All[C] = true end
+	end
+	local Phys, Total = 0, 0
+	for V in pairs(All) do
+		local P = IsValid(V) and V:GetPhysicsObject()
+		if IsValid(P) then
+			local Mass = bodyMass(V, P)
+			Total = Total + Mass
+			if not IsValid(V:GetParent()) then Phys = Phys + Mass end
+		end
+	end
+	if Phys > 0 then Ent.MobPhysMass, Ent.MobTotalMass, Ent.MobMassAt = Phys, Total, CurTime() + 5 end
+	return Phys, Total
+end
+
 -- Builds and solves one group's physics and pushes the wheels. Returns the solve context, or
 -- nil when no engine of the group is ready.
 local function solvePhysics(Engine, Group, Dt)
@@ -1015,12 +1188,14 @@ local function solvePhysics(Engine, Group, Dt)
 		-- The engine measures its vehicle when switched on and at its legality checks; one never
 		-- switched on had no mass yet, which sized its brakes for an empty vehicle (31 N·m
 		-- instead of 9,300 on the Volvo) until the first check.
-		if Desc and (E.TotalMass or 0) <= 0 and E.CalcMassRatio then E:CalcMassRatio() end
-		if Desc then
-			EngineDescs[#EngineDescs + 1] = Desc
-			PhysMass = max(PhysMass, E.PhysMass or 0)
-			TotalMass = max(TotalMass, E.TotalMass or E.PhysMass or 0)
-		end
+		if Desc then EngineDescs[#EngineDescs + 1] = Desc end
+	end
+	-- The vehicle is what the engine sits on plus everything moving with its wheels (an engine
+	-- on its own contraption still drives, and is weighed with, the wheels' vehicle).
+	if #EngineDescs > 0 and IsValid(Ctx.Chassis) then
+		local Starts = { Ctx.Chassis }
+		for _, W in ipairs(Ctx.WheelList) do Starts[#Starts + 1] = W.Ent end
+		PhysMass, TotalMass = contraptionMass(Starts)
 	end
 	--[[
 		Parented props have no mass in Source's physics, so the physical chassis is lighter than
@@ -1254,24 +1429,6 @@ local function treeNeedsSolve(Box, Depth)
 	return false
 end
 
--- Mass of everything physically attached to Ent, and of that plus parented props (as the
--- engine's CalcMassRatio counts it). Cached for a few seconds.
-local function contraptionMass(Ent)
-	if Ent.MobMassAt and CurTime() < Ent.MobMassAt then return Ent.MobPhysMass, Ent.MobTotalMass end
-	local PhysEnts = ACE.GetAllPhysicalConstraints(Ent)
-	local All = table.Copy(PhysEnts)
-	for _, V in pairs(PhysEnts) do table.Merge(All, ACE.GetAllChildren(V)) end
-	local Phys, Total = 0, 0
-	for _, V in pairs(All) do
-		local P = IsValid(V) and V:GetPhysicsObject()
-		if IsValid(P) then
-			Total = Total + P:GetMass()
-			if not IsValid(V:GetParent()) then Phys = Phys + P:GetMass() end
-		end
-	end
-	Ent.MobPhysMass, Ent.MobTotalMass, Ent.MobMassAt = Phys, Total, CurTime() + 5
-	return Phys, Total
-end
 
 --- Solves a gearbox tree that has no engine: brakes, brake holds and differentials only.
 -- @param Box The root acf_gearbox (one with no linked engine or gearbox above it).
@@ -1285,7 +1442,7 @@ function M.TickStandalone(Box, Dt)
 		Chassis = ACE.GetPhysicalParent(Box),
 	}
 	local Desc = buildGearbox(Box, Ctx)
-	local PhysMass, TotalMass = contraptionMass(ACE.GetPhysicalParent(Box) or Box)
+	local PhysMass, TotalMass = contraptionMass({ ACE.GetPhysicalParent(Box) or Box })
 	solveGroup(Ctx, {}, { Desc }, PhysMass, TotalMass, Dt)
 	if M.Log then M.Log.Frame("standalone", nil, Ctx, Dt) end
 	applyBrakeLocks(Ctx.WheelList)

@@ -16,7 +16,7 @@ do
 		["Coolant"]        = "Returns the current coolant level.",
 		["Capacity"]    = "Returns the max capacity of the radiator.",
 		["Leaking"]     = "Is the radiator leaking?",
-		["Temperature"]     = "How hot is the radiator"
+		["Temperature"]     = "Temperature of the coolant in the radiator, in °C (the coolant of the engines it is linked to)."
 	}
 
 	function ENT:Initialize()
@@ -337,7 +337,7 @@ function ENT:UpdateOverlayText()
 
 	text = text .. self.RadiatorStats
 
-	text = text .. "\nTemp: " .. math.Round(self.Heat or ACE.AmbientTemp or 20) .. " °C / " .. math.Round(((self.Heat or ACE.AmbientTemp or 20) * (9 / 5)) + 32) .. " °F\n"
+	text = text .. "\nCoolant: " .. math.Round(self.Heat or ACE.AmbientTemp or 20) .. " °C / " .. math.Round(((self.Heat or ACE.AmbientTemp or 20) * (9 / 5)) + 32) .. " °F\n"
 	text = text .. "Rejecting: " .. math.Round((self.HeatRejected or 0) / 1000, 1) .. " kW\n"
 
 	text = text .. "\nCurrent Coolant Remaining:"
@@ -406,7 +406,8 @@ function ENT:Think()
 		Active cooling: a fan driven from the engines, switched on by the ActiveCooling input and
 		run by its thermostat only while the coolant is above the thermostat's opening point
 		(the thermostatic fan clutch of real cooling systems). The fan's power is taken from the
-		crank as a torque, P / omega, at no less than idle speed.
+		crank as a torque, P / omega, at idle speed and above; below idle it falls with the square
+		of the crank speed.
 	]]
 	local FanWanted = self.Active and (self.Heat or 0) > FanOnTemp
 	self.FanRunning = 0
@@ -418,9 +419,19 @@ function ENT:Think()
 			-- Electric motors idle at 0 rpm and can turn backwards: their fan load is taken at no
 			-- less than 80 rad/s.
 			local Idle = Spec and Spec.IdleW or 0
-			local Omega = math.max(math.abs(State and State.W or 0), Idle > 0 and Idle or 80)
+			local Speed = math.abs(State and State.W or 0)
+			local Omega = math.max(Speed, Idle > 0 and Idle or 80)
+			local Torque = self.ActiveTorqueDemand / math.max(ECount, 1) / Omega
+			--[[
+				Below idle (the starter cranking, the engine stalling or spinning down) a belt-driven
+				fan turns slower with the crank, and a fan's torque goes with the square of its speed
+				(fan affinity laws: power ~ speed³). Held at its idle torque, a big fan used to load
+				the crank like a brake: a hot 3.3 L diesel whose radiator fan was on cranked at 78 rpm
+				and never reached the 130 rpm it fires at, until the fan switched off.
+			]]
+			if Idle > 0 and Speed < Idle then Torque = Torque * (Speed / Idle) ^ 2 end
 			-- The fan is a load on the crank; the drivetrain solve takes it from the engine.
-			Ent.AccessoryTorque = (Ent.AccessoryTorque or 0) + self.ActiveTorqueDemand / math.max(ECount, 1) / Omega
+			Ent.AccessoryTorque = (Ent.AccessoryTorque or 0) + Torque
 
 			self.FanRunning = 1
 		end

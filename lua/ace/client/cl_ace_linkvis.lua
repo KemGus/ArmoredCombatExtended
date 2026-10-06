@@ -131,6 +131,15 @@ local EngineTargets = {
 		local EngineFuel = Def and Def.fuel
 		local Fuel = TankFuel(Tank)
 
+		-- A battery on a piston or rotary engine feeds its starter (ENT:LinkStarterBattery).
+		if Fuel == "Electric" and EngineFuel and EngineFuel ~= "Electric" then
+			local EType = Def.enginetype
+			if EType == "Turbine" or EType == "GroundTurbine" then
+				return Result(ColorFail, "Turbines start without a starter battery")
+			end
+			return DistanceResult(Engine:GetPos():Distance(Tank:GetPos()), LinkVis.FuelLinkDist, "The battery")
+		end
+
 		if EngineFuel and Fuel and not (EngineFuel == "Multifuel" and Fuel ~= "Electric") and EngineFuel ~= Fuel then
 			return Result(ColorFail, "Fuel type is incompatible (" .. EngineFuel .. " engine, " .. Fuel .. " tank)")
 		end

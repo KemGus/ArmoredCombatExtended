@@ -31,6 +31,11 @@ TOOL.ClientConVar[ "gb_lsdpreload" ] = 0
 TOOL.ClientConVar[ "gb_lsdramp" ] = 0.3
 TOOL.ClientConVar[ "gb_assisted" ] = 0
 TOOL.ClientConVar[ "gb_dct" ] = 0
+-- Engine starter setup (see acf_engine ENT:SetStarterSetup).
+TOOL.ClientConVar[ "eng_startersize" ] = 1
+TOOL.ClientConVar[ "eng_preheat" ] = 5
+TOOL.ClientConVar[ "eng_cooling" ] = ""
+TOOL.ClientConVar[ "gb_clutch" ] = 0
 
 -- Entities selected for linking, per player. Tool objects inherit from TOOL through a
 -- metatable, so a table set on TOOL itself would be one selection shared by every player.
@@ -78,6 +83,16 @@ function TOOL:GearboxSetup()
 		LSDRamp = self:GetClientNumber( "gb_lsdramp" ),
 		Assisted = self:GetClientNumber( "gb_assisted" ) ~= 0,
 		DCT = self:GetClientNumber( "gb_dct" ) ~= 0,
+		Clutch = self:GetClientNumber( "gb_clutch" ),
+	}
+end
+
+-- The engine starter setup chosen in the menu.
+function TOOL:EngineStarterSetup()
+	return {
+		Size = self:GetClientNumber( "eng_startersize" ),
+		Preheat = self:GetClientNumber( "eng_preheat" ),
+		Cooling = self:GetClientInfo( "eng_cooling" ),
 	}
 end
 
@@ -125,6 +140,7 @@ function TOOL:LeftClick( trace )
 			table.insert( ArgTable, 1, ply )
 			local success, msg = trace.Entity:Update( ArgTable )
 			if success and trace.Entity.SetMobilitySetup then trace.Entity:SetMobilitySetup( self:GearboxSetup() ) end
+			if success and trace.Entity.SetStarterSetup then trace.Entity:SetStarterSetup( self:EngineStarterSetup() ) end
 			ACE.SendNotify( ply, success, msg )
 		else
 			-- Using the Duplicator entity register to find the right factory function
@@ -132,6 +148,7 @@ function TOOL:LeftClick( trace )
 			if not IsValid(Ent) then ACE.SendNotify(ply, false, "#tool.acemenu.creationfailed") return false end
 
 			if Ent.SetMobilitySetup then Ent:SetMobilitySetup( self:GearboxSetup() ) end
+			if Ent.SetStarterSetup then Ent:SetStarterSetup( self:EngineStarterSetup() ) end
 
 			Ent:Activate()
 			Ent:DropToFloor()

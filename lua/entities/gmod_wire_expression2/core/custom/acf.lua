@@ -832,6 +832,39 @@ do
 		return this.CoolantBoiling and 1 or 0
 	end
 
+	-- Returns the sump oil temperature of an ACF engine, in °C (0 for electric motors)
+	[nodiscard]
+	e2function number entity:acfOilTemp()
+		if not isEngine(this) then return self:throw("Entity is not a valid ACF engine", 0) end
+		if restrictInfo(self.player, this) then return 0 end
+
+		return round(this.OilHeat or 0, 1)
+	end
+
+	__e2setcost(10)
+
+	-- Returns a table with the full drivetrain and cooling state of an ACF engine, for debugging
+	[nodiscard]
+	e2function table entity:acfEngineDebug()
+		local ret = E2Lib.newE2Table()
+
+		if not isEngine(this) then return self:throw("Entity is not a valid ACF engine", ret) end
+		if restrictInfo(self.player, this) then return ret end
+		if not ACE.EngineDebugInfo then return ret end
+
+		-- Booleans become 1 / 0, as everywhere else in E2.
+		for key, value in pairs(ACE.EngineDebugInfo(this)) do
+			if isbool(value) then value = value and 1 or 0 end
+			ret.s[key] = value
+			ret.stypes[key] = "n"
+			ret.size = ret.size + 1
+		end
+
+		return ret
+	end
+
+	__e2setcost(1)
+
 	-- Sets the gear ratio of a CVT, set to 0 to use automatic calculation
 	e2function void entity:acfCVTRatio(number ratio)
 		if not isGearbox(this) then return self:throw("Entity is not a valid ACF gearbox") end

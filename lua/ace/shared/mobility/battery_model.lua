@@ -172,6 +172,24 @@ local function taper(T, Limit)
 	return clamp((Limit - T) / Battery.TaperK, 0, 1)
 end
 
+--- What a pack offers an engine's starter motor (the engine state's StarterSupply, see the
+-- starter in engine_model.lua).
+-- Open-circuit voltage follows the state of charge (OCV table) and is scaled by the BMS's
+-- discharge derate, so a hot pack cranks weaker and one at its discharge limit not at all.
+-- The sag is the pack's resistive loss as a fraction of power (Loss1C·R·P/E, as in LossW)
+-- at the starter's stall power: the voltage drop that power alone would cause.
+-- @param Spec table Pack spec.
+-- @param State table Pack state.
+-- @param SOC number State of charge 0..1.
+-- @param StallW number The starter's electrical power at stall [W] (Engine.StarterRating).
+-- @return number Open-circuit voltage relative to a full new pack's (0..1).
+-- @return number Sag at the stall power, as a fraction of the open-circuit voltage.
+function Battery.StarterSupply(Spec, State, SOC, StallW)
+	local Volt = Battery.OCV(SOC) / OCV[11] * Battery.DischargeDerate(State)
+	local Sag = Battery.Loss1C * Battery.Resistance(State) * max(StallW, 0) / Spec.NominalWh
+	return Volt, Sag
+end
+
 --- Most power the discharge side of the BMS allows, as a fraction of full: 1 while cool, falling
 -- to 0 at the discharge temperature limit.
 -- @param State table Pack state.
@@ -315,6 +333,130 @@ function Battery.ThermalStep(Spec, State, Dt, Ambient, Scale, LoopG)
 	else
 		State.T = State.T + P * H / Spec.C
 	end
+end
+
+--[[
+	The engine's own starter battery: lead-acid, for piston and rotary engines with no ACE battery
+	linked to their starter. It is not an entity; it lives on the engine and is kept charged by
+	the engine's alternator while it runs. It starts full. There is no trickle charge while the
+	engine is off.
+
+	Kinetic battery model (Manwell & McGowan, Solar Energy 50 (1993) 399-405): the charge sits in
+	two wells, an "available" one (share LeadAvailShare of the capacity) that the terminals draw
+	from directly, and a "bound" one that flows into it in proportion to the difference of their
+	levels. A battery cranked hard empties its available well long before it is really empty,
+	so it goes flat while cranking and then recovers part of its charge after a rest, as lead-acid
+	batteries do (Battery University BU-502: the rate-capacity effect). Levels are fractions
+	0..1 of each well.
+
+	LeadWhPerW: capacity per watt of the starter's rated (most) power. A car's 1.4 kW starter
+	  runs from a 12 V 60 Ah (720 Wh) battery, a heavy truck's 7 kW from 24 V 2 x 12 V 140 Ah
+	  (3.4 kWh): 0.5 Wh per W (estimated from those two; Bosch Automotive Handbook, starter
+	  batteries).
+	LeadAvailShare: 0.3, so at cranking currents (5-10 C) about a third of the charge can be
+	  drawn before the voltage collapses, in line with Peukert's law for lead-acid (exponent
+	  1.2-1.3: a 60 Ah battery at 400 A gives out ~17 Ah). Estimated.
+	LeadRecoverTau: with no load the two wells level out with a 10 minute time constant
+	  (estimated: a "dead" battery cranks again after a few minutes' rest).
+	LeadFlatLevel, LeadLiveLevel: the voltage collapses once the available well is down to 2 %;
+	  the battery then reads flat until it has recovered to 10 % (about two minutes' rest
+	  after a first flat; estimated).
+	Open-circuit voltage: 12.7 V full, 11.8 V empty (2.12-1.97 V per cell; Battery University
+	  BU-903), linear, read from the available well.
+	Sag at the starter's stall power: the starter's rated 20 % when full and warm (see
+	  StarterRefSag in engine_model.lua), rising as the available well empties (x(1 + 1.5·(1 -
+	  level)), sulphated plates and acid depletion at the plates; estimated) and in the cold
+	  (x(1 + (20 - T)/40) below 20 °C: a lead-acid battery gives about half its power at
+	  -18 °C, the SAE J537 cold cranking rating point; estimated).
+	Charge acceptance: LeadChargeC = 0.25 C in bulk (flooded lead-acid accepts 0.1-0.3 C,
+	  BU-403), tapering to nothing as the available well fills past 80 %, at a charge
+	  efficiency of 0.85 (lead-acid coulombic efficiency 80-90 %, BU-403).
+]]
+Battery.LeadWhPerW      = 0.5
+Battery.LeadAvailShare  = 0.3
+Battery.LeadRecoverTau  = 600
+Battery.LeadVoltFull    = 12.7
+Battery.LeadVoltEmpty   = 11.8
+Battery.LeadRefSag      = 0.2
+Battery.LeadChargeC     = 0.25
+Battery.LeadTaperFrom   = 0.8
+Battery.LeadChargeEff   = 0.85
+Battery.LeadFlatLevel   = 0.02
+Battery.LeadLiveLevel   = 0.1
+
+--- Creates an engine's built-in lead-acid starter battery, full.
+-- @param RatedW number The starter's rated (most) mechanical power [W], a quarter of its stall power.
+-- @return table Pack: CapJ (capacity, J), Avail and Bound (well levels 0..1).
+function Battery.StarterPack(RatedW)
+	return { CapJ = max(RatedW, 1) * Battery.LeadWhPerW * 3600, Avail = 1, Bound = 1 }
+end
+
+--- Resizes a built-in starter battery (the starter size setting changed), keeping its levels.
+-- @param Pack table Pack from Battery.StarterPack.
+-- @param RatedW number The starter's rated power [W].
+function Battery.StarterPackResize(Pack, RatedW)
+	Pack.CapJ = max(RatedW, 1) * Battery.LeadWhPerW * 3600
+end
+
+--- State of charge of a built-in starter battery, both wells together.
+-- @param Pack table Pack.
+-- @return number 0..1.
+function Battery.StarterPackSOC(Pack)
+	local C = Battery.LeadAvailShare
+	return clamp(C * Pack.Avail + (1 - C) * Pack.Bound, 0, 1)
+end
+
+--- What a built-in starter battery offers the starter (engine state's StarterSupply).
+-- @param Pack table Pack.
+-- @param AirC number|nil Battery (outside air) temperature [°C].
+-- @return number Open-circuit voltage relative to a full battery's (0 when flat).
+-- @return number Sag at the starter's stall power, as a fraction of the open-circuit voltage.
+-- @return number Energy that can be drawn now (the available well) [J].
+function Battery.StarterPackSupply(Pack, AirC)
+	local Level = clamp(Pack.Avail, 0, 1)
+	local EnergyJ = Level * Battery.LeadAvailShare * Pack.CapJ
+	-- Pulled down to its flat level the voltage collapses, and it needs to recover to the
+	-- live level before it turns the engine again.
+	if Level <= Battery.LeadFlatLevel then Pack.Flat = true end
+	if Pack.Flat and Level >= Battery.LeadLiveLevel then Pack.Flat = false end
+	if Pack.Flat or EnergyJ <= 0 then return 0, 0, 0 end
+	local Volt = (Battery.LeadVoltEmpty + (Battery.LeadVoltFull - Battery.LeadVoltEmpty) * Level) / Battery.LeadVoltFull
+	local Cold = 1 + max(20 - (AirC or 20), 0) / 40
+	return Volt, Battery.LeadRefSag * (1 + 1.5 * (1 - Level)) * Cold, EnergyJ
+end
+
+--- Draws energy from a built-in starter battery's available well.
+-- @param Pack table Pack.
+-- @param Joules number Energy taken at the terminals [J].
+function Battery.StarterPackDraw(Pack, Joules)
+	Pack.Avail = max(Pack.Avail - Joules / (Battery.LeadAvailShare * Pack.CapJ), 0)
+end
+
+--- Charging power a built-in starter battery accepts now.
+-- @param Pack table Pack.
+-- @return number Watts at the terminals.
+function Battery.StarterPackAcceptW(Pack)
+	local Taper = clamp((1 - Pack.Avail) / (1 - Battery.LeadTaperFrom), 0, 1)
+	return Battery.LeadChargeC * Pack.CapJ / 3600 * Taper
+end
+
+--- Charges a built-in starter battery.
+-- @param Pack table Pack.
+-- @param Joules number Energy delivered to the terminals [J]; LeadChargeEff of it is stored.
+function Battery.StarterPackCharge(Pack, Joules)
+	Pack.Avail = min(Pack.Avail + Joules * Battery.LeadChargeEff / (Battery.LeadAvailShare * Pack.CapJ), 1)
+end
+
+--- Lets charge flow between a built-in starter battery's wells (exact for the step).
+-- @param Pack table Pack.
+-- @param Dt number Seconds.
+function Battery.StarterPackStep(Pack, Dt)
+	if Dt <= 0 then return end
+	local C = Battery.LeadAvailShare
+	local Total = C * Pack.Avail + (1 - C) * Pack.Bound
+	local Diff = (Pack.Bound - Pack.Avail) * exp(-Dt / Battery.LeadRecoverTau)
+	Pack.Avail = clamp(Total - (1 - C) * Diff, 0, 1)
+	Pack.Bound = clamp(Total + C * Diff, 0, 1)
 end
 
 return Battery

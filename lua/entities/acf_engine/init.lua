@@ -21,7 +21,9 @@ do
 		["Torque"]      = "Returns the current Torque.",
 		["Power"]       = "Returns the current power of this engine.",
 		["Fuel Use"]    = "Gives the actual fuel consumption of the engine.",
-		["EngineHeat"]  = "Returns the engine's temperature.",
+		["EngineHeat"]  = "Coolant temperature in °C. The thermostat opens at about 82 °C and the coolant boils at 120 °C. Air-cooled engines: the oil.",
+		["Oil Temp"]    = "Sump oil temperature in °C, 0 for electric motors. Cold oil raises friction; past about 150 °C it wears the engine.",
+		["Block Temp"]  = "Engine metal temperature, block and head, in °C. Hot metal costs torque and past about 200 °C wears the engine. Air-cooled engines: cylinder heads, limit 260 °C.",
 		["Stalled"]     = "1 when the engine has stalled. Cycle Active to crank it again."
 	}
 
@@ -33,6 +35,9 @@ do
 		self.GearLink       = {} -- a "Link" has these components: Ent, Rope, RopeLen, ReqTq
 		self.FuelLink       = {}
 		self.RadLink       = {}
+		self.BatteryLink    = {} -- batteries feeding a combustion engine's starter
+		self.StarterSize    = 1  -- starter setup (ENT:SetStarterSetup)
+		self.StarterExtraKg = 0
 		self.OTWarnings		= {} --Used to remember all the one time warnings.
 
 		self.NextUpdate     = 0
@@ -64,11 +69,13 @@ do
 		self.LastDamageTime = CurTime()
 
 		self.Inputs = WireLib.CreateSpecialInputs( self, ACE.EngineInputs(false) )
-		self.Outputs = WireLib.CreateSpecialOutputs( self,  { "RPM (" .. EngineWireDescs["RPM"] .. ")", "Torque (" .. EngineWireDescs["Torque"] .. ")", "Power (" .. EngineWireDescs["Power"] .. ")", "Fuel Use (" .. EngineWireDescs["Fuel Use"] .. ")", "Total Fuel" , "Entity", "Mass", "Physical Mass" , "EngineHeat (" .. EngineWireDescs["EngineHeat"] .. ")", "Stalled (" .. EngineWireDescs["Stalled"] .. ")"},
-														{ "NORMAL","NORMAL","NORMAL", "NORMAL", "NORMAL", "ENTITY", "NORMAL", "NORMAL", "NORMAL", "NORMAL" } )
+		self.Outputs = WireLib.CreateSpecialOutputs( self,  { "RPM (" .. EngineWireDescs["RPM"] .. ")", "Torque (" .. EngineWireDescs["Torque"] .. ")", "Power (" .. EngineWireDescs["Power"] .. ")", "Fuel Use (" .. EngineWireDescs["Fuel Use"] .. ")", "Total Fuel" , "Entity", "Mass", "Physical Mass" , "EngineHeat (" .. EngineWireDescs["EngineHeat"] .. ")", "Stalled (" .. EngineWireDescs["Stalled"] .. ")",
+														"Oil Temp (" .. EngineWireDescs["Oil Temp"] .. ")", "Block Temp (" .. EngineWireDescs["Block Temp"] .. ")" },
+														{ "NORMAL","NORMAL","NORMAL", "NORMAL", "NORMAL", "ENTITY", "NORMAL", "NORMAL", "NORMAL", "NORMAL", "NORMAL", "NORMAL", "NORMAL" } )
 
 		Wire_TriggerOutput( self, "Entity", self )
 		Wire_TriggerOutput(self, "EngineHeat", self.Heat)
+		Wire_TriggerOutput(self, "Block Temp", self.Heat)
 
 		self.WireDebugName = "ACF Engine"
 
@@ -280,6 +287,11 @@ function ENT:Update( ArgsTable )
 	self:UpdateBuiltinCooler( Lookup )
 
 	self:SetNWString( "WireName", Lookup.name )
+	-- The starter's extra mass goes back on top of the new engine's (ENT:SetStarterSetup), and
+	-- the drivetrain model is rebuilt for the new engine.
+	self.StarterExtraKg = 0
+	self.MobSpec = nil
+	self:SetStarterSetup( self.StarterSetup )
 	self:UpdateOverlayText()
 
 	ACE.Activate( self, 1 )
@@ -333,7 +345,21 @@ function ENT:UpdateOverlayText()
 	text = text .. "Torque: " .. TorqueNm .. " Nm / " .. TorqueFtLb .. " ft-lb at " .. math.Round(self.PeakTqRPM) .. " RPM\n"
 	text = text .. "Powerband: " .. (math.Round(pbmin / 10) * 10) .. " - " .. (math.Round(pbmax / 10) * 10) .. " RPM\n"
 	text = text .. "Redline: " .. self.LimitRPM .. " RPM\n\n"
-	text = text .. "Temp: " .. math.Round(self.Heat) .. " °C / " .. math.Round((self.Heat * (9 / 5)) + 32) .. " °F\n"
+	-- The three parts the cooling model tracks (ACE.EngineThermalThink).
+	local function temp(C) return math.Round(C) .. " °C / " .. math.Round(C * (9 / 5) + 32) .. " °F" end
+	if self.AirCooled then
+		-- Finned cylinders: no coolant, the oil is the only liquid.
+		text = text .. "Air-cooled\n"
+		text = text .. "Cylinder heads: " .. temp(self.BlockHeat or self.Heat) .. "\n"
+		text = text .. "Oil: " .. temp(self.Heat) .. "\n"
+		text = text .. "Air through the fins: " .. math.Round((self.FinAirSpeed or 0) * 3.6) .. " km/h\n"
+	else
+		text = text .. "Coolant: " .. temp(self.Heat) .. "\n"
+		if self.OilHeat then
+			text = text .. "Oil: " .. temp(self.OilHeat) .. "\n"
+		end
+		text = text .. "Block: " .. temp(self.BlockHeat or self.Heat) .. "\n"
+	end
 	if self.BuiltinCoreFrontM2 then
 		text = text .. "Built-in radiator: " .. math.Round(self.BuiltinCoreFrontM2, 2) .. " m^2 face, " .. math.Round(self.BuiltinCoreDepthM * 100) .. " cm deep\n"
 	end
@@ -341,12 +367,28 @@ function ENT:UpdateOverlayText()
 		text = text .. "Direction: reverse\n"
 	end
 	if self.CoolantBoiling then
-		text = text .. "Coolant boiling - engine at " .. math.Round(self.BlockHeat or self.Heat) .. " °C\n"
+		text = text .. "Coolant boiling - block at " .. math.Round(self.BlockHeat or self.Heat) .. " °C\n"
+	end
+	if self.OilOverheating and self.OilHeat then
+		text = text .. "Oil overheating - " .. math.Round(self.OilHeat) .. " °C\n"
 	end
 
 	--if self.FuelLink and #self.FuelLink > 0 then
 	if self.HasFuel then
 		text = text .. "\nSupplied with " .. (self.EngineType == "Electric" and "Batteries" or "Fuel")
+	end
+	-- Starter: which battery feeds it, and why it is not cranking when it is not.
+	if next(self.BatteryLink or {}) then
+		text = text .. "\nStarter: linked battery"
+	elseif self.StarterPack then
+		text = text .. "\nStarter battery: " .. math.Round(ACE.Mobility.Battery.StarterPackSOC(self.StarterPack) * 100) .. "%"
+	end
+	if self.StarterWasCut then
+		text = text .. "\nStarter overheated - cooling down"
+	elseif self.StarterWasFlat then
+		text = text .. "\nStarter battery flat"
+	elseif self.StarterWasPreheating then
+		text = text .. "\nPreheating (glow plugs)"
 	end
 
 	if self.HasDriver then
@@ -487,7 +529,7 @@ function ENT:TriggerInput( iname, value )
 					local HasWarned = self.OTWarnings.WarnedFuel or false
 					--self.OTWarnings
 					if not HasWarned then
-						ACE.ChatMessagePly( self:CPPIGetOwner() , "[ACE] Your engine requires fuel to work and that it be activated BEFORE the engine.", Color( 255, 0, 0 ))
+						ACE.SendEngineHint( self:CPPIGetOwner() , "[ACE] Your engine requires fuel to work and that it be activated BEFORE the engine.", Color( 255, 0, 0 ))
 						self.OTWarnings.WarnedFuel = true
 					end
 				end
@@ -496,7 +538,7 @@ function ENT:TriggerInput( iname, value )
 					local HasWarned = self.OTWarnings.WarnedDriver or false
 					--self.OTWarnings
 					if not HasWarned then
-						ACE.ChatMessagePly( self:CPPIGetOwner() , "[ACE] Your engine is above [" .. ACE.LargeEngineThreshold .. " hp] requiring a driver to work.", Color( 255, 0, 0 ))
+						ACE.SendEngineHint( self:CPPIGetOwner() , "[ACE] Your engine is above [" .. ACE.LargeEngineThreshold .. " hp] requiring a driver to work.", Color( 255, 0, 0 ))
 						self.OTWarnings.WarnedDriver = true
 					end
 				end
@@ -617,6 +659,8 @@ function ENT:Think()
 	end
 
 	Wire_TriggerOutput(self, "EngineHeat", self.Heat)
+	Wire_TriggerOutput(self, "Oil Temp", self.OilHeat or 0)
+	Wire_TriggerOutput(self, "Block Temp", self.BlockHeat or self.Heat)
 
 	if ACE.CurTime > self.NextUpdate then
 
@@ -724,7 +768,9 @@ function ENT:ACFInit()
 	self.LastThink = CurTime()
 	self.Stalled = false
 	Wire_TriggerOutput(self, "Stalled", 0)
-	ACE.Mobility.EngineSpec(self, self.FuelType)
+	local Spec = ACE.Mobility.EngineSpec(self, self.FuelType)
+	-- Preheat is decided from the temperatures at the moment the start is requested.
+	self:StarterModelInputs(Spec, self.MobState)
 	ACE.Mobility.Engine.Start(self.MobState)
 
 end
@@ -750,6 +796,233 @@ function ENT:GetChargeTank()
 		if IsValid(Tank) and Tank.FuelType == "Electric" and Tank.ChargeAcceptW then
 			local Accept = Tank:ChargeAcceptW()
 			if Accept > 0 then return Tank, Accept end
+		end
+	end
+end
+
+--[[
+	Starter setup, chosen in the engine menu and kept through duplication:
+	  Size     starter size relative to the standard one, 0.5-3: torque and current scale with
+	           it, and so does the built-in battery; the starter and battery's extra mass is
+	           added to the engine's (StarterKgPerW of the starter's rated power per unit of
+	           size: 2.2 kg/kW for a reduction-gear starter plus 12.5 kg/kW of lead-acid battery
+	           at 0.5 Wh/W and 40 Wh/kg; estimated from Bosch / Delco Remy catalogue masses and
+	           typical flooded battery energy density).
+	  Preheat  glow plug preheat at -20 °C in seconds, 0-60 (diesels; 0 = no glow plugs; nil =
+	           ACE.Mobility.Engine.DefaultPreheat).
+	The starter sound is set with the engine's sound banks (sound replacer tool, ace_enginestartersound).
+]]
+local StarterKgPerW = ( 2.2 + 12.5 ) / 1000
+
+-- Rated (most) power of this engine's standard starter, W.
+local function StarterBaseRatedW( Ent )
+	local Model = ACE.Mobility and ACE.Mobility.Engine
+	local Def = EngineTable[Ent.Id]
+	if not Model or not Def then return 0 end
+	local Spec = Model.Build( Def, ACE.GetEngineTorqueCurve( Def ) )
+	if Spec.Kind == "electric" or Spec.Kind == "turbine" then return 0 end
+	local _, StallW = Model.StarterRating( Spec )
+	return StallW / 4
+end
+
+--- Applies an engine's starter and cooling setup and stores it so it survives duplication.
+-- @param Setup table|nil { Size = number (0.5-3), Preheat = number|nil (s, 0-60),
+-- Cooling = "air"|"liquid"|nil (nil = as the engine was built) }.
+function ENT:SetStarterSetup( Setup )
+	Setup = istable( Setup ) and Setup or {}
+	local Size = math.Clamp( tonumber( Setup.Size ) or 1, 0.5, 3 )
+	local Preheat = tonumber( Setup.Preheat )
+	if Preheat then Preheat = math.Clamp( Preheat, 0, 60 ) end
+	if Preheat == ACE.Mobility.Engine.DefaultPreheat then Preheat = nil end
+	self.StarterSize, self.StarterPreheat = Size, Preheat
+	-- Air or liquid cooling in place of the engine's own (ACE.Mobility.EngineSpec reads it).
+	local Cooling = ( Setup.Cooling == "air" or Setup.Cooling == "liquid" ) and Setup.Cooling or nil
+	if Cooling ~= self.CoolingChoice then
+		self.CoolingChoice = Cooling
+		self.MobSpec, self.ThermalSpec = nil, nil
+	end
+	self.StarterSetup = { Size = Size, Preheat = Preheat, Cooling = Cooling }
+	-- Setups saved while the sound lived here carry it; it now belongs with the sound banks.
+	if isstring( Setup.Sound ) and Setup.Sound ~= "" and ACE.EngineSound and ACE.EngineSound.SetStarterSound then
+		ACE.EngineSound.SetStarterSound( self, Setup.Sound )
+	end
+
+	-- The bigger (or smaller) starter and battery weigh more (or less).
+	local Extra = ( Size - 1 ) * StarterBaseRatedW( self ) * StarterKgPerW
+	if math.abs( Extra - ( self.StarterExtraKg or 0 ) ) > 0.01 then
+		self.Weight = math.max( self.Weight - ( self.StarterExtraKg or 0 ) + Extra, 1 )
+		self.StarterExtraKg = Extra
+		local Phys = self:GetPhysicsObject()
+		if IsValid( Phys ) then Phys:SetMass( self.Weight ) end
+	end
+
+	if Size == 1 and not Preheat and not Cooling then
+		duplicator.ClearEntityModifier( self, "ACE_EngineStarter" )
+	else
+		duplicator.StoreEntityModifier( self, "ACE_EngineStarter", self.StarterSetup )
+	end
+	self:UpdateOverlayText()
+end
+
+duplicator.RegisterEntityModifier( "ACE_EngineStarter", function( _, Ent, Data )
+	if IsValid( Ent ) and Ent.SetStarterSetup then Ent:SetStarterSetup( Data ) end
+end )
+
+--- Hands the starter setup and the temperatures that decide a start to the engine model.
+-- @param Spec table Engine spec (gets StarterMul and PreheatMax).
+-- @param State table|nil Engine state (gets AirC, CoolantC and BlockC, °C).
+function ENT:StarterModelInputs( Spec, State )
+	Spec.StarterMul = self.StarterSize or 1
+	Spec.PreheatMax = self.StarterPreheat
+	if State then
+		State.AirC = ACE.AmbientTemp
+		State.CoolantC = self.Heat
+		State.BlockC = self.BlockHeat or self.Heat
+	end
+end
+
+--- The engine's own lead-acid starter battery (ACE.Mobility.Battery.StarterPack), sized from
+-- its starter; created full.
+-- @param Spec table Engine spec.
+-- @return table|nil Pack, nil for motors and turbines.
+function ENT:GetStarterPack( Spec )
+	if Spec.Kind == "electric" or Spec.Kind == "turbine" then return nil end
+	local _, StallW = ACE.Mobility.Engine.StarterRating( Spec )
+	local Pack = self.StarterPack
+	if not Pack then
+		Pack = ACE.Mobility.Battery.StarterPack( StallW / 4 )
+		self.StarterPack = Pack
+	elseif Pack.RatedW ~= StallW / 4 then
+		ACE.Mobility.Battery.StarterPackResize( Pack, StallW / 4 )
+	end
+	Pack.RatedW = StallW / 4
+	return Pack
+end
+
+--- What the starter motor runs on this tick. The first linked starter battery that is on, legal
+-- and holds charge feeds it (ENT:LinkStarterBattery). With no battery linked the engine cranks
+-- on its own lead-acid battery (ENT:GetStarterPack), which its alternator recharges. With
+-- batteries linked but all flat, off or illegal, the starter gets nothing.
+-- @param Spec table Engine spec.
+-- @return table { Volt, Sag, EnergyJ } as the engine model's State.StarterSupply.
+function ENT:StarterSupply( Spec )
+	for I = #self.BatteryLink, 1, -1 do
+		if not IsValid( self.BatteryLink[I] ) then table.remove( self.BatteryLink, I ) end
+	end
+	self.StarterBattery = nil
+
+	local Supply = self.MobStarterSupply or {}
+	self.MobStarterSupply = Supply
+	Supply.Volt, Supply.Sag, Supply.EnergyJ = 0, 0, 0
+	if not next( self.BatteryLink ) then
+		local Pack = self:GetStarterPack( Spec )
+		if Pack then
+			Supply.Volt, Supply.Sag, Supply.EnergyJ = ACE.Mobility.Battery.StarterPackSupply( Pack, ACE.AmbientTemp )
+		end
+		return Supply
+	end
+
+	for _, Bat in ipairs( self.BatteryLink ) do
+		if Bat.Fuel > 0 and Bat.Active and Bat.Legal and Bat.BatteryState then
+			local _, StallW = ACE.Mobility.Engine.StarterRating( Spec )
+			Supply.Volt, Supply.Sag = ACE.Mobility.Battery.StarterSupply( Bat.BatterySpec, Bat.BatteryState,
+				Bat.Fuel / math.max( Bat.Capacity, 1e-6 ), StallW )
+			Supply.EnergyJ = Bat.Fuel * 3.6e6
+			self.StarterBattery = Bat
+			break
+		end
+	end
+	return Supply
+end
+
+--[[
+	Alternator. While the engine runs it recharges the starter battery (the built-in one, or a
+	linked ACE battery) and loads the crank with the power that takes over its efficiency.
+	AlternatorEff: 0.55, claw-pole alternators convert 50-65 % (Bosch Automotive Handbook,
+	  alternators; estimated midpoint).
+	AlternatorPerW: most charging power per watt of the starter's rated power, 1.5 (car: a 1.4 kW
+	  starter and a 1.5-2 kW alternator, of which part feeds the vehicle's own loads, which are
+	  not modelled; estimated). Below idle the alternator gives proportionally less.
+]]
+local AlternatorEff  = 0.55
+local AlternatorPerW = 1.5
+
+--- Charging power the alternator delivers this tick: as much as the starter battery accepts,
+-- up to the alternator's output at the present crank speed.
+-- @param Spec table Engine spec.
+-- @param State table Engine state.
+-- @return number Watts at the battery terminals (0 while the engine is not running).
+-- @return table|Entity|nil The built-in pack or the linked battery it goes to.
+function ENT:AlternatorCharge( Spec, State )
+	if not State.Running or ( State.W or 0 ) <= 0 then return 0 end
+	local _, StallW = ACE.Mobility.Engine.StarterRating( Spec )
+	local Most = AlternatorPerW * StallW / 4 * math.Clamp( State.W / Spec.IdleW, 0, 1 )
+	local Bat = self.BatteryLink[1]
+	if IsValid( Bat ) then
+		if not Bat.ChargeAcceptW or not Bat.Active or not Bat.Legal then return 0 end
+		return math.min( Most, Bat:ChargeAcceptW() ), Bat
+	end
+	local Pack = self.StarterPack
+	if not Pack then return 0 end
+	return math.min( Most, ACE.Mobility.Battery.StarterPackAcceptW( Pack ) ), Pack
+end
+
+--- Load torque of the alternator on the crank at its charging power.
+-- @param Spec table Engine spec.
+-- @param State table Engine state.
+-- @return number N·m.
+function ENT:AlternatorTorque( Spec, State )
+	local ChargeW = self:AlternatorCharge( Spec, State )
+	self.MobAltW = ChargeW
+	if ChargeW <= 0 then return 0 end
+	return ChargeW / AlternatorEff / math.max( State.W, 0.5 * Spec.IdleW )
+end
+
+--- Bills the starter's (and glow plugs') electricity to its battery, charges it from the
+-- alternator, and tells the owner when the starter cuts out on heat or its battery is flat.
+-- @param State table Engine state.
+-- @param Dt number Tick length, s.
+function ENT:StarterApply( State, Dt )
+	local Battery = ACE.Mobility.Battery
+	local Pack = self.StarterPack
+	local Joules = State.StarterJ or 0
+	if Joules > 0 then
+		State.StarterJ = 0
+		local Bat = self.StarterBattery
+		if IsValid( Bat ) and Bat.DrawEnergy then
+			Bat:DrawEnergy( Joules / 3.6e6, Dt )
+		elseif Pack and not next( self.BatteryLink ) then
+			Battery.StarterPackDraw( Pack, Joules )
+		end
+	end
+
+	local Spec = self.MobSpec
+	if Spec and ( self.MobAltW or 0 ) > 0 then
+		local ChargeW, Target = self:AlternatorCharge( Spec, State )
+		ChargeW = math.min( ChargeW, self.MobAltW )
+		if Target == Pack and Pack then
+			Battery.StarterPackCharge( Pack, ChargeW * Dt )
+		elseif IsValid( Target ) and Target.StoreEnergy then
+			Target:StoreEnergy( ChargeW * Dt / 3.6e6, Dt )
+		end
+	end
+	if Pack then Battery.StarterPackStep( Pack, Dt ) end
+
+	local Cut = State.StarterOn and State.StarterCut or false
+	local Supply = State.StarterSupply
+	local Flat = State.StarterOn and Supply ~= nil and Supply.Volt <= 0 or false
+	local Preheating = State.StarterOn and State.Preheating or false
+	if Cut ~= (self.StarterWasCut or false) or Flat ~= (self.StarterWasFlat or false) or Preheating ~= (self.StarterWasPreheating or false) then
+		self.StarterWasCut, self.StarterWasFlat, self.StarterWasPreheating = Cut, Flat, Preheating
+		self:UpdateOverlayText()
+		if (Cut or Flat) and ACE.CurTime > (self.NextStarterHint or 0) then
+			self.NextStarterHint = ACE.CurTime + 15
+			local Msg = "[ACE] Starter overheated - it cranks again once it cools down."
+			if Flat then
+				Msg = next( self.BatteryLink ) and "[ACE] Starter battery is flat or switched off."
+					or "[ACE] Engine starter battery is flat - rest it a few minutes, link a charged battery to the engine, or push start in gear."
+			end
+			ACE.SendEngineHint( self:CPPIGetOwner(), Msg, Color( 255, 160, 0 ) )
 		end
 	end
 end
@@ -866,6 +1139,13 @@ function ENT:MobilityDesc(Ctx)
 	-- Radiators add their fan load between Thinks; MobilityApply holds it for every physics step
 	-- until the next.
 	Desc.AccessoryTorque = self.MobAccessory or self.AccessoryTorque or 0
+	if self.MobState and Spec.Kind ~= "electric" and Spec.Kind ~= "turbine" then
+		-- The starter setup, the temperatures a start depends on, what the starter motor runs on
+		-- this tick (engine_model.lua, starter) and the alternator recharging its battery.
+		self:StarterModelInputs(Spec, self.MobState)
+		self.MobState.StarterSupply = self:StarterSupply(Spec)
+		Desc.AccessoryTorque = Desc.AccessoryTorque + self:AlternatorTorque(Spec, self.MobState)
+	end
 	return Desc
 end
 
@@ -911,6 +1191,7 @@ function ENT:MobilityApply()
 		end
 		Wire_TriggerOutput(self, "Fuel Use", -math.Round(60 * Charged / Dt, 3))
 	end
+	if self.FuelType ~= "Electric" then self:StarterApply(State, Dt) end
 
 	if (Desc.HeatJ or 0) > 0 then
 		self.HeatGeneration = Desc.HeatJ / 1000 / Dt -- kJ/s, shown in the menu
@@ -1181,6 +1462,11 @@ do
 
 	function ENT:LinkFuel( Target )
 
+		-- A battery linked to a piston or rotary engine feeds its starter.
+		if Target.FuelType == "Electric" and self.FuelType ~= "Electric" then
+			return self:LinkStarterBattery( Target )
+		end
+
 		if not (self.FuelType == "Multifuel" and Target.FuelType ~= "Electric") and self.FuelType ~= Target.FuelType then
 			return false, "Cannot link because fuel type is incompatible."
 		end
@@ -1214,7 +1500,39 @@ do
 			end
 		end
 
+		if table.HasValue( self.BatteryLink, Target ) then
+			table.RemoveByValue( self.BatteryLink, Target )
+			table.RemoveByValue( Target.Master, self )
+			self:UpdateOverlayText()
+			return true, "Starter battery unlinked."
+		end
+
 		return false, "That fuel tank is not linked to this engine!"
+	end
+
+	--- Links a battery to feed this engine's starter motor. Piston and rotary engines only:
+	-- turbines and electric motors start without one.
+	-- @param Target acf_fueltank holding Electric fuel.
+	-- @return boolean, string Success and message.
+	function ENT:LinkStarterBattery( Target )
+		if self.EngineType == "Turbine" or self.EngineType == "GroundTurbine" then
+			return false, "Turbines start without a starter battery."
+		end
+		if Target.NoLinks then
+			return false, "This battery doesn\'t allow linking."
+		end
+		if table.HasValue( self.BatteryLink, Target ) then
+			return false, "That battery already feeds this engine's starter!"
+		end
+		if self:GetPos():Distance( Target:GetPos() ) > FuelLinkDistBase then
+			return false, "The battery is too far away."
+		end
+
+		table.insert( self.BatteryLink, Target )
+		table.insert( Target.Master, self )
+		self:UpdateOverlayText()
+
+		return true, "Battery linked to the starter."
 	end
 end
 
@@ -1281,6 +1599,11 @@ do
 		end
 		for _, Value in pairs(self.FuelLink) do				--Then save it
 			table.insert(fuel_entids, Value:EntIndex())
+		end
+		-- Starter batteries are saved with the fuel tanks; pasting relinks them through
+		-- ENT:LinkFuel, which sends batteries to the starter.
+		for _, Value in ipairs(self.BatteryLink) do
+			if IsValid(Value) then table.insert(fuel_entids, Value:EntIndex()) end
 		end
 
 		fuel_info.entities = fuel_entids

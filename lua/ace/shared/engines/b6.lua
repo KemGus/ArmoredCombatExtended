@@ -135,3 +135,29 @@ ACE.DefineEngine( "25.9-B6", {
 	idlerpm = 600,
 	limitrpm = 2800
 } )
+
+ACE.DefineEngine( "8.9-B6", {
+	name = "8.9L Flat 6 Petrol",
+	desc = "Lycoming IO-540-K, the fuel-injected six of heavy light aircraft: 300 hp at 2,700 rpm. Air-cooled and runs its cylinders hot.",
+	model = "models/engines/b6med.mdl",
+	sound = "acf_engines/b6_petrolmedium.wav",
+	category = "B6",
+	fuel = "Petrol",
+	cooling = "air",
+	enginetype = "B6",
+	-- IO-540-K1A5 (Wikipedia): 224 kW (300 hp) at 2,700 rpm, 199 kg dry, 8.9 L, bore 130.2 x
+	-- stroke 111.1 mm, 8.7:1.
+	weight = 199,
+	torque = 800,
+	displacement = 8.9,
+	cylinders = 6,
+	stroke = 0.111,
+	compression = 8.7,
+	-- No full-throttle torque curve is published for direct-drive aero engines (they run on a
+	-- propeller, rated at maximum speed). Estimated: nearly flat, highest at 75-85 % of rated
+	-- speed, so power peaks at the rated speed as the type certificate gives it.
+	torquecurve = {0.70, 0.76, 0.82, 0.87, 0.91, 0.94, 0.965, 0.98, 0.99, 1.0, 1.0, 0.995, 0.99},
+	flywheelmass = 0.5,
+	idlerpm = 650, -- estimated
+	limitrpm = 2700
+} )

@@ -31,6 +31,49 @@ local floor = math.floor
 
 local RPMToRad = pi / 30
 local BarToPa  = 1e5
+local sin, cos, sqrt = math.sin, math.cos, math.sqrt
+
+--[[
+	Cylinder gas springs (Engine.GasTorque). With its valves shut a cylinder is a sealed volume
+	of air: turning the crank against it compresses the air, which pushes back on the piston.
+	That is what holds a car parked in gear with the engine off, and what makes a stopping
+	engine shudder and rock back before it settles.
+	Atmosphere: 1.013 bar. Intake valve closing 45 deg after bottom centre, exhaust valve
+	opening 45 deg before it: typical four-stroke timing, 40-60 deg each (Heywood 6.3). The gas
+	is trapped only between the two.
+	RodRatio: crank radius over connecting rod length, 0.25-0.33 in production engines
+	(Heywood 2.2 gives rod length over crank radius as 3-4).
+	Heat: compressing the charge heats it (adiabatic, gamma 1.4 for air) and the walls draw that
+	heat off with a time constant WallTau. Squeezed slowly (a parked car), the charge stays at
+	wall temperature and the spring is isothermal and lossless; squeezed at about the speed of
+	WallTau, part of the work leaves as heat and the spring damps, which is what stops a crank
+	that gets pushed round from bouncing on its cylinders. WallTau: trapped air of a 0.5 L
+	cylinder is ~0.6 g (c_v 718 J/kg·K, so 0.43 J/K), against ~0.02 m² of wall at a quiescent
+	heat transfer coefficient of ~100 W/m²·K (Heywood 12.4 puts motored low-speed values at
+	100-300): 0.43 / (100 · 0.02) ~ 0.2 s. Trapped mass and wall area both grow with bore,
+	so the same value is used for every size (an estimate, not a measurement).
+	Leak: the charge escapes past the rings at a rate proportional to its excess pressure.
+	Blowby in a healthy engine is about 1 % of the charge per cycle (Heywood 8.6), lost mostly
+	while the cylinder is near peak pressure: at 2,000 rpm a cycle is 60 ms and the
+	high-pressure quarter of it 15 ms, at about 40 bar over ambient. So 0.01 of the charge in
+	0.015 s per 40 bar: GasLeak = 0.01 / 0.015 / 40 = 0.017 of a cylinder's charge per second
+	per bar of excess pressure. A cylinder held at 9 bar over ambient loses ~15 % a second, so
+	a car held on compression alone creeps as the charge bleeds away, as real ones do.
+	The springs are resolved crank angle by crank angle only while the engine turns slowly
+	(full below 60 rpm, gone above 150): over a whole cycle a gas spring returns what it took,
+	and what it loses at speed (heat, blowby) is already inside the motoring friction fit.
+	Faster, the substeps could not follow the crank angle anyway.
+]]
+local Atmosphere  = 1.013 * BarToPa
+local ValveIVC    = pi + math.rad(45)       -- cycle angle the trapped charge starts at
+local ValveEVO    = 3 * pi - math.rad(45)   -- and where it is let out
+local RodRatio    = 0.3
+local GasLeak     = 0.01 / 0.015 / 40       -- charge fraction per second per bar of excess
+local Gamma       = 1.4
+local WallTau     = 0.2
+local GasFullW    = 60 * RPMToRad
+local GasOffW     = 150 * RPMToRad
+local Cycle       = 4 * pi
 
 local function clamp(v, lo, hi)
 	if v < lo then return lo end
@@ -82,6 +125,9 @@ Engine.SampleCurve = sampleCurve
 	  drive-by-wire idle controller only opens far enough to catch the engine, not to pull a car; a diesel's mechanical governor can deliver
 	  full fuel to hold idle, which is why diesels crawl in gear with no throttle.
 	LHV: lower heating value [J/kg] (Heywood App. D).
+CompressionRatio: geometric compression ratio, the same values PmaxIdle is computed from
+  (Heywood 1.3: SI 8-12, diesel 12-24). GasSpring: the cylinders are modelled one by one as
+  gas springs while the engine stands or turns slowly (see Engine.GasTorque).
 ]]
 Engine.Kinds = {
 	si = {
@@ -90,6 +136,7 @@ Engine.Kinds = {
 		PmaxIdle = 6, PmaxFull = 60,
 		EtaIndicated = 0.36, CoolantFrac = 0.28, LHV = 43.3e6,
 		Strokes = 4, StallFrac = 0.35, IdleAuthority = 0.45,
+		CompressionRatio = 10, GasSpring = true,
 	},
 	diesel = {
 		A = 0.445, B = 0.005, C = 0, D = 0.0136,
@@ -97,6 +144,7 @@ Engine.Kinds = {
 		PmaxIdle = 42, PmaxFull = 150,
 		EtaIndicated = 0.45, CoolantFrac = 0.25, LHV = 42.6e6,
 		Strokes = 4, StallFrac = 0.4, IdleAuthority = 1, DroopGovernor = true,
+		CompressionRatio = 16, GasSpring = true,
 	},
 	rotary = {
 		-- A Wankel fires once per rotor per crank revolution; treated as a 4-stroke of
@@ -185,6 +233,53 @@ local function estimateInertia(DispL, Kind)
 	return 0.046 + 0.026 * DispL
 end
 
+-- Distance of a piston from top centre and its rate with crank angle (slider-crank).
+local function pistonTravel(Gas, Theta)
+	local R, L = Gas.Crank, Gas.Rod
+	local S, C = sin(Theta), cos(Theta)
+	local Root = sqrt(L * L - R * R * S * S)
+	return R * (1 - C) + L - Root, R * S * (1 + R * C / Root)
+end
+
+--[[
+	Most torque the cylinders' air puts against turning the crank forwards slowly from rest:
+	each sealed cylinder holds ambient air trapped at intake closing, compressed isothermally,
+	all cylinders summed at every crank angle (one compressing while another expands).
+]]
+local function compressionPeak(Gas)
+	local Worst = 0
+	for Step = 0, 719 do
+		local Angle = Step / 720 * Cycle
+		local Torque = 0
+		for I = 1, Gas.Count do
+			local Phase = (Angle + (I - 1) * Gas.Interval) % Cycle
+			if Phase > ValveIVC and Phase < ValveEVO then
+				local Travel, Rate = pistonTravel(Gas, Phase)
+				local V = Gas.Vc + Gas.Area * Travel
+				local Trapped = Gas.Vc + Gas.Area * pistonTravel(Gas, ValveIVC)
+				Torque = Torque + (Atmosphere * Trapped / V - Atmosphere) * Gas.Area * Rate
+			end
+		end
+		Worst = min(Worst, Torque)
+	end
+	return -Worst
+end
+
+-- Engines are liquid-cooled unless their definition says cooling = "air" (or the player picks it
+-- in the engine menu). Most ACE definitions make two to five times the power per kilogram of
+-- real air-cooled engines, more than finned cylinders of their size can shed.
+-- Air-cooled types with no cooling fan of their own: motorcycle engines cool on riding speed
+-- alone. Others (fan-cooled boxers and tank engines, aircraft engines behind their propeller)
+-- get an engine-driven air flow; a definition overrides it with blower = true or false.
+local NoBlowerTypes = { Single = true, V2 = true }
+
+--- Whether an engine definition is air-cooled (finned cylinders, no coolant).
+-- @param Def Engine definition.
+-- @return boolean
+function Engine.IsAirCooled(Def)
+	return Def.cooling == "air"
+end
+
 --- Builds the physical description of an engine from its ACE definition.
 -- @param Def Engine definition (fields torque, idlerpm, limitrpm, fuel, enginetype, category,
 -- name; optional displacement [L], cylinders, stroke [m], inertia [kg·m²]).
@@ -203,6 +298,10 @@ function Engine.Build(Def, Curve)
 		IdleW      = Def.idlerpm * RPMToRad,
 		LimitW     = Def.limitrpm * RPMToRad,
 	}
+	if (Kind == "si" or Kind == "diesel") and Engine.IsAirCooled(Def) then
+		Spec.AirCooled = true
+		if Def.blower == false or (Def.blower == nil and NoBlowerTypes[Def.enginetype or ""]) then Spec.NoBlower = true end
+	end
 
 	local DispL = Engine.Displacement(Def)
 	if not DispL or DispL <= 0 then
@@ -214,7 +313,8 @@ function Engine.Build(Def, Curve)
 	Spec.DispL = DispL
 	Spec.Vd = DispL / 1000
 
-	local Cyl = Def.cylinders or CylindersByCategory[Def.category] or 4
+	local Cyl = Def.cylinders or CylindersByCategory[Def.category] or CylindersByCategory[Def.enginetype]
+		or tonumber((Def.name or ""):match("%f[%w][VIRW](%d%d?)%f[%W]")) or 4
 	Spec.Cylinders = Cyl
 
 	if K.Strokes then
@@ -223,6 +323,24 @@ function Engine.Build(Def, Curve)
 		Spec.Stroke = Def.stroke or (4 * Vcyl / pi) ^ (1 / 3)
 		-- Converts a mean effective pressure [Pa] into crank torque [N·m] (Heywood eq. 2.19).
 		Spec.MepToTorque = Spec.Vd / (2 * pi * (K.Strokes / 2))
+	end
+
+	if K.GasSpring then
+		-- Cylinder geometry for the gas springs. Every field can come from the definition, so
+		-- an engine built from bore, stroke and cylinder count describes itself fully.
+		local Vcyl = Spec.Vd / Cyl
+		local Rc = Def.compression or K.CompressionRatio
+		local Crank = Spec.Stroke / 2
+		Spec.Gas = {
+			Count    = Cyl,
+			Area     = Vcyl / Spec.Stroke,                    -- piston area, m²
+			Crank    = Crank,                                 -- crank radius, m
+			Rod      = Crank / (Def.rodratio or RodRatio),    -- connecting rod length, m
+			Vcyl     = Vcyl,                                  -- swept volume per cylinder, m³
+			Vc       = Vcyl / (Rc - 1),                       -- clearance volume, m³
+			Interval = 4 * pi / Cyl,                          -- even firing interval, rad
+		}
+		Spec.Gas.Peak = compressionPeak(Spec.Gas)
 	end
 
 	Spec.Inertia = Def.inertia or estimateInertia(DispL, Kind)
@@ -314,7 +432,7 @@ end
 ACE.Mobility.EngineCurveSample = Engine.CurveSample
 
 --- Friction torque (rubbing + accessories) at a given speed and load, Chen-Flynn.
--- @param Spec Engine spec.
+-- @param Spec Engine spec (optional Spec.FrictionMul: oil viscosity multiplier, default 1).
 -- @param W Crank speed in rad/s.
 -- @param Load Air/fuel fraction 0..1 (sets peak cylinder pressure).
 -- @return Friction torque in N·m (positive, opposes rotation).
@@ -333,18 +451,83 @@ function Engine.FrictionTorque(Spec, W, Load)
 	local Sp = abs(W) * Spec.Stroke / pi -- mean piston speed, 2·S·N
 	local Pmax = K.PmaxIdle + (K.PmaxFull - K.PmaxIdle) * Load
 	local Fmep = K.A + K.B * Pmax + K.C * Sp + K.D * Sp * Sp
-	return Fmep * BarToPa * Spec.MepToTorque
+	-- The fit is for fully warm oil; Spec.FrictionMul (set from the oil temperature by
+	-- ACE.Mobility.Thermal.FrictionMul) raises it for cold, viscous oil. Unset means warm.
+	return Fmep * BarToPa * Spec.MepToTorque * (Spec.FrictionMul or 1)
 end
 
 --- Pumping torque: manifold vacuum against exhaust back-pressure.
+-- Pumping is a flow loss: the manifold vacuum is pulled by the engine's own air flow, so it
+-- builds up from nothing at standstill to its full value at idle. Held at full value at rest it
+-- acted as static friction and held parked cars on slopes their compression could not.
 -- @param Spec Engine spec.
 -- @param Load Air fraction 0..1.
+-- @param W Optional crank speed in rad/s; when given, the loss fades in up to idle speed.
 -- @return Pumping torque in N·m (positive, opposes rotation).
-function Engine.PumpingTorque(Spec, Load)
+function Engine.PumpingTorque(Spec, Load, W)
 	local K = Spec.K
 	if not K.PumpClosed then return 0 end
 	local Pmep = K.PumpClosed + (K.PumpOpen - K.PumpClosed) * Load
-	return Pmep * BarToPa * Spec.MepToTorque
+	local Flow = W and min(abs(W) / max(Spec.IdleW, 1), 1) or 1
+	return Pmep * BarToPa * Spec.MepToTorque * Flow
+end
+
+--- Torque of the cylinders' trapped air on the crank, crank angle by crank angle.
+-- Advances the crank angle and each cylinder's trapped charge by Dt at the state's speed.
+-- Each cylinder is a sealed volume between intake closing and exhaust opening: entering that
+-- window (turning either way) it traps air at ambient pressure, which then follows p·V = const
+-- and bleeds past the rings (see the constants at the top of this file). Cylinders fire evenly
+-- (four-stroke, 720/N degrees apart).
+-- @param Spec Engine spec (needs Spec.Gas).
+-- @param State Engine state; uses W, Angle (crank angle in the 720 degree cycle) and Charge
+-- ({ Trapped, Heat, Volume } per sealed cylinder).
+-- @param Dt Time step in seconds.
+-- @return Torque on the crank in N·m (positive turns it forwards).
+function Engine.GasTorque(Spec, State, Dt)
+	local Gas = Spec.Gas
+	if not Gas then return 0 end
+	local W = State.W
+	local Weight = clamp((GasOffW - abs(W)) / (GasOffW - GasFullW), 0, 1)
+	local Charge = State.Charge
+	if State.Running or Weight == 0 then
+		-- Running, or turning fast: the cycle-mean models carry it, nothing is held over.
+		if Charge then State.Charge = nil end
+		State.Angle = ((State.Angle or 0) + W * Dt) % Cycle
+		return 0
+	end
+	if not Charge then
+		Charge = {}
+		State.Charge = Charge
+	end
+
+	local Angle = State.Angle or 0
+	local Torque = 0
+	for I = 1, Gas.Count do
+		local Phase = (Angle + (I - 1) * Gas.Interval) % Cycle
+		if Phase > ValveIVC and Phase < ValveEVO then
+			local Travel, Rate = pistonTravel(Gas, Phase)
+			local V = Gas.Vc + Gas.Area * Travel
+			local C = Charge[I]
+			if not C then
+				-- Air trapped as the valve shuts: ambient pressure, wall temperature.
+				C = { Trapped = V, Heat = 1, Volume = V }
+				Charge[I] = C
+			end
+			-- Heat is the charge's temperature over wall temperature: adiabatic change for the
+			-- volume swept since last step, then cooling (or warming) towards the wall.
+			local Heat = C.Heat * (C.Volume / V) ^ (Gamma - 1)
+			Heat = 1 + (Heat - 1) * exp(-Dt / WallTau)
+			-- Trapped is the volume the air would take at ambient pressure and wall temperature.
+			local P = Atmosphere * C.Trapped * Heat / V
+			Torque = Torque + (P - Atmosphere) * Gas.Area * Rate
+			C.Trapped = max(C.Trapped - GasLeak * Gas.Vcyl * (P - Atmosphere) / BarToPa * Dt, 0)
+			C.Heat, C.Volume = Heat, V
+		else
+			Charge[I] = nil
+		end
+	end
+	State.Angle = (Angle + W * Dt) % Cycle
+	return Torque * Weight
 end
 
 --- Indicated (combustion) torque at wide-open throttle, i.e. brake torque plus the losses the
@@ -360,7 +543,11 @@ function Engine.NewState(Spec)
 	return {
 		W        = 0,        -- crank speed, rad/s
 		Running  = false,    -- combustion enabled
-		Cranking = 0,        -- starter time remaining, s
+		Cranking = 0,        -- > 0 while the starter turns the crank: cranking left before its thermal cut-out, s
+		StarterOn = false,   -- start requested (Active held) and the engine has not caught yet
+		StarterHeat = 0,     -- starter winding heat, 0 cold .. 1 thermal cut-out
+		StarterCut = false,  -- thermal cut-out open, waiting to cool
+		StarterJ = 0,        -- electrical energy the starter drew since the entity last billed it, J
 		IdleInt  = 0.15,     -- idle governor integrator (air fraction)
 		Spool    = 0,        -- turbine gas generator spool 0..1
 		Cut      = false,    -- rev limiter fuel cut latched
@@ -369,12 +556,250 @@ function Engine.NewState(Spec)
 		FuelRate = 0,        -- kg/s
 		HeatRate = 0,        -- W into the engine block / coolant
 		Stalled  = false,
+		Angle    = 0,        -- crank angle within the 720 degree cycle, rad
+		Charge   = nil,      -- trapped air per sealed cylinder (Engine.GasTorque)
 		Direction = 1,       -- electric motors: selected direction, +1 forward, -1 reverse
+		PreheatLeft = 0,     -- glow plug preheat still to run before the starter engages, s
+		Glow     = 0,        -- glow plug heat, 0 cold .. 1 at working temperature
+		CrankWarm = 0,       -- warming of the cylinder walls by the compression strokes, K
+		SyncAngle = 0,       -- crank angle turned since the start was requested, rad
+		Fire     = 0,        -- share of the cycles that fire, 0..1
+		-- Set by the entity each tick (nil: a warm engine on a 20 °C day): AirC, BlockC, CoolantC.
 		Spec     = Spec,
 	}
 end
 
---- Requests a start. Combustion engines crank on their starter until they catch.
+--[[
+	Starter motor. A series-wound DC motor: the field is in series with the armature, so the
+	flux follows the current, torque is c·I² and the back-EMF c·I·ω (Chapman, Electric Machinery
+	Fundamentals, the series DC motor, unsaturated). Fed from a battery of open-circuit voltage
+	U0 that sags under load:
+	    I = U / (R + c·ω),  T = c·I²,  U = U0 - (sag)
+	so torque falls hyperbolically with speed, T = Tstall·x² / (1 + ω/ωk)², where x is the
+	terminal voltage relative to the starter's rated one and ωk = R/c the speed at which it
+	gives its most power (a quarter of Tstall·ωk). The circuit draws Pe = Pstall·x² / (1 + ω/ωk)
+	and loses Pe - T·ω = Pstall·x² / (1 + ω/ωk)² as heat in its windings.
+	A sagging or flat battery turns the starter slower and weaker (x² on torque), and a flat one
+	not at all. The battery's sag is solved with the same current, so a small pack fed hard sags
+	more than a large one.
+	StarterKneeW: ωk, 200 rpm at the crank: starters are matched so their most power falls at
+	  the engine's cranking speed (150-300 rpm, Heywood 7.6). Estimated.
+	StarterRefSag: the starter is rated at its stall current from a battery whose terminal
+	  voltage drops 20 % (12 V systems sit near 9.6-10 V while cranking; SAE J537 lets a
+	  battery fall to 7.2 V at its cold cranking current). Estimated. An engine with no battery
+	  linked cranks on its own lead-acid battery (Battery.StarterPack*, battery_model.lua), which
+	  is that battery when full and warm.
+	Spec.StarterMul: the starter's size relative to the standard one (a player setting, default
+	  1). Torque and current scale with it at the same max-power speed.
+	StarterDrag: an ideal series motor speeds up without limit as its load falls; a real one
+	  is held back by brush and bearing friction, windage and armature reaction, so that its
+	  no-load speed is only 2-3 times its max-power speed (starter characteristic curves, Bosch
+	  Automotive Handbook, starting systems; pinion-to-ring-gear ratios 1:10-1:15). Modelled as a
+	  constant drag that puts the free speed at 2.5 x ωk (500 rpm at the crank, estimated). Before
+	  it, a warm 3.3 L diesel cranked at 600 rpm, its idle speed; now about 380 rpm.
+	Duty: manufacturers allow 30 s of cranking, then about 2 minutes to cool (Delco Remy
+	  cranking motor instructions); heavy-duty starters carry a thermal over-crank switch that
+	  opens when the windings get too hot and closes once they cool. StarterDuty: 30 s at the
+	  max-power point from cold opens it; StarterCoolTau: windings cool with a 60 s time constant
+	  (estimated: a 2-minute rest brings them back within 14 % of cold); StarterReset: the switch
+	  closes again once half the heat is gone (estimated). A starter held against a load it
+	  cannot turn (locked) heats four times faster and cuts out in about 6 s.
+]]
+local StarterKneeW   = 200 * RPMToRad
+local StarterRefSag  = 0.2
+local StarterDuty    = 30
+local StarterCoolTau = 60
+local StarterReset   = 0.5
+-- The motor's own drag as a share of stall torque, so that unloaded it runs no faster than
+-- StarterFreeR times its max-power speed (see StarterDrag in the comment above).
+local StarterFreeR   = 2.5
+local StarterDrag    = 1 / (1 + StarterFreeR) ^ 2
+-- Heating rate so that 30 s at the max-power point (winding loss Pstall/4) reaches the cut-out
+-- with the cooling acting all along: Heat(t) = Rate·τ·(1 - e^(-t/τ)).
+local StarterHeatTime = StarterCoolTau * (1 - exp(-StarterDuty / StarterCoolTau))
+Engine.StarterRefSag = StarterRefSag
+
+--- Rated torque and power of an engine's starter.
+-- Stall torque is a margin over breakaway: four times the losses at rest plus 1.5 times the
+-- cylinders' compression peak (starter selection works from the engine's breakaway torque,
+-- Bosch Automotive Handbook, starting systems). Spec.StarterMul scales the result.
+-- @param Spec table Engine spec.
+-- @return number Stall torque at the crank [N·m], at the rated terminal voltage.
+-- @return number Electrical power drawn at stall [W] (Tstall·ωk); the most mechanical power
+-- (at ωk) is a quarter of it.
+function Engine.StarterRating(Spec)
+	local Stall = Engine.StarterBaseStall(Spec) * max(Spec.StarterMul or 1, 0.1)
+	return Stall, Stall * StarterKneeW
+end
+
+--- Stall torque of the standard starter for an engine, before the size setting.
+-- @param Spec table Engine spec.
+-- @return number Stall torque at the crank [N·m].
+function Engine.StarterBaseStall(Spec)
+	local Stall = Spec.StarterStall
+	if not Stall then
+		-- Sized from warm-oil friction: the starter is a property of the motor and its battery,
+		-- not of the oil. Cold, viscous oil (Spec.FrictionMul) then makes it crank slower, as it
+		-- does in reality.
+		local Mul = Spec.FrictionMul
+		Spec.FrictionMul = nil
+		local Breakaway = Spec.Gas and 1.5 * Spec.Gas.Peak or 0
+		Stall = 4 * (Engine.FrictionTorque(Spec, 0, 0) + Engine.PumpingTorque(Spec, 0)) + Breakaway
+		Spec.FrictionMul = Mul
+		Spec.StarterStall = Stall
+	end
+	return Stall
+end
+
+-- Seconds of cranking left before the thermal cut-out, at the rated load.
+local function starterTimeLeft(State)
+	return max(StarterDuty * (1 - (State.StarterHeat or 0)), 1e-3)
+end
+
+--[[
+	Catching: when a cranked engine fires. Nothing here is a timer; an engine catches once enough
+	of its cycles fire to run it up past the speed it would stall at, and that depends on how
+	fast the starter turns it and how hot the air gets in the cylinders.
+	SyncAngle: no fuel or spark for the first two revolutions. An engine controller needs up to
+	  two crank turns to find top centre from the crank and cam sensors before it injects (Bosch
+	  Automotive Handbook, engine management: synchronisation), and a mechanical injection pump
+	  must fill its lines. Estimated.
+	FireLoW, FireHiW: firing speed. Below ~60 rpm spark-ignition mixtures do not form well and a
+	  diesel's injection pump cannot build its pressure; by ~100 rpm both fire every cycle. Heywood
+	  7.6 gives cranking speeds of 150-300 rpm and minimum firing speeds well below them; the
+	  60-100 rpm band is estimated. Cold petrol needs ColdFireShiftW more at -20 °C (fuel
+	  evaporates poorly; estimated).
+	Wall wetting (petrol): much of the first fuel injected lands on the port and cylinder walls
+	  as a film and only reaches the charge as that film builds up and evaporates (the x-tau
+	  fuel film model, Aquino, SAE 810494), so the first cycles run lean and fire weakly. The
+	  share that arrives is 1 - exp(-t/tau) after t seconds of fuelling. tau is WetTau = 0.3 s
+	  with the charge at 55 °C (a warm engine on a 20 °C day) and doubles every WetDoubleK =
+	  35 K colder, as petrol's vapour pressure falls: 0.6 s at 20 °C, 1.3 s at -20 °C
+	  (estimated; Aquino's evaporation time constants run from tenths of a second warm to
+	  seconds cold).
+	Compression ignition (diesels): the air must get hot enough to light the fuel. At the end of
+	  compression it is at T = Tcharge·rc^(n-1). The charge is the outside air warmed by the walls
+	  it is drawn past: Tcharge = Tair + WallShare·(Tblock - Tair) (estimated), plus whatever
+	  cranking and glow plugs add. The exponent n falls from CrankNHot (near-adiabatic, running
+	  speed) towards 1 (isothermal) as the strokes slow down and the walls take the heat away
+	  (Heywood 10.6, cold starting): n = CrankNHot - (CrankNHot - 1)·ωh/(ω + ωh). ωh = 48 rpm
+	  gives n ≈ 1.28 at 150 rpm, so a warm diesel's cranking compression pressure (1 bar·16^1.28)
+	  is ~35 bar, in the 28-35 bar workshop compression-test range (estimated).
+	  IgnitionLoK..IgnitionHiK: 700-780 K, from no cycle to every cycle firing. Estimated so
+	  that a diesel without glow plugs behaves as direct-injection diesels do: it starts in
+	  about a second at 20 °C, cranks for seconds around 0 °C and does not start at -20 °C
+	  (the 3.3 L V4 of the tests: 0.8 s, 4.9 s at 0 °C, 9.7 s at -10 °C, none at -20 °C).
+	  Cranking at 250 rpm the charge reaches ~775 K warm, ~690 K at 20 °C and ~600 K at -20 °C
+	  before the walls warm up.
+	CrankWarmK, CrankWarmTau: each compression stroke leaves some of its heat in the walls and the
+	  residual gas, so a cold diesel that is cranked for a while gets closer to firing (estimated:
+	  up to 40 K, time constant 5 s; it cools off with a 60 s time constant once the crank stops).
+	Glow plugs: GlowBoostK is how much hotter the charge gets with the plugs at working
+	  temperature (estimated: a 900-1,000 °C tip in each chamber). They heat with a time constant
+	  GlowTau = 1.5 s (95 % in 4.5 s; steel glow plugs reach 850 °C in 2-5 s, Bosch glow plug
+	  data) and draw GlowW = 150 W each (12 V plugs take 10-25 A heating up, ~8 A hot; estimated).
+	  The controller preheats before cranking, longest when cold: PreheatMax (a setting, default
+	  5 s) at -20 °C coolant and below, nothing at 60 °C and above, linear in between (estimated
+	  from glow-time-against-coolant maps of ~2-20 s). PreheatMax 0 means no glow plugs.
+	CatchMargin: the engine counts as running (the starter drops out) once it fires past 1.15 x
+	  its stall speed, the speed below which a running engine stalls (estimated).
+]]
+local SyncAngle      = 4 * pi
+local FireLoW        = 60 * RPMToRad
+local FireHiW        = 100 * RPMToRad
+local ColdFireShiftW = 40 * RPMToRad
+local WetTau         = 0.3
+local WetWarmC       = 55
+local WetDoubleK     = 35
+local CrankNHot      = 1.37
+local CrankNHalfW    = 48 * RPMToRad
+local WallShare      = 0.5
+local IgnitionLoK    = 700
+local IgnitionHiK    = 780
+local CrankWarmK     = 40
+local CrankWarmTau   = 5
+local CrankCoolTau   = 60
+local GlowBoostK     = 100
+local GlowTau        = 1.5
+local GlowW          = 150
+local PreheatColdC   = -20
+local PreheatWarmC   = 60
+local DefaultPreheat = 5
+local CatchMargin    = 1.15
+-- Temperatures when the entity has not set them: a warm engine on a 20 °C day.
+local WarmAirC, WarmBlockC = 20, 90
+
+Engine.DefaultPreheat = DefaultPreheat
+Engine.GlowW = GlowW
+
+local function smooth(X)
+	X = clamp(X, 0, 1)
+	return X * X * (3 - 2 * X)
+end
+
+-- Outside air and engine metal temperatures for starting, °C.
+local function startTemps(State)
+	local Air = State.AirC or WarmAirC
+	return Air, State.BlockC or (State.AirC and Air or WarmBlockC)
+end
+
+--- Glow plug preheat a diesel runs before its starter engages.
+-- @param Spec table Engine spec (Spec.PreheatMax: preheat at -20 °C, s; nil: Engine.DefaultPreheat).
+-- @param State table Engine state (CoolantC, or BlockC, °C).
+-- @return number Seconds; 0 for engines without glow plugs and for warm diesels.
+function Engine.PreheatTime(Spec, State)
+	if Spec.Kind ~= "diesel" then return 0 end
+	local Max = max(Spec.PreheatMax or DefaultPreheat, 0)
+	local _, Block = startTemps(State)
+	local Coolant = State.CoolantC or Block
+	return Max * clamp((PreheatWarmC - Coolant) / (PreheatWarmC - PreheatColdC), 0, 1)
+end
+
+--- Temperature of the air at the end of compression at a crank speed (diesels).
+-- @param Spec table Engine spec.
+-- @param State table Engine state (temperatures, CrankWarm, Glow).
+-- @param W number Crank speed, rad/s.
+-- @return number Kelvin.
+function Engine.CompressionTemp(Spec, State, W)
+	local Gas = Spec.Gas
+	local Rc = Gas and (Gas.Vcyl + Gas.Vc) / Gas.Vc or Spec.K.CompressionRatio or 10
+	local Air, Block = startTemps(State)
+	local Charge = 273.15 + Air + WallShare * (Block - Air) + (State.CrankWarm or 0) + GlowBoostK * (State.Glow or 0)
+	local N = CrankNHot - (CrankNHot - 1) * CrankNHalfW / (abs(W) + CrankNHalfW)
+	return Charge * Rc ^ (N - 1)
+end
+
+--- Share of the cycles that fire at a crank speed, given fuel.
+-- @param Spec table Engine spec.
+-- @param State table Engine state.
+-- @param W number Crank speed, rad/s.
+-- @return number 0..1.
+function Engine.FireFraction(Spec, State, W)
+	local S = abs(W)
+	if Spec.Kind == "diesel" then
+		local Speed = smooth((S - FireLoW) / (FireHiW - FireLoW))
+		if Speed <= 0 then return 0 end
+		return Speed * smooth((Engine.CompressionTemp(Spec, State, S) - IgnitionLoK) / (IgnitionHiK - IgnitionLoK))
+	end
+	local Air, Block = startTemps(State)
+	local Charge = Air + WallShare * (Block - Air)
+	local Lo = FireLoW + ColdFireShiftW * clamp((20 - Charge) / 40, 0, 1)
+	return smooth((S - Lo) / (FireHiW - FireLoW))
+end
+
+--- Share of the injected petrol that reaches the cylinders during a start (spark ignition).
+-- @param State table Engine state (FuelTime: seconds fuelled so far; temperatures).
+-- @return number 0..1.
+function Engine.WallWetting(State)
+	local Air, Block = startTemps(State)
+	local Tau = WetTau * 2 ^ clamp((WetWarmC - (Air + WallShare * (Block - Air))) / WetDoubleK, -1, 3)
+	return 1 - exp(-(State.FuelTime or 0) / Tau)
+end
+
+--- Requests a start. Combustion engines preheat (diesels with glow plugs, when cold), then
+-- crank on their starter until they catch, for as long as the start is held (Engine.Stop
+-- releases it) and the battery and the starter's thermal cut-out allow.
+-- @param State table Engine state.
 function Engine.Start(State)
 	local Spec = State.Spec
 	if Spec.Kind == "electric" or Spec.Kind == "turbine" then
@@ -382,14 +807,91 @@ function Engine.Start(State)
 		State.Stalled = false
 		return
 	end
-	State.Cranking = 3
+	State.StarterOn = true
+	State.SyncAngle = 0
+	State.FuelTime = 0
+	State.PreheatLeft = Engine.PreheatTime(Spec, State)
+	State.Cranking = (State.StarterCut or State.PreheatLeft > 0) and 0 or starterTimeLeft(State)
 	State.Stalled = false
 end
 
---- Stops combustion (key off or out of fuel). The crank keeps spinning down on friction.
+--- Stops combustion (key off or out of fuel) and releases the starter. The crank keeps
+-- spinning down on friction.
+-- @param State table Engine state.
 function Engine.Stop(State)
 	State.Running = false
+	State.StarterOn = false
 	State.Cranking = 0
+	State.PreheatLeft = 0
+end
+
+--[[
+	One step of the starter and the glow plugs: the starter's torque on the crank, the energy both
+	draw (State.StarterJ, billed to the battery by the entity) and the starter's winding heat.
+	State.StarterSupply describes the battery (nil: a full, warm battery that never runs down,
+	see StarterRefSag):
+	  Volt     open-circuit voltage relative to that battery's when full and new (0 when flat)
+	  Sag      fractional voltage drop the starter's stall power alone would cause (k·Pstall,
+	           with k the battery's resistive loss per watt, Battery.StarterSupply)
+	  EnergyJ  energy left in it, J (nil: unlimited)
+]]
+local function starterStep(Spec, State, W, Dt)
+	local Heat = State.StarterHeat or 0
+	local Torque = 0
+	local Starting = State.StarterOn and not State.Running
+	local Supply = State.StarterSupply
+	local Volt = Supply and Supply.Volt or 1
+	if Supply and Supply.EnergyJ and Supply.EnergyJ <= (State.StarterJ or 0) then Volt = 0 end
+
+	-- Glow plugs: on from the moment the start is requested until the engine runs, while the
+	-- battery has anything to give.
+	local Plugs = Spec.Kind == "diesel" and (Spec.PreheatMax or DefaultPreheat) > 0
+	local GlowOn = Plugs and Starting and Volt > 0
+	local GlowTarget = GlowOn and 1 or 0
+	State.Glow = GlowTarget + ((State.Glow or 0) - GlowTarget) * exp(-Dt / GlowTau)
+	if GlowOn then State.StarterJ = (State.StarterJ or 0) + GlowW * Spec.Cylinders * Dt end
+
+	-- The cylinder walls warm up while the crank is turned over.
+	local Turning = abs(W) > FireLoW
+	local WarmTarget = Turning and CrankWarmK or 0
+	State.CrankWarm = WarmTarget + ((State.CrankWarm or 0) - WarmTarget) * exp(-Dt / (Turning and CrankWarmTau or CrankCoolTau))
+
+	-- The controller waits for the preheat before it engages the starter.
+	local Preheating = Starting and (State.PreheatLeft or 0) > 0
+	if Preheating and (GlowOn or not Plugs) then
+		State.PreheatLeft = max(State.PreheatLeft - Dt, 0)
+	end
+	State.Preheating = Preheating
+
+	if Starting and not Preheating then
+		if Heat >= 1 then State.StarterCut = true end
+		if State.StarterCut and Heat <= StarterReset then State.StarterCut = false end
+		if not State.StarterCut then
+			local Stall, StallW = Engine.StarterRating(Spec)
+			local Sag = Supply and Supply.Sag or StarterRefSag
+			if Volt > 0 then
+				local R = max(W, 0) / StarterKneeW
+				-- Terminal voltage x (relative to the rated one) from x = x0·(1 - Sag·x²/(1 + R)),
+				-- in the form that stays accurate when the sag is small.
+				local X0 = Volt / (1 - StarterRefSag)
+				local B = Sag / (1 + R)
+				local X = 2 * X0 / (1 + sqrt(1 + 4 * X0 * X0 * B))
+				local F = X * X / (1 + R)
+				-- Less the motor's own brush, bearing and windage drag; the pinion's overrunning
+				-- clutch never lets it hold the crank back.
+				Torque = max(Stall * (F / (1 + R) - StarterDrag), 0)
+				State.StarterJ = (State.StarterJ or 0) + StallW * F * Dt
+				-- Winding loss over the loss at the max-power point (StallW / 4).
+				Heat = Heat + 4 * F / (1 + R) * Dt / StarterHeatTime
+			end
+		end
+	end
+	State.StarterHeat = Heat * exp(-Dt / StarterCoolTau)
+	State.Cranking = Torque > 0 and starterTimeLeft(State) or 0
+	-- How hard the starter is pulling, 0..1: 1 when it is bogged down against a load it cannot
+	-- turn (the sound of a struggling starter), falling as it spins up freely.
+	State.StarterLoad = Torque > 0 and clamp(1 / (1 + max(W, 0) / StarterKneeW), 0, 1) or 0
+	return Torque
 end
 
 --[[
@@ -429,7 +931,7 @@ end
 -- State.Direction selects (+1 forward, -1 reverse); other engines only turn forwards.
 -- @param Dt Substep length in seconds.
 -- @param Opts Optional { NoStall = bool, HasFuel = bool }.
--- @return Drive torque (combustion, starter or motor) in N·m, and loss torque magnitude in N·m
+-- @return Drive torque (combustion, starter or motor, and the cylinders' gas springs) in N·m, and loss torque magnitude in N·m
 -- (friction and pumping). Losses are returned separately so the caller can apply them as
 -- friction that never reverses the crank.
 function Engine.Step(State, Throttle, Dt, Opts)
@@ -508,15 +1010,24 @@ function Engine.Step(State, Throttle, Dt, Opts)
 
 	-- Reciprocating / rotary combustion engines.
 	local Load = 0
-	if State.Cranking > 0 and not State.Running then
-		State.Cranking = State.Cranking - Dt
-		-- Engines fire once cranked past ~120-150 RPM with fuel (Heywood 7.6; starter
-		-- cranking speeds are 150-300 RPM).
-		if HasFuel and W > 130 * RPMToRad then
-			State.Running = true
-			State.Caught = false
-			State.Cranking = 0
-			State.IdleInt = 0.2
+	-- Firing (see "Catching" above): a share of the cycles fires, set by crank speed and, for
+	-- diesels, the compression temperature. With the start held the engine is fuelled on the
+	-- start map once it has synchronised, however the crank is turned: by the starter, or
+	-- rolling in gear with the starter cut out or the battery flat (a push start). The fired
+	-- cycles run it up, and once it fires past its stall speed it runs and the start is
+	-- released, as the starter relay drops out on a running engine.
+	local Fire = 0
+	if HasFuel and (State.Running or State.StarterOn) then
+		Fire = Engine.FireFraction(Spec, State, W)
+	end
+	if State.StarterOn and not State.Running then
+		State.SyncAngle = (State.SyncAngle or 0) + abs(W) * Dt
+		if HasFuel and State.SyncAngle >= SyncAngle then
+			Load = max(clamp(Throttle, 0, 1), max(K.IdleAuthority, 0.6))
+			State.FuelTime = (State.FuelTime or 0) + Dt
+			if Spec.Kind ~= "diesel" then Fire = Fire * Engine.WallWetting(State) end
+		else
+			Fire = 0
 		end
 	end
 
@@ -548,34 +1059,79 @@ function Engine.Step(State, Throttle, Dt, Opts)
 		end
 	end
 
-	local Combustion = Load * Engine.IndicatedWOT(Spec, max(W, 0))
-	local Loss = Engine.FrictionTorque(Spec, W, Load) + Engine.PumpingTorque(Spec, Load)
+	if Load <= 0 then Fire = 0 end
+	State.Fire = Fire
+	-- Injected fuel follows Load; only the cycles that fire make torque and heat (a misfiring
+	-- cold diesel blows the rest out unburnt).
+	local Injected = Load * Engine.IndicatedWOT(Spec, max(W, 0))
+	local Combustion = Injected * Fire
+	local Loss = Engine.FrictionTorque(Spec, W, Load * Fire) + Engine.PumpingTorque(Spec, Load, W)
 
-	local Starter = 0
-	if State.Cranking > 0 and not State.Running then
-		-- Starter motor: series-wound DC, torque falling linearly from stall to its free speed;
-		-- sized to crank at 200-250 RPM against the engine's motoring losses.
-		local Free = 450 * RPMToRad
-		local StallTq = 4 * (Engine.FrictionTorque(Spec, 0, 0) + Engine.PumpingTorque(Spec, 0))
-		Starter = StallTq * clamp(1 - W / Free, 0, 1)
+	-- Caught: past its stall speed and firing well enough to keep itself turning without the
+	-- starter. It runs from here and the start is released.
+	if State.StarterOn and not State.Running and Combustion > Loss and W > Spec.IdleW * K.StallFrac * CatchMargin then
+		State.Running = true
+		State.Caught = false
+		State.StarterOn = false
+		State.Cranking = 0
+		State.IdleInt = 0.2
 	end
-	-- How hard the starter is pulling, 0..1: 1 when it is bogged down against a load it cannot
-	-- turn (the sound of a struggling starter), falling as it spins up freely.
-	State.StarterLoad = Starter > 0 and clamp(1 - W / (450 * RPMToRad), 0, 1) or 0
+	local GasSpring = Engine.GasTorque(Spec, State, Dt)
+
+	-- Starter motor fed from the battery (starterStep): pushes the first cylinder over
+	-- compression from rest, then cranks.
+	local Starter = starterStep(Spec, State, W, Dt)
 
 	State.Load = Load
 	State.StarterTorque = Starter
-	State.Torque = Combustion + Starter - Loss * (W >= 0 and 1 or -1)
+	State.GasTorque = GasSpring
+	State.Torque = Combustion + Starter + GasSpring - Loss * (W >= 0 and 1 or -1)
 
-	local Pind = Combustion * max(W, 0)
-	local Pfuel = Pind / K.EtaIndicated
-	State.FuelRate = Pfuel / K.LHV
+	local Pfuel = Combustion * max(W, 0) / K.EtaIndicated
+	State.FuelRate = Injected * max(W, 0) / K.EtaIndicated / K.LHV
 	-- Coolant heat: the share of fuel energy measured in the coolant on test beds. Friction
 	-- heat is part of that measurement (it ends up in the oil and coolant), so it is not added
 	-- again (Heywood 12.1, table 12.1).
 	State.HeatRate = Pfuel * K.CoolantFrac
 
-	return Combustion + Starter, Loss
+	return Combustion + Starter + GasSpring, Loss
+end
+
+--- Estimates how long a start takes: the engine alone (in neutral, no accessories) from rest
+-- with the start held, until it runs. Used by the engine menu.
+-- @param Spec table Engine spec (StarterMul and PreheatMax are used).
+-- @param Opts table|nil { AirC, BlockC, CoolantC (°C; nil: warm), FrictionMul (oil), Supply
+-- (State.StarterSupply), MaxTime (s, default 20) }.
+-- @return number|nil Seconds from the start request until it runs, nil if it does not.
+-- @return number Of that, seconds spent preheating.
+function Engine.SimulateStart(Spec, Opts)
+	Opts = Opts or {}
+	if Spec.Kind == "electric" or Spec.Kind == "turbine" then return 0, 0 end
+	local OldMul = Spec.FrictionMul
+	Spec.FrictionMul = Opts.FrictionMul
+	local State = Engine.NewState(Spec)
+	State.AirC, State.BlockC, State.CoolantC = Opts.AirC, Opts.BlockC, Opts.CoolantC
+	State.StarterSupply = Opts.Supply
+	Engine.Start(State)
+	local Preheat = State.PreheatLeft or 0
+
+	local Dt, T, J = 0.002, 0, Spec.Inertia
+	local Result
+	while T < (Opts.MaxTime or 20) do
+		local Drive, Loss = Engine.Step(State, 0, Dt)
+		-- Losses act as friction: they slow the crank but never turn it backwards.
+		local W = State.W + Drive / J * Dt
+		local Drag = Loss / J * Dt
+		if W > Drag then W = W - Drag elseif W < -Drag then W = W + Drag else W = 0 end
+		State.W = W
+		T = T + Dt
+		if State.Running then
+			Result = T
+			break
+		end
+	end
+	Spec.FrictionMul = OldMul
+	return Result, Preheat
 end
 
 return Engine

@@ -213,6 +213,164 @@ function ACE.EngineGUI_Update( Table )
 		acemenupanel:CPanelText("EngHeat", "Producing " .. math.Round(fuelcons * HeatPerLiterUsed,2) .. "kJ / Second of heat")
 	end
 
+	ACE.EngineModelGUI( Table, Spec )
+
 	acemenupanel.CustomDisplay:PerformLayout()
 
+end
+
+do -- What the drivetrain model does with an engine, and its starter setup
+
+	local SizeVar    = "acemenu_eng_startersize"
+	local PreheatVar = "acemenu_eng_preheat"
+	local CoolingVar = "acemenu_eng_cooling"
+
+	-- Plain-language summary of each kind of engine.
+	local KindText = {
+		si = "Spark ignition. Fires once the starter turns it past 60-100 rpm and the first fuel has reached the cylinders, slower when cold. Throttled, so it brakes hard off the throttle.",
+		diesel = "Compression ignition: the squeezed air itself must get hot enough to light the fuel. Cold, it needs glow plug preheat and a fast crank; warm, it starts at once. Weak engine braking; the governor gives full fuel to hold idle, so it crawls in gear.",
+		rotary = "Wankel rotary. Starts like a petrol engine and brakes like one.",
+		turbine = "Gas turbine with a free power turbine: lights up without a starter battery and cannot stall; the output can sit at 0 rpm under load. The gas generator burns fuel whatever the output does.",
+		electric = "Electric motor: full torque from 0 rpm, no starter and no stall. Reverse input drives it backwards; a negative throttle regenerates into the battery.",
+	}
+
+	local function Text( Name, Value, Tooltip, Font )
+		acemenupanel:CPanelText( Name, Value, Font )
+		local Label = acemenupanel.CData[Name .. "_text"]
+		if IsValid( Label ) then
+			Label:SetTooltip( Tooltip or false )
+			Label:SetMouseInputEnabled( Tooltip ~= nil )
+		end
+	end
+
+	local function Seconds( T, Preheat )
+		if not T then return "no start" end
+		local S = string.format( "%.1f s", T )
+		if Preheat and Preheat > 0 then S = S .. string.format( " (%.0f s preheat)", Preheat ) end
+		return S
+	end
+
+	-- Start times at three temperatures with the menu's starter setup.
+	local function StartLine( Table, Spec )
+		local Model = ACE.Mobility.Engine
+		local Thermal = ACE.Mobility.Thermal
+		Spec.StarterMul = math.Clamp( GetConVar( SizeVar ):GetFloat(), 0.5, 3 )
+		Spec.PreheatMax = math.Clamp( GetConVar( PreheatVar ):GetFloat(), 0, 60 )
+		local TS = Thermal and Thermal.Build( Spec, Table.weight or 100 )
+		local function Try( C )
+			local Mul = ( TS and C < 80 ) and Thermal.FrictionMul( TS, C ) or nil
+			return Model.SimulateStart( Spec, { AirC = math.min( C, 20 ), BlockC = C, CoolantC = C, FrictionMul = Mul, MaxTime = 15 } )
+		end
+		local Warm, WarmP = Try( 90 )
+		local Mild, MildP = Try( 20 )
+		local Cold, ColdP = Try( -20 )
+		return "Start: warm " .. Seconds( Warm, WarmP ) .. ", 20 °C " .. Seconds( Mild, MildP ) .. ", -20 °C " .. Seconds( Cold, ColdP )
+	end
+
+	-- The starter and its built-in battery at the menu's starter size (StartLine sets it).
+	local function StarterLine( Spec )
+		local Stall, StallW = ACE.Mobility.Engine.StarterRating( Spec )
+		local Battery = ACE.Mobility.Battery
+		local Wh = Battery and StallW / 4 * Battery.LeadWhPerW or 0
+		return string.format( "Starter: %.1f kW, %.0f Nm at stall, on a built-in %.1f kWh lead-acid battery the alternator recharges.", StallW / 4000, Stall, Wh / 1000 )
+	end
+
+	local function Slider( Key, Label, Min, Max, Decimals, ConVar, Tooltip )
+		local CData = acemenupanel.CData
+		if IsValid( CData[Key] ) then return end
+		local S = vgui.Create( "DNumSlider" )
+		S:SetText( Label )
+		S:SetDark( true )
+		S:SetMinMax( Min, Max )
+		S:SetDecimals( Decimals )
+		S:SetConVar( ConVar )
+		S:SetTooltip( Tooltip )
+		CData[Key] = S
+		acemenupanel.CustomDisplay:AddItem( S )
+	end
+
+	--- Adds what the drivetrain model does with an engine to the engine menu: a plain-language
+	-- summary, cylinders and compression, the starter and expected start times, cooling, and the
+	-- starter setup the menu tool applies to the engines it spawns.
+	-- @param Table table Engine definition.
+	-- @param Spec table|nil Engine spec (ACE.Mobility.Engine.Build).
+	function ACE.EngineModelGUI( Table, Spec )
+		if not Spec then return end
+
+		Text( "MobHeader", "\nHow it is modelled", nil, "DermaDefaultBold" )
+		Text( "MobKind", KindText[Spec.Kind] or "" )
+
+		local Piston = Spec.Kind ~= "electric" and Spec.Kind ~= "turbine"
+		if not Piston then return end
+
+		local Build = string.format( "%.1f L, %d cylinder%s", Spec.DispL, Spec.Cylinders, Spec.Cylinders == 1 and "" or "s" )
+		if Spec.Gas then
+			Build = Build .. string.format( ", %.0f:1 compression", ( Spec.Gas.Vcyl + Spec.Gas.Vc ) / Spec.Gas.Vc )
+		end
+		Build = Build .. string.format( ", flywheel %.2f kg·m²", Spec.Inertia )
+		Text( "MobBuild", Build, "With the engine off its cylinders act as gas springs: the trapped air holds a parked car in gear, creeps as it leaks past the rings, and rocks a stopping engine back." )
+
+		-- The menu's cooling choice overrides the definition's (ENT:SetStarterSetup).
+		local Choice = GetConVar( CoolingVar ):GetString()
+		local Air = Choice == "air" or Choice ~= "liquid" and ACE.Mobility.Engine.IsAirCooled( Table )
+		if Air then
+			Text( "MobCooling", "Air-cooled: finned cylinders cooled by the engine's own fan or propeller wash plus the air it moves through. EngineHeat output = oil °C; Block Temp = cylinder heads, limit 260 °C.",
+				"No coolant to boil, but the heads run hot: about 200 °C climbing at full power is normal for a light aircraft engine. Standing at full power, or a powerful engine with small cylinders, overheats. Linked radiators work as oil coolers." )
+		else
+			Text( "MobCooling", "EngineHeat output = coolant °C (thermostat 82, boils at 120). Cold oil adds friction: about 2x at 20 °C, up to 4x. Oil past 150 °C wears the engine.",
+				"Coolant, oil and engine metal are tracked separately (Oil Temp and Block Temp outputs). The engine warms up slowly at idle; link radiators to keep it cool under load." )
+		end
+
+		-- StartLine first: it applies the menu's starter size to Spec.
+		local Start = StartLine( Table, Spec )
+		Text( "MobStarter", StarterLine( Spec ),
+			"Cranking runs the battery down; a flat battery recovers some charge after a few minutes' rest. Link an ACE battery to the engine (menu tool, right click both) to start from it instead. The starter cuts out after about 30 s of cranking and cranks again once it cools." )
+		Text( "MobStart", Start,
+			"Engine alone in neutral, from the request (Active = 1) to running. Cold oil and a cold charge slow it; a bigger starter and glow plug preheat speed it up." )
+
+		-- Follow the starter setup sliders.
+		local Label = acemenupanel.CData["MobStart_text"]
+		local StarterLabel = acemenupanel.CData["MobStarter_text"]
+		if IsValid( Label ) then
+			local Key, NextCheck = nil, 0
+			Label.Think = function( Self )
+				local Now = RealTime()
+				if Now < NextCheck then return end
+				NextCheck = Now + 0.3
+				local New = GetConVar( SizeVar ):GetString() .. "|" .. GetConVar( PreheatVar ):GetString()
+				if Key == nil then Key = New return end
+				if New == Key then return end
+				Key = New
+				Self:SetText( StartLine( Table, Spec ) )
+				if IsValid( StarterLabel ) then StarterLabel:SetText( StarterLine( Spec ) ) end
+			end
+		end
+
+		Text( "MobSetup", "Engine setup:", nil, "DermaDefaultBold" )
+		local CData = acemenupanel.CData
+		if not IsValid( CData.CoolingChoice ) then
+			local Box = vgui.Create( "DComboBox" )
+			Box:SetTall( 20 )
+			Box:SetTooltip( "Air-cooled engines have finned cylinders and no coolant; liquid-cooled ones have a water jacket and need radiators under load. Weight and power stay the same (estimated). Applies to engines this tool spawns or updates." )
+			Box:AddChoice( "Cooling: as built (" .. ( ACE.Mobility.Engine.IsAirCooled( Table ) and "air" or "liquid" ) .. ")", "", Choice == "" )
+			Box:AddChoice( "Cooling: air", "air", Choice == "air" )
+			Box:AddChoice( "Cooling: liquid", "liquid", Choice == "liquid" )
+			Box.OnSelect = function( _, _, _, Data )
+				RunConsoleCommand( CoolingVar, Data )
+				local Label = acemenupanel.CData["MobCooling_text"]
+				if IsValid( Label ) then
+					local Now = Data == "air" or Data ~= "liquid" and ACE.Mobility.Engine.IsAirCooled( Table )
+					Label:SetText( Now and "Air-cooled: finned cylinders cooled by the engine's own fan or propeller wash plus the air it moves through. EngineHeat output = oil °C; Block Temp = cylinder heads, limit 260 °C." or "EngineHeat output = coolant °C (thermostat 82, boils at 120). Cold oil adds friction: about 2x at 20 °C, up to 4x. Oil past 150 °C wears the engine." )
+				end
+			end
+			CData.CoolingChoice = Box
+			acemenupanel.CustomDisplay:AddItem( Box )
+		end
+		Slider( "StarterSize", "Starter size (x)", 0.5, 3, 2, SizeVar,
+			"Torque and current of the starter and its battery against the standard size. Bigger cranks faster and starts cold engines, but adds weight." )
+		if Spec.Kind == "diesel" then
+			Slider( "StarterPreheat", "Glow plug preheat at -20 °C (s)", 0, 30, 0, PreheatVar,
+				"How long the glow plugs heat before cranking on a frozen engine. Shorter as the coolant warms, none above 60 °C. 0 = no glow plugs." )
+		end
+	end
 end

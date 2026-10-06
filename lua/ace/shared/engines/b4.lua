@@ -122,3 +122,29 @@ ACE.DefineEngine( "14.3-B4", {
 	limitrpm = 2600
 } )
 ]]--
+
+ACE.DefineEngine( "5.9-B4", {
+	name = "5.9L Flat 4 Petrol",
+	desc = "Lycoming O-360-A, the light aircraft flat four: 180 hp at 2,700 rpm. Air-cooled, low revving and heavy for its power next to a car engine, but it does not boil.",
+	model = "models/engines/b4med.mdl",
+	sound = "acf_engines/b4_petrolmedium.wav",
+	category = "B4",
+	fuel = "Petrol",
+	cooling = "air",
+	enginetype = "B4",
+	-- O-360-A1A (FAA type certificate E-286, via Wikipedia): 134 kW (180 hp) at 2,700 rpm,
+	-- 117 kg dry, 5.9 L, bore 130 x stroke 111 mm, 8.5:1.
+	weight = 117,
+	torque = 480,
+	displacement = 5.9,
+	cylinders = 4,
+	stroke = 0.111,
+	compression = 8.5,
+	-- No full-throttle torque curve is published for direct-drive aero engines (they run on a
+	-- propeller, rated at maximum speed). Estimated: nearly flat, highest at 75-85 % of rated
+	-- speed, so power peaks at the rated speed as the type certificate gives it.
+	torquecurve = {0.70, 0.76, 0.82, 0.87, 0.91, 0.94, 0.965, 0.98, 0.99, 1.0, 1.0, 0.995, 0.99},
+	flywheelmass = 0.3,
+	idlerpm = 650, -- estimated
+	limitrpm = 2700
+} )
