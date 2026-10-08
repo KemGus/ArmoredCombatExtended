@@ -58,10 +58,11 @@ end
 	  30 mΩ DC resistance × 5 A / 3.63 V = 0.041.
 	CellCp: specific heat of the cells [J/(kg·K)], Steinhardt 2022 median for cylindrical cells.
 	CaseCp: steel housing [J/(kg·K)], Steinhardt 2022 table 3.
-	SkinH: natural convection from the pack's outer skin [W/(m²·K)]; Incropera table 1.1 gives
-	  2-25, the same 10 the engine skin uses (estimated).
+	SkinH: natural convection from the pack's outer skin [W/(m²·K)]: 10, the same as the engine
+	  skin (estimated).
 	PlateH: cells to coolant through a liquid cold plate [W/(m²·K)] (estimated, inside the
-	  100-1000 range of forced liquid convection, Incropera table 1.1), over PlateShare of the
+	  50-10,000 range of forced liquid convection,
+	  engineeringtoolbox.com/convective-heat-transfer-d_430.html), over PlateShare of the
 	  pack's outer area (plates under the modules and fins between them: about a third,
 	  estimated).
 	LoopC: coolant flow of a battery loop as a capacity rate [W/K]: about 10 L/min of
@@ -351,8 +352,7 @@ end
 
 	LeadWhPerW: capacity per watt of the starter's rated (most) power. A car's 1.4 kW starter
 	  runs from a 12 V 60 Ah (720 Wh) battery, a heavy truck's 7 kW from 24 V 2 x 12 V 140 Ah
-	  (3.4 kWh): 0.5 Wh per W (estimated from those two; Bosch Automotive Handbook, starter
-	  batteries).
+	  (3.4 kWh): 0.5 Wh per W (estimated from those two, themselves estimated).
 	LeadAvailShare: 0.3, so at cranking currents (5-10 C) about a third of the charge can be
 	  drawn before the voltage collapses, in line with Peukert's law for lead-acid (exponent
 	  1.2-1.3: a 60 Ah battery at 400 A gives out ~17 Ah). Estimated.

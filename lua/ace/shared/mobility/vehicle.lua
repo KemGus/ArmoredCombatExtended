@@ -60,7 +60,7 @@ function Vehicle.Ground(ShareMass, R, GroundSpeed, Mu, NormalLoad, Grounded, Whe
 		W = WheelW
 	elseif WheelW then
 		-- Adhesion band: below roughly 0.3 m/s or 8 % slip a tyre is still in its linear,
-		-- mostly-elastic region (Pacejka, Tire and Vehicle Dynamics, 3rd ed., §1.2 and §3.2).
+		-- mostly-elastic region (estimated).
 		local Slip = math.abs(WheelW * R - GroundSpeed)
 		if Slip < max(0.3, 0.08 * math.abs(GroundSpeed)) then W = WheelW end
 	end

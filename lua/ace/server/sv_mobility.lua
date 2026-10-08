@@ -114,9 +114,10 @@ end
 	Peak tyre-road friction coefficients for a rubber tyre on dry surfaces, by the ground's
 	surface material. Source's own friction values are game tuning (their product reaches 2-3),
 	not real coefficients, so they are not used here.
-	Sources: Wong, Theory of Ground Vehicles, 4th ed., Table 1.3 (asphalt/concrete 0.8-0.9,
-	earth road 0.68, gravel 0.6, snow 0.2, ice 0.1); Gillespie, Fundamentals of Vehicle
-	Dynamics, Table 10.1; loose sand and grass from off-road tractive data (Wong ch. 2, 0.3-0.5).
+	Source: Wong, Theory of Ground Vehicles, 2nd ed., p. 26, average peak values as reproduced at
+	hpwizard.com/tire-friction-coefficient.html (asphalt/concrete dry 0.8-0.9, earth road dry
+	0.68, gravel 0.6, hard-packed snow 0.2, ice 0.1). Tile, grass, sand and the rest are
+	(estimated): that table has no grass or sand row.
 ]]
 local TyreMu = {}
 for Name, Mu in pairs({
@@ -131,9 +132,10 @@ for Name, Mu in pairs({
 end
 local DefaultTyreMu = 0.8
 
--- Steel (tracks, metal wheels) on the ground grips less than rubber on hard ground: about
--- 0.4-0.6 dry (Wong Table 1.3, steel wheel on rail 0.25-0.4; tracked vehicles on soil rely on
--- shear, not friction, which the contact solve handles).
+-- Steel (tracks, metal wheels) on the ground grips less than rubber on hard ground: 0.6 is
+-- (estimated), at the low end of dry steel on steel (0.5-0.8 static, 0.42 kinetic,
+-- engineeringtoolbox.com/friction-coefficients-d_778.html). Tracked vehicles on soil rely on
+-- shear, not friction, which the contact solve handles.
 local SteelMuCap = 0.6
 
 local function isRubber(Name)
@@ -925,7 +927,7 @@ local function solveGroup(Ctx, EngineDescs, Roots, PhysMass, TotalMass, Dt)
 	--[[
 		Brake bias. A stop moves load onto the wheels ahead of the centre of mass (in the
 		direction of travel) and off those behind it, and brake systems are proportioned to
-		match (about 60-70 % front on road vehicles, Gillespie ch. 3): the trailing wheels get
+		match (about 60-70 % front on road vehicles, estimated): the trailing wheels get
 		less torque so they are not the first to lock, which would swing the vehicle round.
 	]]
 	local Root = Ctx.WheelList[1] and ACE.GetPhysicalParent(Ctx.WheelList[1].Box)
@@ -1034,10 +1036,12 @@ local function solveGroup(Ctx, EngineDescs, Roots, PhysMass, TotalMass, Dt)
 		end
 		W.WasSliding = Sliding
 		--[[
-			Rolling resistance: about 0.012 of the load for tyres on a hard road (Gillespie ch. 4).
+			Rolling resistance: about 0.012 of the load for tyres on a hard road (car tyres on
+			concrete/asphalt 0.010-0.015, engineeringtoolbox.com/rolling-friction-resistance-d_1303.html).
 			A track adds its internal losses (pin joints, road wheels and idlers flexing the
-			track), about 0.03-0.05 of vehicle weight on hard ground (Wong, Theory of Ground
-			Vehicles, 4th ed., ch. 2), so sprockets driving through a track use 0.04.
+			track): a tracked vehicle measured 0.045 and 0.06 on a cement and a sand road
+			(pmc.ncbi.nlm.nih.gov/articles/PMC10490626), so sprockets driving through a track
+			use 0.04 (estimated).
 		]]
 		local Crr = W.Meshed and (ACE.MobilityTrackResistance or 0.04) or (ACE.MobilityRollingResistance or 0.012)
 		W.RollDrag = W.Grounded and Crr * Share * Gravity * W.Radius or 0
@@ -1045,7 +1049,7 @@ local function solveGroup(Ctx, EngineDescs, Roots, PhysMass, TotalMass, Dt)
 			Full pedal is 2.5 times the torque that locks the wheel under an equal share of the
 			weight (1.0 behind the centre of mass, see the brake bias above). Braking moves load
 			forward (the front axle of a high vehicle carries up to about 70 % of the weight in a
-			hard stop, Gillespie, Fundamentals of Vehicle Dynamics, ch. 3), so locking a front wheel
+			hard stop, estimated), so locking a front wheel
 			takes about 1.4 times its equal share; brake systems are sized to lock the wheels part
 			way down the pedal with reserve left for fade, so full pedal always locks.
 		]]

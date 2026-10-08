@@ -11,7 +11,7 @@
 	Q_in is the heat the combustion gas and friction put into the engine; it reaches the air only
 	through the coolant (the radiators) and, weakly, through the engine's own skin (Gs) and oil
 	pan (Gos). Q_oil is the part of it dissipated in the oil: most of the bearing, valve train
-	and ring friction, and a little of the piston's gas heat (Heywood ch. 12-13). The oil gives
+	and ring friction, and a little of the piston's gas heat (estimated). The oil gives
 	it up to the coolant through the oil cooler and the coolant-jacketed crankcase (Goc). The
 	metal-coolant pair is solved exactly for conductances frozen over the step, and the oil node
 	exactly against the coolant temperature at the start of the step, so results do not depend
@@ -19,7 +19,6 @@
 	friction (Thermal.FrictionMul).
 
 	References (full list and status in docs/mobility-sources.md, section thermal_model.lua):
-	- J. B. Heywood, Internal Combustion Engine Fundamentals, 2nd ed., 2018, ch. 12.
 	- MIT 2.61 Internal Combustion Engines lecture notes, lecture 18 "Engine Heat Transfer":
 	  heat transfer / fuel energy ∝ BMEP^-0.2 · N^-0.2; material limits (liner oil film ~200 °C,
 	  aluminium ~300 °C).
@@ -32,7 +31,8 @@
 	- Cummins QSB5.9-G1 genset spec sheet; Kharkiv V-2 family: cooling system 90-95 L.
 	- ASTM D341: Walther viscosity-temperature relation for petroleum oils. SAE J300: engine oil
 	  viscosity grades (kinematic viscosity at 100 °C).
-	- Incropera, table A.5: properties of engine oil.
+	- Wikipedia, "Nusselt number" (laminar flat plate Nu = 0.664·Re^0.5·Pr^(1/3)) and "NTU method".
+	- engineeringtoolbox.com/convective-heat-transfer-d_430.html: convection coefficient ranges.
 ]]
 
 ACE = ACE or {}
@@ -55,8 +55,7 @@ end
 
 -- Coolant: 50/50 ethylene glycol near 90 °C, cp 3.5 kJ/(kg·K), density 1.05 kg/L (MEGlobal
 -- ethylene glycol product guide, tables for 50 vol-%). Engine oil: cp 2.0 kJ/(kg·K), 0.87 kg/L
--- (Incropera table A.5, unused engine oil: cp 1.91-2.34 kJ/(kg·K) and 0.88-0.83 kg/L over
--- 300-400 K). Turbines circulate oil as their coolant; piston engines carry it in the sump.
+-- (estimated). Turbines circulate oil as their coolant; piston engines carry it in the sump.
 local GlycolC = 3500 * 1.05 -- J/(K·L)
 local OilC    = 2000 * 0.87 -- J/(K·L)
 Thermal.CoolantCPerLitre = GlycolC
@@ -98,7 +97,7 @@ local AirRho, AirCp = 1.13, 1007
 	  loses health at DamageRate of its maximum per second per 50 K. These shapes are estimated
 	  for gameplay; the anchoring temperatures are cited.
 	CoolantMax: most of the fuel energy that can go to the coolant at light load (20-60% range,
-	  FSAE wiki "Cooling"; Heywood ch. 12).
+	  FSAE wiki "Cooling").
 	Builtin: multiplier on ace_engine_builtin_cooling for this kind (how generously the engine's
 	  own cooling is sized).
 
@@ -109,8 +108,8 @@ local AirRho, AirCp = 1.13, 1007
 	  and 1-2 L per litre on petrol engines (4-4.5 L on a 2 L four, 5-8 L on a 6 L V8): 2.0 for
 	  diesels and 1.5 for petrol engines are used (estimated from service data, not re-checked).
 	  OilLPerKW is the fallback with no displacement (0.1 L/kW, estimated).
-	OilFricFrac: share of the friction work dissipated in the oil rather than the liner. Heywood
-	  ch. 13 splits rubbing friction about half to the pistons and rings, the rest to bearings,
+	OilFricFrac: share of the friction work dissipated in the oil rather than the liner. Rubbing
+	  friction goes about half to the pistons and rings (estimated), the rest to bearings,
 	  valve train and auxiliaries; the bearings and valve train heat their oil, and about half of
 	  the ring friction heats the liner wall instead: 0.6 (estimated).
 	OilGasFrac: share of the combustion gas heat reaching the oil, through the piston crown,
@@ -129,8 +128,8 @@ local AirRho, AirCp = 1.13, 1007
 	ViscExp: friction multiplier = (ν / ν_ref)^ViscExp. Hydrodynamic film friction grows with
 	  viscosity, boundary and mixed friction does not, so FMEP grows much more slowly than the
 	  viscosity: 0.24 (estimated) gives a 20 °C engine about twice its warm friction and 0 °C
-	  about 2.8 times, in line with cold-start friction measurements (Heywood ch. 13 notes
-	  friction falls substantially as the oil warms). FrictionMulMin and FrictionMulMax clamp it:
+	  about 2.8 times (friction falls substantially as the oil warms; the size of it is
+	  estimated). FrictionMulMin and FrictionMulMax clamp it:
 	  thinned oil saves little once the film is down to boundary contact (0.8), and the curve is
 	  not extrapolated past 4, reached near -15 °C (both estimated).
 	OilHot: the overlay warns of hot oil above this [°C]. OilDamageStart: past it the oil film
@@ -202,7 +201,7 @@ Thermal.Kinds.rotary = Thermal.Kinds.si
 	  3.8 m² of fins) at about 215 °C climbing at full power and 170 °C cruising, against
 	  Lycoming's 435 °F (224 °C) climb and 400 °F (205 °C) cruise recommendations.
 	FinChord: fin length along the air flow [m], for the flat-plate correlation (estimated, 5 cm).
-	FinEff: fin efficiency, 0.8 (aluminium fins, Incropera ch. 3; estimated).
+	FinEff: fin efficiency, 0.8 (aluminium fins; estimated).
 	WashV: air speed between the fins at rated engine speed from the engine's own blower or, on
 	  an aircraft, the propeller slipstream through the cowl baffles [m/s]; it follows engine
 	  speed. Engines without a fan (motorcycles, Spec.NoBlower) get none. 20 is used (estimated: a light aircraft's static slipstream is 25-35 m/s, the
@@ -238,13 +237,13 @@ Thermal.Kinds.air = airKind(Petrol10W30, 0.5)
 Thermal.Kinds.airdiesel = airKind(Diesel15W40, 0.6)
 
 -- Air between the fins (about 60 °C): conductivity [W/(m·K)], kinematic viscosity [m²/s],
--- Prandtl number (Incropera table A.4).
+-- Prandtl number (estimated air properties).
 local FinAirK, FinAirNu, FinAirPr = 0.029, 1.9e-5, 0.7
--- Natural convection from hot fins in still air [W/(m²·K)] (Incropera table 1.1: 2-25).
+-- Natural convection from hot fins in still air [W/(m²·K)] (estimated).
 local FinNaturalH = 8
 
 --- Heat transfer coefficient on an air-cooled engine's fins: laminar flat plate,
--- Nu = 0.664·Re^0.5·Pr^(1/3) (Incropera eq. 7.30), over the fin chord.
+-- Nu = 0.664·Re^0.5·Pr^(1/3) (en.wikipedia.org/wiki/Nusselt_number), over the fin chord.
 -- @param K table Air-cooled thermal kind.
 -- @param V number Air speed between the fins [m/s].
 -- @return number h [W/(m²·K)].
@@ -268,7 +267,7 @@ function Thermal.FinAirSpeed(K, SpeedFrac, AirSpeed, NoBlower)
 end
 
 -- Heat transfer coefficient from an engine's outer skin: natural convection to air is
--- 2-25 W/(m²·K) (Incropera, Fundamentals of Heat and Mass Transfer, table 1.1). Engines sit in
+-- a few to some tens of W/(m²·K); 10 is used (estimated). Engines sit in
 -- a hull, so no speed dependence is credited.
 local SkinH = 10
 -- Packaged engine density used to estimate its skin area from its mass [kg/m³] (estimated:
@@ -305,8 +304,8 @@ function Thermal.KindOf(Spec)
 	return Spec.Kind or "liquid"
 end
 
---- Effectiveness of a cross-flow heat exchanger, both fluids unmixed (Incropera eq. 11.32,
--- as used by Padmaraman et al. 2021).
+--- Effectiveness of a cross-flow heat exchanger, both fluids unmixed (as used by Padmaraman
+-- et al. 2021, eq. 8).
 -- @param UA number Overall conductance [W/K].
 -- @param Ca number Capacity rate of one stream [W/K].
 -- @param Cb number Capacity rate of the other stream [W/K].

@@ -63,8 +63,8 @@ do
 		local Brake = M.Engine.IndicatedWOT(Spec, W) - M.Engine.FrictionTorque(Spec, W, 1) - M.Engine.PumpingTorque(Spec, 1)
 		near(Brake, Spec.BrakeWOT(W), 1e-6, "WOT brake torque matches curve at " .. RPM)
 	end
-	-- Closed-throttle losses at 3000 RPM on a 5.7 L SI engine: Heywood fig. 13-12 puts total
-	-- motoring mep (friction + pumping) around 1.5-2.5 bar, i.e. 70-110 N·m here.
+	-- Closed-throttle losses at 3000 RPM on a 5.7 L SI engine: total motoring mep (friction +
+	-- pumping) around 1.5-2.5 bar (estimated), i.e. 70-110 N·m here.
 	local W = 3000 * math.pi / 30
 	local Motoring = M.Engine.FrictionTorque(Spec, W, 0) + M.Engine.PumpingTorque(Spec, 0)
 	check(Motoring > 60 and Motoring < 120, "motoring torque plausible", Motoring)

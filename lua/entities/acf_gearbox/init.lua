@@ -8,7 +8,8 @@ local GearboxTable = ACE.Weapons.Gearboxes
 --[[
 	Custom clutch capacity, as a multiple of the linked engines' peak torque (the reserve
 	factor clutch makers size with: about 1.2-1.5 for cars, 1.5-2 for diesels and trucks,
-	Naunheimer et al., Automotive Transmissions, clutch dimensioning - recalled, not re-checked).
+	estimated; one clutch maker builds a 20 % margin into its ratings, phoenixfriction.com,
+	another advises at least 2 for engines, ogura-clutch.com).
 	The disc has to fit the gearbox's bell housing, which grows with the gearbox: one plate the
 	size the housing takes carries the gearbox's own rating. Past that a second plate is added
 	(twin-plate clutches, as on heavy trucks and tanks), up to twice the rating; no more fits.
@@ -631,8 +632,8 @@ end
 local RPMToRad = math.pi / 30
 
 -- Clutch heat: a dry clutch pack of a few kg of steel and friction material. Its size scales
--- with the gearbox torque rating. Organic facings fade from ~250 °C and are destroyed near
--- 350-400 °C (Shigley §16-8, and SAE J1916-style clutch-temperature practice).
+-- with the gearbox torque rating. Organic facings fade from ~250 °C (friction falls to 0.25 or
+-- lower, patent US5670231) and are destroyed near 350-400 °C (estimated).
 local ClutchSpecificHeat = 460       -- J/(kg·K), steel
 local ClutchFadeStart = 250           -- °C
 local ClutchFadeEnd = 450             -- °C, capacity down to the fade floor
@@ -939,8 +940,8 @@ function ENT:MobilityControl(Dt)
 
 	--[[
 		A clutch bolted to the engine is sized for that engine, not for the gearbox's torque
-		rating: about 1.2-2 times peak engine torque (clutch reserve factor, Naunheimer et al.,
-		Automotive Transmissions, 2nd ed., clutch dimensioning). With the gearbox rating as full
+		rating: about 1.2-2 times peak engine torque (clutch reserve factor, see the top of this
+		file). With the gearbox rating as full
 		capacity a half-pressed pedal could still carry several times the engine's torque and
 		would never slip. The pedal scales this capacity linearly (0.5 = half the clamp force).
 	]]
@@ -961,7 +962,8 @@ function ENT:MobilityControl(Dt)
 	--[[
 		A custom clutch is sized to the engine, not the gearbox: it can be made stronger than the
 		gears behind it (they then wear when overloaded, see MobilityApply) or weaker. Clutch
-		capacity T = mu * F * r * n (Shigley ch. 16): at the same facing pressure the torque grows
+		capacity T = mu * F * r * n (mean friction radius r, n friction faces): at the same facing
+		pressure the torque grows
 		with the disc radius cubed, so the driven disc's inertia (mass r^2, thickness kept) grows
 		with T^(4/3). A 300 N·m car clutch's driven disc is about 0.005 kg·m² (estimated). That
 		inertia must be stopped and spun up by the synchronisers at every shift, so a strong

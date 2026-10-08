@@ -56,9 +56,8 @@ local max = math.max
 --[[
 	Drag that only exists while something turns fades in from standstill instead of acting at
 	full strength on the slightest motion. Gearbox no-load losses (oil churning, bearings) grow
-	with shaft speed (Naunheimer et al., Automotive Transmissions, 2nd ed., on load-independent
-	losses), and rolling resistance gets a smooth onset near zero speed, as tyre models give it
-	to stay well behaved at standstill (Pacejka, Tire and Vehicle Dynamics). Applied as full Coulomb
+	with shaft speed (estimated), and rolling resistance gets a smooth onset near zero speed, so
+	it stays well behaved at standstill (estimated). Applied as full Coulomb
 	friction to a standing vehicle, the solver's drag on a shaft geared to the wheels went
 	through the wheels into the road, the tyre handed it back reversed, and the wheels turned
 	back and forth on their own (buggy, clutch pressed: 85 N·m of churning on each axle box
@@ -524,7 +523,7 @@ function Drivetrain.Step(Sys, Dt, Substeps, Iterations)
 
 		for _, Gearbox in ipairs(Sys.Gearboxes) do
 			for _, C in ipairs(Gearbox.Inputs or {}) do
-				-- Clutch slip heat: transmitted torque × slip speed (Shigley §16-8).
+				-- Clutch slip heat: transmitted torque × slip speed (power = torque × angular speed).
 				local Slip = abs(C.Bodies[1].W * C.Coefs[1] + C.Bodies[2].W * C.Coefs[2])
 				Gearbox.ClutchHeatJ = Gearbox.ClutchHeatJ + abs(C.Acc) * Slip
 			end

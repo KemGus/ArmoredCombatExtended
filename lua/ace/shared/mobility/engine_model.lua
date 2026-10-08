@@ -4,9 +4,9 @@
 	can be unit-tested under LuaJIT.
 
 	References (full list in docs/mobility-sources.md):
-	- J. B. Heywood, Internal Combustion Engine Fundamentals, 2nd ed., McGraw-Hill 2018.
-	  Ch. 2 (mean effective pressure, T = mep·Vd/(2π·nR)), ch. 13 (friction, pumping),
-	  ch. 12 (energy balance), App. D (fuel heating values).
+	- Mean effective pressure: T = mep·Vd/(2π·nR) (en.wikipedia.org/wiki/Mean_effective_pressure).
+	- Fuel heating values: engineeringtoolbox.com/fuels-higher-calorific-values-d_169.html.
+	- Values marked (estimated) are typical figures not checked against a source.
 	- Chen & Flynn, SAE 650733 (1965): FMEP = A + B·pmax + C·Sp + D·Sp², Sp = mean piston
 	  speed. Constants fitted to measured motoring torque: EPA ALPHA engine packages (SI) and
 	  the VECTO generic engines' motoring curves (diesel).
@@ -39,21 +39,21 @@ local sin, cos, sqrt = math.sin, math.cos, math.sqrt
 	That is what holds a car parked in gear with the engine off, and what makes a stopping
 	engine shudder and rock back before it settles.
 	Atmosphere: 1.013 bar. Intake valve closing 45 deg after bottom centre, exhaust valve
-	opening 45 deg before it: typical four-stroke timing, 40-60 deg each (Heywood 6.3). The gas
+	opening 45 deg before it: typical four-stroke timing (estimated). The gas
 	is trapped only between the two.
 	RodRatio: crank radius over connecting rod length, 0.25-0.33 in production engines
-	(Heywood 2.2 gives rod length over crank radius as 3-4).
+	(estimated).
 	Heat: compressing the charge heats it (adiabatic, gamma 1.4 for air) and the walls draw that
 	heat off with a time constant WallTau. Squeezed slowly (a parked car), the charge stays at
 	wall temperature and the spring is isothermal and lossless; squeezed at about the speed of
 	WallTau, part of the work leaves as heat and the spring damps, which is what stops a crank
 	that gets pushed round from bouncing on its cylinders. WallTau: trapped air of a 0.5 L
 	cylinder is ~0.6 g (c_v 718 J/kg·K, so 0.43 J/K), against ~0.02 m² of wall at a quiescent
-	heat transfer coefficient of ~100 W/m²·K (Heywood 12.4 puts motored low-speed values at
-	100-300): 0.43 / (100 · 0.02) ~ 0.2 s. Trapped mass and wall area both grow with bore,
+	heat transfer coefficient of ~100 W/m²·K (estimated): 0.43 / (100 · 0.02) ~ 0.2 s. Trapped mass and wall area both grow with bore,
 	so the same value is used for every size (an estimate, not a measurement).
 	Leak: the charge escapes past the rings at a rate proportional to its excess pressure.
-	Blowby in a healthy engine is about 1 % of the charge per cycle (Heywood 8.6), lost mostly
+	Blowby in a healthy engine is about 1 % of the charge (a common engine-builder rule of thumb,
+	ricksfreeautorepairadvice.com/engine-blow-by-understanding-the-basics), lost mostly
 	while the cylinder is near peak pressure: at 2,000 rpm a cycle is 60 ms and the
 	high-pressure quarter of it 15 ms, at about 40 bar over ambient. So 0.01 of the charge in
 	0.015 s per 40 bar: GasLeak = 0.01 / 0.015 / 40 = 0.017 of a cylinder's charge per second
@@ -114,19 +114,22 @@ Engine.SampleCurve = sampleCurve
 	  literature) and the pumping value below; A is what remains.
 	PumpClosed: pumping MEP with the throttle shut [bar]; PumpOpen at wide-open throttle.
 	  SI engines idle at ~0.3 bar manifold pressure, so closed-throttle pumping is ~0.7-0.8 bar
-	  (Heywood 13.2). Diesels are unthrottled: pumping stays near the WOT value, which is why
+	  (estimated). Diesels are unthrottled: pumping stays near the WOT value, which is why
 	  diesels have weak engine braking.
 	PmaxIdle: motoring peak pressure from polytropic compression p·rc^n (SI: 0.3 bar manifold,
 	  rc 10, n 1.3 -> 6 bar; diesel: 1 bar, rc 16, n 1.35 -> 42 bar). PmaxFull: typical
-	  full-load peak pressure (Heywood 9.2, 10.2).
-	EtaIndicated: gross indicated fuel conversion efficiency (Heywood 5.7): SI ~0.36, DI diesel ~0.45.
-	CoolantFrac: share of fuel energy rejected to coolant (Heywood 12.1, table 12.1).
+	  full-load peak pressure (estimated).
+	EtaIndicated: gross indicated fuel conversion efficiency: SI ~0.36, DI diesel ~0.45 (estimated).
+	CoolantFrac: share of fuel energy rejected to coolant: 20-30 % in published heat balances
+	  (one diesel full-load example: 30 % work, 30 % coolant, 26 % exhaust); SI 0.28, diesel 0.25
+	  (estimated within that range).
 	IdleAuthority: most air/fuel the idle governor may add. A petrol idle-air valve or
 	  drive-by-wire idle controller only opens far enough to catch the engine, not to pull a car; a diesel's mechanical governor can deliver
 	  full fuel to hold idle, which is why diesels crawl in gear with no throttle.
-	LHV: lower heating value [J/kg] (Heywood App. D).
+	LHV: lower heating value [J/kg]: diesel 42.6 MJ/kg
+	  (engineeringtoolbox.com/fuels-higher-calorific-values-d_169.html).
 CompressionRatio: geometric compression ratio, the same values PmaxIdle is computed from
-  (Heywood 1.3: SI 8-12, diesel 12-24). GasSpring: the cylinders are modelled one by one as
+  (petrol 8-12, diesel 14-23, en.wikipedia.org/wiki/Compression_ratio). GasSpring: the cylinders are modelled one by one as
   gas springs while the engine stands or turns slowly (see Engine.GasTorque).
 ]]
 Engine.Kinds = {
@@ -305,8 +308,9 @@ function Engine.Build(Def, Curve)
 
 	local DispL = Engine.Displacement(Def)
 	if not DispL or DispL <= 0 then
-		-- Unknown size: back out displacement from peak torque via BMEP. Heywood 2.7 puts
-		-- naturally aspirated SI at ~10 bar and turbo diesels at ~15-20 bar at peak torque.
+		-- Unknown size: back out displacement from peak torque via BMEP: ~10 bar for naturally
+		-- aspirated SI and 16 bar for diesels (estimated; en.wikipedia.org/wiki/Mean_effective_pressure
+		-- gives 13 bar as the maximum for NA petrol and 20 bar for turbo diesel car engines).
 		local Bmep = (Kind == "diesel") and 16 or 10
 		DispL = Def.torque * 4 * pi / (Bmep * BarToPa) * 1000
 	end
@@ -321,7 +325,8 @@ function Engine.Build(Def, Curve)
 		-- Square engine (bore = stroke) when geometry is not given.
 		local Vcyl = Spec.Vd / Cyl
 		Spec.Stroke = Def.stroke or (4 * Vcyl / pi) ^ (1 / 3)
-		-- Converts a mean effective pressure [Pa] into crank torque [N·m] (Heywood eq. 2.19).
+		-- Converts a mean effective pressure [Pa] into crank torque [N·m]
+		-- (en.wikipedia.org/wiki/Mean_effective_pressure).
 		Spec.MepToTorque = Spec.Vd / (2 * pi * (K.Strokes / 2))
 	end
 
@@ -583,7 +588,8 @@ end
 	not at all. The battery's sag is solved with the same current, so a small pack fed hard sags
 	more than a large one.
 	StarterKneeW: ωk, 200 rpm at the crank: starters are matched so their most power falls at
-	  the engine's cranking speed (150-300 rpm, Heywood 7.6). Estimated.
+	  the engine's cranking speed (150-250 rpm, carscounsel.com/calculators/cranking-pressure-calculator).
+	  Estimated.
 	StarterRefSag: the starter is rated at its stall current from a battery whose terminal
 	  voltage drops 20 % (12 V systems sit near 9.6-10 V while cranking; SAE J537 lets a
 	  battery fall to 7.2 V at its cold cranking current). Estimated. An engine with no battery
@@ -593,8 +599,8 @@ end
 	  1). Torque and current scale with it at the same max-power speed.
 	StarterDrag: an ideal series motor speeds up without limit as its load falls; a real one
 	  is held back by brush and bearing friction, windage and armature reaction, so that its
-	  no-load speed is only 2-3 times its max-power speed (starter characteristic curves, Bosch
-	  Automotive Handbook, starting systems; pinion-to-ring-gear ratios 1:10-1:15). Modelled as a
+	  no-load speed is only 2-3 times its max-power speed (estimated; pinion-to-ring-gear ratios
+	  1:10-1:15, estimated). Modelled as a
 	  constant drag that puts the free speed at 2.5 x ωk (500 rpm at the crank, estimated). Before
 	  it, a warm 3.3 L diesel cranked at 600 rpm, its idle speed; now about 380 rpm.
 	Duty: manufacturers allow 30 s of cranking, then about 2 minutes to cool (Delco Remy
@@ -621,8 +627,7 @@ Engine.StarterRefSag = StarterRefSag
 
 --- Rated torque and power of an engine's starter.
 -- Stall torque is a margin over breakaway: four times the losses at rest plus 1.5 times the
--- cylinders' compression peak (starter selection works from the engine's breakaway torque,
--- Bosch Automotive Handbook, starting systems). Spec.StarterMul scales the result.
+-- cylinders' compression peak (estimated margin). Spec.StarterMul scales the result.
 -- @param Spec table Engine spec.
 -- @return number Stall torque at the crank [N·m], at the rated terminal voltage.
 -- @return number Electrical power drawn at stall [W] (Tstall·ωk); the most mechanical power
@@ -661,13 +666,11 @@ end
 	of its cycles fire to run it up past the speed it would stall at, and that depends on how
 	fast the starter turns it and how hot the air gets in the cylinders.
 	SyncAngle: no fuel or spark for the first two revolutions. An engine controller needs up to
-	  two crank turns to find top centre from the crank and cam sensors before it injects (Bosch
-	  Automotive Handbook, engine management: synchronisation), and a mechanical injection pump
-	  must fill its lines. Estimated.
+	  two crank turns to find top centre from the crank and cam sensors before it injects, and a
+	  mechanical injection pump must fill its lines. Estimated.
 	FireLoW, FireHiW: firing speed. Below ~60 rpm spark-ignition mixtures do not form well and a
-	  diesel's injection pump cannot build its pressure; by ~100 rpm both fire every cycle. Heywood
-	  7.6 gives cranking speeds of 150-300 rpm and minimum firing speeds well below them; the
-	  60-100 rpm band is estimated. Cold petrol needs ColdFireShiftW more at -20 °C (fuel
+	  diesel's injection pump cannot build its pressure; by ~100 rpm both fire every cycle. Cranking
+	  speeds are 150-250 rpm (see StarterKneeW); the 60-100 rpm band below them is estimated. Cold petrol needs ColdFireShiftW more at -20 °C (fuel
 	  evaporates poorly; estimated).
 	Wall wetting (petrol): much of the first fuel injected lands on the port and cylinder walls
 	  as a film and only reaches the charge as that film builds up and evaporates (the x-tau
@@ -682,7 +685,7 @@ end
 	  it is drawn past: Tcharge = Tair + WallShare·(Tblock - Tair) (estimated), plus whatever
 	  cranking and glow plugs add. The exponent n falls from CrankNHot (near-adiabatic, running
 	  speed) towards 1 (isothermal) as the strokes slow down and the walls take the heat away
-	  (Heywood 10.6, cold starting): n = CrankNHot - (CrankNHot - 1)·ωh/(ω + ωh). ωh = 48 rpm
+	  (estimated): n = CrankNHot - (CrankNHot - 1)·ωh/(ω + ωh). ωh = 48 rpm
 	  gives n ≈ 1.28 at 150 rpm, so a warm diesel's cranking compression pressure (1 bar·16^1.28)
 	  is ~35 bar, in the 28-35 bar workshop compression-test range (estimated).
 	  IgnitionLoK..IgnitionHiK: 700-780 K, from no cycle to every cycle firing. Estimated so
@@ -696,8 +699,8 @@ end
 	  up to 40 K, time constant 5 s; it cools off with a 60 s time constant once the crank stops).
 	Glow plugs: GlowBoostK is how much hotter the charge gets with the plugs at working
 	  temperature (estimated: a 900-1,000 °C tip in each chamber). They heat with a time constant
-	  GlowTau = 1.5 s (95 % in 4.5 s; steel glow plugs reach 850 °C in 2-5 s, Bosch glow plug
-	  data) and draw GlowW = 150 W each (12 V plugs take 10-25 A heating up, ~8 A hot; estimated).
+	  GlowTau = 1.5 s (95 % in 4.5 s; sheathed glow plugs reach 850 °C in about 3-8 s,
+	  patents.google.com/patent/US5091631) and draw GlowW = 150 W each (12 V plugs take 10-25 A heating up, ~8 A hot; estimated).
 	  The controller preheats before cranking, longest when cold: PreheatMax (a setting, default
 	  5 s) at -20 °C coolant and below, nothing at 10 °C and above, linear in between (estimated
 	  from glow-time-against-coolant maps of ~2-20 s; passenger-car direct-injection diesels skip
@@ -1045,8 +1048,7 @@ function Engine.Step(State, Throttle, Dt, Opts)
 		else
 			-- Spark-ignition rev limiter as modern engine controllers do it: a progressive
 			-- cylinder cut over the last ~150 RPM rather than an on/off fuel cut, so the engine
-			-- holds the limit and burns only what holding it takes (Bosch Automotive Handbook,
-			-- 10th ed., engine management: speed limitation by selective injection cut-off).
+			-- holds the limit and burns only what holding it takes (estimated).
 			local Band = 150 * RPMToRad
 			Load = min(Load, clamp((Spec.LimitW + 0.5 * Band - W) / Band, 0, 1))
 			State.Cut = W > Spec.LimitW + 0.5 * Band
@@ -1093,7 +1095,7 @@ function Engine.Step(State, Throttle, Dt, Opts)
 	State.FuelRate = Injected * max(W, 0) / K.EtaIndicated / K.LHV
 	-- Coolant heat: the share of fuel energy measured in the coolant on test beds. Friction
 	-- heat is part of that measurement (it ends up in the oil and coolant), so it is not added
-	-- again (Heywood 12.1, table 12.1).
+	-- again (estimated).
 	State.HeatRate = Pfuel * K.CoolantFrac
 
 	return Combustion + Starter + GasSpring, Loss

@@ -74,7 +74,8 @@ do
 	local Einf = Th.CrossFlowEffectiveness(1e6, 100, 1e9)
 	check(E0 == 0 and E1 > 0 and E2 > E1 and E2 < 1, "effectiveness grows with NTU", E1, E2)
 	check(math.abs(Einf - 1) < 1e-6, "one side infinite: 1 - exp(-NTU)", Einf)
-	-- Incropera table 11.3 check point: cross-flow unmixed, NTU 1, Cr 1 -> ε ≈ 0.48.
+	-- Check point: cross-flow unmixed, NTU 1, Cr 1 -> ε ≈ 0.48 (the exact series of
+	-- en.wikipedia.org/wiki/NTU_method, summed here, gives 0.476).
 	check(math.abs(E1 - 0.48) < 0.02, "cross-flow NTU 1, Cr 1", E1)
 
 	local Lo = Th.RadiatorRating(Front, Depth, Th.FaceVelocity(Depth, 0, 0), 80)

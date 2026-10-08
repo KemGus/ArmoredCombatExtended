@@ -5,9 +5,10 @@
 	Scale s is the linear size relative to the small model (1). Everything follows from geometric
 	similarity at the same material and stress:
 	  Torque rating ~ s^3. A gear tooth's bending strength is F = sigma * b * m * Y (Lewis
-	    equation, Shigley's Mechanical Engineering Design ch. 14): face width b and module m both
+	    bending equation, engineersedge.com/gears/lewis-factor.htm): face width b and module m both
 	    grow with s, so the tooth force grows with s^2 and the torque (force times pitch radius)
-	    with s^3. A shaft in torsion carries T = tau * pi * d^3 / 16 (Shigley ch. 3), also s^3.
+	    with s^3. A shaft in torsion carries T = tau * pi * d^3 / 16
+	    (en.wikipedia.org/wiki/Torsion_(mechanics)), also s^3.
 	  Mass ~ s^3: volume. Rating and mass grow together, so torque per kilogram stays the same,
 	    as in real gearboxes: about 10 N·m/kg from car manuals (around 400 N·m at 40-45 kg) to
 	    heavy-truck boxes (about 2,600 N·m at 280 kg), from manufacturer data sheets (recalled, not

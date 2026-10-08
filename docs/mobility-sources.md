@@ -14,10 +14,20 @@ Digitised charts were read from rendered PDF pages. Expect about ±1% error on t
 
 ### Engine friction, pumping and general engine theory
 
-- **[Heywood]** J. B. Heywood, *Internal Combustion Engine Fundamentals*, 2nd ed., McGraw-Hill, 2018.
-  Ch. 2 (mean effective pressure), 9-10 (combustion pressures), 12 (energy balance),
-  13 (friction and pumping), App. D (fuel properties). *These chapter citations were not
-  re-checked against the book during this pass.*
+- **Books are not cited.** Earlier versions cited Heywood, Shigley, Naunheimer, Kotwicki,
+  Wong, Gillespie, Pacejka, Incropera, Shah-Sekulic and the Bosch Automotive Handbook without
+  the books having been read. On 2026-10-08 every such citation was checked online: a value
+  found on a page that was actually read now cites that page; the rest are **Estimated**.
+- **[MEP]** Wikipedia, "Mean effective pressure", https://en.wikipedia.org/wiki/Mean_effective_pressure :
+  torque = MEP·Vd/(2π·nR); maximum BMEP 13 bar NA petrol, 22 bar turbo petrol, 20 bar turbo diesel
+  (passenger cars).
+- **[CR]** Wikipedia, "Compression ratio", https://en.wikipedia.org/wiki/Compression_ratio :
+  petrol cars 8-12, diesels 14-23.
+- **[ETB fuels]** Engineering ToolBox, "Fuels - Higher and Lower Calorific Values",
+  https://www.engineeringtoolbox.com/fuels-higher-calorific-values-d_169.html : LHV diesel 42.6,
+  kerosene 43.0, petrol 43.4 MJ/kg.
+- **[Cranking]** carscounsel.com cranking pressure calculator: cranking 150-200 rpm diesel,
+  150-250 rpm petrol (read through a search summary).
 - **[Chen-Flynn]** S. K. Chen, P. F. Flynn, "Development of a Single Cylinder Compression
   Ignition Research Engine", SAE 650733, 1965. Source of the FMEP = A + B·pmax + C·Sp + D·Sp² form.
 - **[Tadros 2025]** M. Tadros et al., "Engine Optimization Model for Accurate Prediction of
@@ -179,17 +189,29 @@ Digitised charts were read from rendered PDF pages. Expect about ±1% error on t
   standard, not re-checked.*
 - **[Delco Remy]** Delco Remy cranking motor service instructions: never crank more than 30 s
   at a time, then let the motor cool for at least 2 minutes; heavy-duty models (e.g. 39MT) offer
-  an over-crank protection thermal switch. *Quoted from memory, not re-checked.*
+  an over-crank protection thermal switch. *Quoted from memory, not checked: treat as Estimated.*
 - **[Fan laws]** Fan affinity laws (e.g. ASHRAE Handbook, *HVAC Systems and Equipment*, Fans):
   flow ∝ speed, pressure ∝ speed², power ∝ speed³, so shaft torque ∝ speed². Used for the
   belt-driven radiator fan below idle (ace_radiator).
 
-### Torque converter, gears, clutch, tyres (cited by the code; not re-verified in this pass)
+### Torque converter, gears, clutch, tyres (checked online 2026-10-08)
 
-- **[SAE J643]** SAE J643, *Hydrodynamic Drive Test Code*: K = N/√T and TR vs SR convention.
-- **[Naunheimer]** H. Naunheimer et al., *Automotive Transmissions*, 2nd ed., Springer 2011, §6.3.
-- **[Kotwicki]** A. J. Kotwicki, "Dynamic Models for Torque Converter Equipped Vehicles", SAE 820393, 1982.
-- **[Shigley]** Budynas & Nisbett, *Shigley's Mechanical Engineering Design*, §16-8 (clutch energy).
+- **[TC]** Wikipedia, "Torque converter", https://en.wikipedia.org/wiki/Torque_converter :
+  coupling phase from about 90 % turbine/impeller speed; stall torque ratio 1.8-2.5 automotive.
+- **[Tyre μ]** Wong, *Theory of Ground Vehicles*, 2nd ed., p. 26 and p. 17, as reproduced at
+  https://hpwizard.com/tire-friction-coefficient.html : peak μ dry asphalt/concrete 0.8-0.9,
+  earth road 0.68, gravel 0.6, packed snow 0.2, ice 0.1; car tyre rolling resistance 0.015 on concrete.
+- **[ETB Crr]** https://www.engineeringtoolbox.com/rolling-friction-resistance-d_1303.html :
+  ordinary car tyres on concrete/new asphalt 0.010-0.015.
+- **[Track Crr]** https://pmc.ncbi.nlm.nih.gov/articles/PMC10490626/ : a tracked vehicle measured
+  0.045 and 0.06 on a cement and a sand road.
+- **[ETB μ]** https://www.engineeringtoolbox.com/friction-coefficients-d_778.html : dry steel on
+  steel 0.5-0.8 static, 0.42 kinetic.
+- **[Lewis]** https://ns1.engineersedge.com/gears/lewis-factor.htm : W = σ·b·m·Y (read through a
+  search summary). **[Torsion]** https://en.wikipedia.org/wiki/Torsion_(mechanics) : τ = 16T/(πd³).
+- **[Clutch margin]** phoenixfriction.com (ratings carry a 20 % margin) and ogura-clutch.com (a
+  factor of at least 2 for engines), read through a search summary.
+- **[US5670231]** Clutch facing patent: phenolic facings fall to μ ≤ 0.25 above 250 °C (fade).
 
 ### Engine cooling (thermal_model.lua)
 
@@ -197,7 +219,8 @@ Digitised charts were read from rendered PDF pages. Expect about ±1% error on t
   Transfer". https://web.mit.edu/2.61/www/Lecture%20notes/Lec.%2018%20Heat%20transf.pdf .
   Heat transfer / fuel energy ∝ BMEP^-0.2 · N^-0.2 (from Nu ∝ Re^0.8); material limits cast iron
   ~400 °C, aluminium ~300 °C, liner oil film ~200 °C; head temperatures at 2000 rpm WOT with
-  95 °C coolant (after Heywood fig. 12-20).
+  95 °C coolant. Checked 2026-10-08 against the Spring 2017 notes,
+  https://ocw.mit.edu/courses/2-61-internal-combustion-engines-spring-2017/resources/mit2_61s17_lec18/ .
 - **[Padmaraman 2021]** S. Padmaraman, N. R. Mathivanan, B. R. Ponangi, "Heat Dissipation
   Characteristics of a FSAE Racecar Radiator", *Int. J. Heat and Technology* 39(5), 2021,
   https://doi.org/10.18280/ijht.390531 . ε-NTU cross-flow relation (eq. 8), core discharge
@@ -206,10 +229,9 @@ Digitised charts were read from rendered PDF pages. Expect about ±1% error on t
 - **[Kim-Bullard 2002]** N.-H. Kim, C. W. Bullard, "Air-side thermal hydraulic performance of
   multi-louvered fin aluminum heat exchangers", *Int. J. Refrigeration* 25(3), 2002, 390-400.
   j ∝ Re^-0.49, so h grows about as √(face velocity). Taken from abstracts and citing papers.
-- **[Shah-Sekulic]** R. K. Shah, D. P. Sekulić, *Fundamentals of Heat Exchanger Design*, Wiley,
-  2003. Compact automotive cores 1,000-2,500 m²/m³. *Not re-checked against the book.*
-- **[Incropera]** F. P. Incropera et al., *Fundamentals of Heat and Mass Transfer*, table 1.1
-  (free convection in gases 2-25 W/(m²·K)) and the cross-flow ε-NTU relation. *Not re-checked.*
+- **[ETB h]** https://www.engineeringtoolbox.com/convective-heat-transfer-d_430.html : free
+  convection in air 0.5-1000, forced air 10-1000, forced liquids 50-10,000 W/(m²·K). Compact
+  core area density 1,200 m²/m³ is **Estimated**.
 - **[Hella]** Hella, *Thermostats, thermoswitches & temperature sender units* brochure.
   https://www.hella.com/hella-za/assets/media_global/HASA_Thermo_Range_Borchure_LRes.pdf :
   a typical wax thermostat starts to open at 78-82 °C and is fully open at 95 °C; expansion tank
@@ -229,8 +251,7 @@ Digitised charts were read from rendered PDF pages. Expect about ±1% error on t
   log log(ν + 0.7) = A − B·log T, fitted through two measured viscosities.
 - **[SAE J300]** SAE J300, *Engine Oil Viscosity Classification*: kinematic viscosity at 100 °C,
   grade 30 9.3-12.5 mm²/s, grade 40 12.5-16.3 mm²/s. *From memory of the table, not re-checked.*
-- **[Incropera A.5]** Incropera et al., table A.5, unused engine oil: cp 1.91 / 2.12 / 2.34
-  kJ/(kg·K) and density 884 / 854 / 825 kg/m³ at 300 / 350 / 400 K. *Not re-checked.*
+- Engine oil cp about 2 kJ/(kg·K) and 0.87 kg/L: **Estimated** (book table not read).
 - **[API IIIG]** API engine oil Sequence IIIG / IIIH high-temperature oxidation and deposit
   tests run the oil at about 150 °C. *As recalled, not re-checked.*
 
@@ -304,10 +325,10 @@ Definitions with their own `inertia`: AGT1500 7.93 ([FI AGT1500]), Electric-Tiny
 | Piston speed | Sp = 2·S·N (mean piston speed) | Definition in [Chen-Flynn]. The old code used ω·S/2, which is π/2 × the mean piston speed |
 | B (all) | 0.005 | Middle of the 0.004-0.006 range in [Tadros 2025]. Only the split of the fitted constant depends on it |
 | PmaxIdle SI / diesel / rotary | 6 / 42 / 6 bar | **Derived**: polytropic compression p·rc^n. SI: 0.3 bar manifold, rc 10, n 1.3. Diesel: 1 bar, rc 16, n 1.35. The rc and n values are typical, so this is **estimated**. Old values: 15 / 40 / 12 |
-| PmaxFull SI / diesel / rotary | 60 / 150 / 55 bar | [Heywood] ch. 9-10 typical values, **not re-verified** |
-| PumpClosed / PumpOpen SI | 0.75 / 0.15 bar | [Heywood] 13.2: exhaust ≈ 1.05 bar minus idle manifold ≈ 0.3 bar. **Estimated split**: only the total motoring MEP is fitted to data |
+| PmaxFull SI / diesel / rotary | 60 / 150 / 55 bar | **Estimated** |
+| PumpClosed / PumpOpen SI | 0.75 / 0.15 bar | **Estimated**: exhaust ≈ 1.05 bar minus idle manifold ≈ 0.3 bar. **Estimated split**: only the total motoring MEP is fitted to data |
 | PumpClosed / PumpOpen diesel | 0.25 / 0.2 bar | **Estimated** (unthrottled). The total motoring MEP is fitted |
-| EtaIndicated SI / diesel / rotary | 0.36 / 0.45 / 0.30 | [Heywood] 5.7 typical, **not re-verified**. Rotary is **estimated** |
+| EtaIndicated SI / diesel / rotary | 0.36 / 0.45 / 0.30 | **Estimated** |
 | EtaIndicated turbine | 0.28 (was 0.25) | **Sourced**: [FI AGT1500] 0.30 kg/kWh at full power, 3.6/(0.30·42.8) = 0.28 |
 | EtaIndicated electric | removed (was a flat 0.9) | Replaced by the motor loss model below |
 | Motor losses CopperLoss·t² + InverterLoss·t (battery side), IronLoss·w² (shaft drag), ×Prated | 0.03 / 0.065 / 0.037 | **Fitted** by non-negative least squares to seven points read as the shape of the [Burress 2013] LEAF combined map (peak 96%, ≥90% over most of the envelope, ~90% at the peak-torque corner, ~80-85% at 10% torque and 10% speed). Result: peak 95.5%, 91% at the corner, 94.6% at full power and top speed. The seven points are a reading of the summary, not digitised contours, so treat as **estimated to ±2 points of efficiency** |
@@ -316,15 +337,15 @@ Definitions with their own `inertia`: AGT1500 7.93 ([FI AGT1500]), Electric-Tiny
 | Regen low-speed fade | 5% of top speed | **Estimated**. The fade speed is where the fitted losses equal the recovered power at regen torque, so below it regen would drain the battery. Real EVs blend in friction brakes there |
 | Regen charge limit | the linked battery's CC-CV charge acceptance (`ENT:ChargeAcceptW`) | See Batteries below. The limit is applied to the power reaching the battery; the torque is scaled down linearly when it is exceeded (`Engine.GeneratorLimit`) |
 | Direction (Reverse input) | +1 / −1; the inverter commands torque in the selected direction | Behaviour of a four-quadrant drive: a motor turning against the selected direction is braked by that torque (generating, limited like regen) down through zero, then driven the other way. No reversal is instant: the rotor and the vehicle geared to it pass through standstill. Regen on a negative throttle works in either direction |
-| CoolantFrac | 0.28 / 0.25 / 0.30 / 0.02 (SI / diesel / rotary / turbine) | [Heywood] table 12.1 for SI and diesel, **not re-verified**. The others are **estimated**. Motors put all of their losses (copper, inverter, core, bearings) into the engine's heat instead |
+| CoolantFrac | 0.28 / 0.25 / 0.30 / 0.02 (SI / diesel / rotary / turbine) | **Estimated**, inside the 20-30 % coolant share of published heat balances (search summary of lecture and paper heat balances). The others are **estimated**. Motors put all of their losses (copper, inverter, core, bearings) into the engine's heat instead |
 | LHV petrol (SI, rotary) | 43.3 MJ/kg (was 43.4) | **Sourced**: [EPA-TNGA] EPA test gasoline 43.31 MJ/kg |
-| LHV diesel / turbine fuel | 42.6 / 42.8 MJ/kg | [Heywood] App. D, **not re-verified** |
+| LHV diesel / turbine fuel | 42.6 / 42.8 MJ/kg | Diesel [ETB fuels]; turbine fuel **Estimated** (kerosene 43.0 there) |
 | Cylinder gas springs (`Engine.GasTorque`) | per cylinder, crank angle by crank angle, below 60 rpm (gone by 150) while not running | Physics: slider-crank kinematics, air trapped at ambient between intake closing and exhaust opening, adiabatic compression (gamma 1.4) relaxing to wall temperature. Holds a parked engine, creeps as the charge leaks, turns over past its peak |
-| CompressionRatio SI / diesel | 10 / 16 | [Heywood] 1.3 ranges (SI 8-12, diesel 12-24); the same values PmaxIdle already used. Definitions can override (`compression`) |
-| Valve timing | intake closes 45° after BDC, exhaust opens 45° before BDC | [Heywood] 6.3 typical 40-60° each, **estimated** midpoint |
-| Rod ratio | crank radius / rod 0.3 | [Heywood] 2.2: rod / crank radius 3-4. Definitions can override (`rodratio`) |
-| Blowby leak | 0.017 of a cylinder's charge per s per bar over ambient | **Derived**: ~1% of the charge per cycle ([Heywood] 8.6), lost over the 15 ms near peak pressure at 2,000 rpm, at ~40 bar: 0.01/0.015/40 |
-| Wall heat time constant | 0.2 s | **Estimated**: 0.6 g trapped air (0.43 J/K) against 0.02 m² of wall at 100 W/m²K ([Heywood] 12.4 motored low-speed range 100-300) |
+| CompressionRatio SI / diesel | 10 / 16 | [CR] ranges (petrol 8-12, diesel 14-23); the same values PmaxIdle already used. Definitions can override (`compression`) |
+| Valve timing | intake closes 45° after BDC, exhaust opens 45° before BDC | **Estimated** |
+| Rod ratio | crank radius / rod 0.3 | **Estimated**. Definitions can override (`rodratio`) |
+| Blowby leak | 0.017 of a cylinder's charge per s per bar over ambient | **Derived**: ~1% of the charge (engine-builder rule of thumb, ricksfreeautorepairadvice.com/engine-blow-by-understanding-the-basics), lost over the 15 ms near peak pressure at 2,000 rpm, at ~40 bar: 0.01/0.015/40 |
+| Wall heat time constant | 0.2 s | **Estimated**: 0.6 g trapped air (0.43 J/K) against 0.02 m² of wall at 100 W/m²K (**Estimated**) |
 | Pumping at low speed | fades in linearly from 0 at standstill to full at idle | Physics: pumping is a flow loss, there is no manifold vacuum without air flow. It used to act in full at rest as static friction |
 | Starter stall torque | 4 × losses at rest (warm oil) + 1.5 × compression peak, at the rated terminal voltage | **Estimated** margin over breakaway torque (starter selection works from it, Bosch Automotive Handbook, starting systems). Sized with the oil-viscosity multiplier taken out: cold oil makes the starter crank slower, it does not make it stronger |
 | StallFrac, IdleAuthority | 0.35 / 0.45 SI, 0.4 / 1 diesel | **Estimated** (control behaviour, not physical data) |
@@ -336,13 +357,13 @@ Definitions with their own `inertia`: AGT1500 7.93 ([FI AGT1500]), Electric-Tiny
 | Idle governor gains | Ki 2.5, Kp 1.5; start integrator 0.15 / 0.2; fast-idle authority 0.6 | **Estimated** (controller tuning) |
 | Start: when it catches / how long it cranks | no fixed catch speed any more: see "Starting" below / for as long as the start (Active) is held | The starter keeps cranking until the engine catches, Active goes to 0, its thermal cut-out opens or its battery is flat (the fixed 3 s attempt is gone). With the start held, a crank turned by the wheels fires the engine too (push start). The old rule (fires at 130 rpm, [Heywood] 7.6 cranking 150-300 rpm) is replaced by firing speed, compression temperature and a catch test, below |
 | Starter motor | series-wound DC: T = Tstall·x²/(1 + ω/ωk)², electrical power Pstall·x²/(1 + ω/ωk), winding loss Pstall·x²/(1 + ω/ωk)², Pstall = Tstall·ωk; x = terminal voltage / rated | Physics: series machine, T = c·I², I = U/(R + c·ω), unsaturated [Chapman]. Replaces a straight line from stall to a 450 rpm free speed, which was **estimated** |
-| Starter max-power speed ωk | 200 rpm at the crank | **Estimated**: starters are matched so their most power falls at the cranking speed, 150-300 rpm [Heywood] 7.6. Gives 6.7 kW electrical at stall for the 3.3 L V4 diesel (318 N·m at the crank) |
+| Starter max-power speed ωk | 200 rpm at the crank | **Estimated**: starters are matched so their most power falls at the cranking speed, 150-250 rpm [Cranking]. Gives 6.7 kW electrical at stall for the 3.3 L V4 diesel (318 N·m at the crank) |
 | Starter rated supply | terminal voltage 80 % of open circuit at stall | **Estimated**: 12 V systems sit near 9.6-10 V while cranking; [SAE J537] lets a battery fall to 7.2 V at its cold cranking current. An engine with no battery linked now cranks on its own lead-acid battery, which is this rated battery when full and warm and runs down while cranking (see "Starting" below) |
 | Starter battery (a linked Electric tank) | open-circuit voltage OCV(SOC)/OCV(100 %) × BMS discharge derate; sag Loss1C·R·P/E at the starter's current, solved together with the motor's current | Same OCV table and loss model as the battery's own (see Batteries). A small pack sags more and cranks slower, a nearly empty one cranks slower, a flat, switched-off or illegal one not at all. The starter's energy is drawn from the battery (`ENT:StarterApply`) |
 | Starter duty / thermal cut-out | 30 s at the max-power point from cold opens the cut-out; cooling time constant 60 s; closes again at half heat | 30 s on, ~2 min rest: [Delco Remy] cranking motor instructions; heavy-duty starters carry an over-crank thermal switch. τ = 60 s (a 2-minute rest gets back within 14 % of cold) and the 50 % reset are **Estimated**. Heat follows the winding loss, so a locked starter cuts out after ~6 s and one cranking freely and fast heats slowly |
 | Radiator fan load on the crank (ace_radiator) | fan power / ω at idle and above; below idle the idle torque × (ω / ω_idle)² | [Fan laws]: a belt-driven fan turns with the crank and its torque goes with speed². It used to be held at its idle torque at any speed: a hot 3.3 L diesel with a 3.45 kW fan on cranked at 78 rpm against 55 N·m and never fired (recording 20261005_191524) |
 | Rev-limiter hysteresis | 150 rpm | **Estimated** |
-| Unknown displacement BMEP | 10 bar SI / 16 bar diesel | [Heywood] 2.7 typical, **not re-verified** |
+| Unknown displacement BMEP | 10 bar SI / 16 bar diesel | **Estimated**, below the [MEP] maxima |
 | Bore = stroke when no stroke given | square engine | **Estimated** |
 | CylindersByCategory Radial | 7 (was 9) | Matches ACE's own "R7" radial definitions |
 
@@ -375,8 +396,8 @@ real time; cycle wear follows charge throughput, so it is independent of any tim
 |---|---|---|
 | Resistive loss | P_loss = Loss1C · R · P² / E_nom, Loss1C = 0.03 Ω × 5 A / 3.63 V = 0.041 | **Sourced**: [LG M50] DCIR, capacity, voltage. Taken from the stored energy on discharge and from the input on charge, and heats the cells |
 | Cell heat capacity | 912 J/(kg·K) on the fill mass (1.35 kg/L); housing 480 J/(kg·K) | [Steinhardt 2022] |
-| Cooling | natural convection, h = 10 W/(m²·K) on the box's outer area, exact exponential step | [Incropera] range 2-25; 10 as for the engine skin, **Estimated**. A pack worked hard with no radiator stays hot for a long time |
-| Liquid loop (radiators linked to the battery) | cold plate h = 300 W/(m²·K) over a third of the outer area, in series with the radiators' air side at a loop flow of 10 L/min water-glycol (583 W/K); a shared radiator is split equally between everything linked to it; its fan runs off the battery above 30 °C cells | Plate h inside the 100-1000 range for forced liquid convection [Incropera], plate share and flow (8-15 L/min EV battery pumps) **Estimated**. Coolant heat capacity left out (litres against hundreds of kg of cells). Self-test: a 16.7 kWh pack at 2C for an hour reaches 108 °C uncooled, 43 °C with a 0.15 m² core at 15 m/s |
+| Cooling | natural convection, h = 10 W/(m²·K) on the box's outer area, exact exponential step | [ETB h] free convection range; 10 as for the engine skin, **Estimated**. A pack worked hard with no radiator stays hot for a long time |
+| Liquid loop (radiators linked to the battery) | cold plate h = 300 W/(m²·K) over a third of the outer area, in series with the radiators' air side at a loop flow of 10 L/min water-glycol (583 W/K); a shared radiator is split equally between everything linked to it; its fan runs off the battery above 30 °C cells | Plate h inside the 100-1000 range for forced liquid convection [ETB h], plate share and flow (8-15 L/min EV battery pumps) **Estimated**. Coolant heat capacity left out (litres against hundreds of kg of cells). Self-test: a 16.7 kWh pack at 2C for an hour reaches 108 °C uncooled, 43 °C with a 0.15 m² core at 15 m/s |
 | CC-CV acceptance | 1C constant current to 85 % charge, then C·(1 − SOC)/0.15 (the exponential CV taper) until it falls below 0.04C, where the pack reads full (99.4 %) | CC rate 1C from [BU-409] (the M50 allows 0.7C continuous, so 1C is at the generous end of a cell rating); CV point and cut-off [BU-409]. Applies to regen, to reverse braking and to Refuel Duty transfers between batteries. The taper shape is the usual first-order approximation, **Estimated** |
 | Charge temperature limit | 50 °C, tapering from 45 °C | Limit [LG M50]; 5 K taper **Estimated** |
 | Discharge temperature limit | 60 °C, tapering from 55 °C (motor torque × derate) | Limit [LG M50]; 5 K taper **Estimated** |
@@ -411,10 +432,10 @@ flow (`PumpC`), not the core, limits what they reject.
 | Constant | Value | Status |
 |---|---|---|
 | Form K = N/√T, TR(SR) | J643 convention | [SAE J643] |
-| Coupling point SR | 0.87 | [Naunheimer] §6.3 / [Kotwicki] typical, **not re-verified** |
+| Coupling point SR | 0.87 | **Estimated**; [TC] puts coupling at about 0.9 |
 | Stall torque ratio default | 2.0 (range 1.8-2.4) | same, **not re-verified** |
 | K scale 1 + 0.1·SR/0.6 up to SR 0.6, then 1.1/(1−X)^0.75 | shape | **Estimated** fit to the typical curve shape |
-| Overrun: stator freewheels, TR 1 | behaviour | [Naunheimer], **not re-verified** |
+| Overrun: stator freewheels, TR 1 | behaviour | [TC] (overrunning clutch) |
 
 ## vehicle.lua
 
@@ -430,7 +451,7 @@ flow (`PumpC`), not the core, limits what they reject.
 | Gearbox mesh efficiency default | 0.97 | **Estimated**. Commonly quoted per-mesh efficiency is 0.97-0.99; no source is cited in the code |
 | Input shaft inertia default | 0.02 kg·m² (+0.00002 × max torque in sv_mobility) | **Estimated** |
 | Spin loss | 0.002 × max torque | **Estimated** |
-| Clutch slip heat = torque × slip speed | physics | [Shigley] §16-8 |
+| Clutch slip heat = torque × slip speed | physics | power = torque × angular speed |
 | Rolling resistance default | 0.012 | **Estimated** (typical car tyre on asphalt) |
 | Surface friction fallback | 0.8 | **Estimated** |
 | Brake capacity 1.5·μ·N·r + 10·J | sizing rule | **Estimated** |
@@ -473,23 +494,23 @@ up; hot metal costs torque and, past the damage temperature, health.
 | Thermostat | opens 82 °C, fully open 95 °C | [Hella] |
 | Boiling point | 120 °C (water at 2 bar abs under a ~1 bar gauge cap) | Steam tables; glycol's rise not credited |
 | Film boiling | Gbc × 0.2 above boiling (3 K ramp) | **Estimated** (boiling curve past critical heat flux) |
-| Engine skin | h = 10 W/(m²·K), area of a cube of mass / 800 kg/m³ | [Incropera] range, area **Estimated** |
-| Radiator air side | h = 85·√(v/5) W/(m²·K), 1,200 m²/m³ of core | [Kim-Bullard 2002] exponent, [Shah-Sekulic] density, 85 **Estimated** |
+| Engine skin | h = 10 W/(m²·K), area of a cube of mass / 800 kg/m³ | [ETB h] range, area **Estimated** |
+| Radiator air side | h = 85·√(v/5) W/(m²·K), 1,200 m²/m³ of core | [Kim-Bullard 2002] exponent; density and 85 **Estimated** |
 | Face velocity | fan 4 m/s; ram 0.4 × speed × √(5 cm / depth); still air 0.3 m/s; fan and ram added as pressures | [Padmaraman 2021] discharge 0.75 (halved for installation, **Estimated**); fan 4 m/s from the existing 30 W/L fan power, **Estimated** |
-| ε-NTU | cross-flow, both unmixed | [Padmaraman 2021] eq. 8 / [Incropera] |
+| ε-NTU | cross-flow, both unmixed | [Padmaraman 2021] eq. 8 |
 | Built-in cooling | `ace_engine_builtin_cooling` (default 0.5) × kind multiplier (turbine 3) of rated heat at 100 °C / 20 °C | Gameplay setting: ACE builds may have no radiator entity |
 | Built-in radiator core (Electric-Small/-Medium/-Large) | an extra heat exchanger from the housing's spare volume | See Batteries > Built-in radiator |
 | Derate | from 150 °C metal (140 petrol) to ×0.6 (×0.5 petrol, ×0.5 motor) at 250 °C (200 motor) | **Estimated** shape |
 | Damage | from 200 °C metal (180 motor windings), 0.5% of max health per s per 50 K | Onset [MIT 2.61] oil film limit / [IEC 60085]; rate **Estimated** |
 | Sump oil volume | 2.0 L per litre of displacement (diesel), 1.5 (petrol, rotary); 0.1 L/kW without one | **Estimated** from service fill capacities (5.9 L Cummins B ~14 L, 15 L truck diesels ~40 L, 2 L petrol fours 4-4.5 L, 6 L V8s 5-8 L), from memory, not re-checked |
-| Oil heat capacity | 2.0 kJ/(kg·K) × 0.87 kg/L | [Incropera A.5] range |
-| Heat into the oil | 0.6 of the friction work + 0.05 of the rest, at most 0.5 of the engine's heat | **Estimated**: [Heywood] ch. 13 friction breakdown (about half pistons and rings, the rest bearings, valve train, auxiliaries); bearings and valve train heat the oil, about half of the ring friction heats the liner. UTD-20 class at rated: 82 of 323 kW |
+| Oil heat capacity | 2.0 kJ/(kg·K) × 0.87 kg/L | **Estimated** |
+| Heat into the oil | 0.6 of the friction work + 0.05 of the rest, at most 0.5 of the engine's heat | **Estimated**: friction split about half pistons and rings, the rest bearings, valve train, auxiliaries (estimated); bearings and valve train heat the oil, about half of the ring friction heats the liner. UTD-20 class at rated: 82 of 323 kW |
 | Oil above coolant at rated heat | 20 K (sets the oil cooler / crankcase conductance Goc) | **Estimated** (sump oil commonly 100-120 °C at full load with coolant at 90-95 °C) |
 | Oil cooler with the engine stopped | 0.2 of Goc (the oil pump is crank-driven) | **Estimated** |
 | Oil cooler film boiling | Goc × 0.2 with the coolant boiling, as the water jacket | Same boiling-curve estimate as Gbc |
 | Oil pan | 1/6 of the engine skin (its bottom face), taken out of Gs | **Estimated** |
 | Oil viscosity | Walther fit through 110 / 14.5 mm²/s at 40 / 100 °C (SAE 15W-40, diesel), 70 / 10.5 (SAE 10W-30, petrol) | [ASTM D341] relation; 100 °C values mid-grade per [SAE J300]; 40 °C values typical data-sheet figures, **Estimated** |
-| Friction multiplier | (ν / ν at 90 °C)^0.24, clamped 0.8-4 | **Estimated** exponent (film friction rises with viscosity, boundary friction does not), giving ×2.0 at 20 °C, ×2.8 at 0 °C, ×0.87 at 115 °C; [Heywood] ch. 13: friction falls substantially as the oil warms. Reference 90 °C because the FMEP fits are of fully warm engines (**Estimated**) |
+| Friction multiplier | (ν / ν at 90 °C)^0.24, clamped 0.8-4 | **Estimated** exponent (film friction rises with viscosity, boundary friction does not), giving ×2.0 at 20 °C, ×2.8 at 0 °C, ×0.87 at 115 °C. Reference 90 °C because the FMEP fits are of fully warm engines (**Estimated**) |
 | Hot oil | overlay warning from 130 °C; wear from 150 °C at 0.5% of max health per s per 50 K, on top of the block's | Onset [API IIIG] test temperature; 130 and the rate **Estimated** |
 
 Convars (server, archived): `ace_heat_timescale` (default 2; 1 is real time),
@@ -541,15 +562,15 @@ existed, so nothing was applied. The 3TD entries in b4.lua are commented out.
 
 ## Starting (engine_model.lua "Catching", battery_model.lua starter pack, acf_engine)
 
-References used here (in addition to [Heywood], [Chapman], [SAE J537], [Delco Remy] above):
+References used here (in addition to [Chapman], [SAE J537], [Delco Remy] above):
 
-- **[Bosch]** Robert Bosch GmbH, *Automotive Handbook*, starting systems (starter characteristic
-  curves, pinion to ring gear ratios 1:10-1:15, starter battery sizing), alternators (claw-pole
-  efficiency) and engine management (crank/cam synchronisation, speed limitation). *Quoted from
-  memory of the handbook, not re-checked against a specific edition.*
-- **[Bosch glow]** Bosch / Beru glow plug product information: steel sheathed glow plugs reach
-  ~850 °C in 2-5 s, ceramic ones faster; preheat time is mapped against coolant temperature.
-  *Product literature, not re-checked.*
+- **[Alternator]** Motor magazine, May 2000, https://www.motor.com/magazine/pdfs/052000_04.pdf :
+  a Lundell (claw-pole) alternator is about 50 % efficient (read through a search summary).
+  Starter characteristics, pinion ratios, battery sizing and crank/cam synchronisation are
+  **Estimated** (the Bosch handbook was cited before without being read).
+- **[Glow]** Patent US5091631 (https://patents.google.com/patent/US5091631): conventional
+  sheathed glow plugs reach ~850 °C in about 5-10 s (8 s in its example), the improved one in
+  3-4 s. Preheat maps against coolant temperature are **Estimated**.
 - **[Aquino]** C. F. Aquino, "Transient A/F Control Characteristics of the 5 Liter Central Fuel
   Injection Engine", SAE 810494, 1981: the x-τ fuel film (wall wetting) model.
 - **[KiBaM]** J. F. Manwell, J. G. McGowan, "Lead acid battery storage model for hybrid energy
@@ -561,24 +582,24 @@ References used here (in addition to [Heywood], [Chapman], [SAE J537], [Delco Re
 
 | Constant | Value | Status / source |
 |---|---|---|
-| Synchronisation before the first injection / spark | 2 crank revolutions | **Estimated** from [Bosch] engine management: the controller finds top centre from the crank and cam sensors within two turns; a mechanical injection pump must fill its lines |
-| Firing speed band | none below 60 rpm, every cycle by 100 rpm; petrol +40 rpm when the charge is at -20 °C | **Estimated**, below the 150-300 rpm cranking speeds of [Heywood] 7.6 |
+| Synchronisation before the first injection / spark | 2 crank revolutions | **Estimated**: the controller finds top centre from the crank and cam sensors within two turns; a mechanical injection pump must fill its lines |
+| Firing speed band | none below 60 rpm, every cycle by 100 rpm; petrol +40 rpm when the charge is at -20 °C | **Estimated**, below the 150-250 rpm cranking speeds of [Cranking] |
 | Petrol wall wetting | share of injected fuel reaching the charge 1 - exp(-t/τ), τ 0.3 s at a 55 °C charge, doubling every 35 K colder (0.6 s at 20 °C, 1.3 s at -20 °C) | Form from [Aquino]; time constants **estimated** inside Aquino's range (tenths of a second warm, seconds cold) |
-| Diesel compression temperature | T = (Tair + 0.5·(Tblock - Tair) + crank warming + glow)·rc^(n-1), n = 1.37 - 0.37·48 rpm/(N + 48 rpm) | Polytropic compression [Heywood] 10.6 (cold starting: slow cranking loses heat and blowby). The wall share 0.5 and the 48 rpm constant are **estimated**; the latter gives n ≈ 1.28 at 150 rpm, a 35 bar cranking compression for rc 16, inside the 28-35 bar of workshop compression tests |
+| Diesel compression temperature | T = (Tair + 0.5·(Tblock - Tair) + crank warming + glow)·rc^(n-1), n = 1.37 - 0.37·48 rpm/(N + 48 rpm) | Polytropic compression (cold starting: slow cranking loses heat and blowby; **Estimated**). The wall share 0.5 and the 48 rpm constant are **estimated**; the latter gives n ≈ 1.28 at 150 rpm, a 35 bar cranking compression for rc 16, inside the 28-35 bar of workshop compression tests |
 | Diesel ignition band | 700 K (no cycle fires) to 780 K (every cycle) | **Estimated** so that the 3.3 L test diesel without glow plugs starts in 0.8 s at 20 °C, 4.9 s at 0 °C, 9.7 s at -10 °C and not at all at -20 °C, the way direct-injection diesels behave |
 | Cranking wall warming | up to 40 K, time constant 5 s while cranking, cools with 60 s | **Estimated**: each compression leaves heat in the walls and residual gas, so a cold diesel that is cranked for a while gets closer to firing |
-| Glow plugs | +100 K equivalent charge temperature when hot; heat-up time constant 1.5 s; 150 W per cylinder | Heat-up: [Bosch glow] 850 °C in 2-5 s. Boost and power **estimated** (12 V plugs take 10-25 A heating, ~8 A hot) |
-| Preheat time | setting (default 5 s) at -20 °C coolant and below, 0 at 60 °C and above, linear between; 0 = no glow plugs | **Estimated** from typical preheat maps of ~2-20 s against coolant temperature [Bosch glow] |
+| Glow plugs | +100 K equivalent charge temperature when hot; heat-up time constant 1.5 s; 150 W per cylinder | Heat-up: [Glow] 850 °C in about 3-8 s. Boost and power **estimated** (12 V plugs take 10-25 A heating, ~8 A hot) |
+| Preheat time | setting (default 5 s) at -20 °C coolant and below, 0 at 60 °C and above, linear between; 0 = no glow plugs | **Estimated** from typical preheat maps of ~2-20 s against coolant temperature |
 | Catch | runs once the fired cycles out-torque the losses (combustion > friction + pumping) above 1.15 × the stall speed | **Estimated** threshold; the test itself is physics (self-sustaining). Replaces "fires at 130 rpm" |
 | Unburnt fuel while misfiring | fuel is charged for every injected cycle, torque and heat only for the ones that fire | Behaviour |
-| Starter own drag | constant, 1/(1 + 2.5)² of stall torque: free speed 2.5 × the 200 rpm max-power speed | **Estimated** from [Bosch] starter characteristics (no-load speed 2-3 × max-power speed). Before it, a warm 3.3 L diesel cranked in neutral at 600 rpm (its idle speed); now ~380 rpm, a 5.7 L V8 ~330 rpm and the 27 L V12 ~250 rpm |
-| Starter size setting | 0.5-3 × standard; torque and current scale, max-power speed kept; adds 14.7 kg per kW of standard starter power per unit of size above 1 | Mass **estimated**: 2.2 kg/kW reduction-gear starter ([Bosch], [Delco Remy] catalogue masses) + 12.5 kg/kW of battery (0.5 Wh/W at 40 Wh/kg flooded lead-acid) |
-| Built-in starter battery capacity | 0.5 Wh per W of the starter's rated (most) power | **Estimated** from a car (1.4 kW starter, 12 V 60 Ah = 720 Wh) and a heavy truck (7 kW, 24 V 140 Ah = 3.4 kWh) [Bosch] |
+| Starter own drag | constant, 1/(1 + 2.5)² of stall torque: free speed 2.5 × the 200 rpm max-power speed | **Estimated** (no-load speed 2-3 × max-power speed). Before it, a warm 3.3 L diesel cranked in neutral at 600 rpm (its idle speed); now ~380 rpm, a 5.7 L V8 ~330 rpm and the 27 L V12 ~250 rpm |
+| Starter size setting | 0.5-3 × standard; torque and current scale, max-power speed kept; adds 14.7 kg per kW of standard starter power per unit of size above 1 | Mass **estimated**: 2.2 kg/kW reduction-gear starter (estimated) + 12.5 kg/kW of battery (0.5 Wh/W at 40 Wh/kg flooded lead-acid) |
+| Built-in starter battery capacity | 0.5 Wh per W of the starter's rated (most) power | **Estimated** from a car (1.4 kW starter, 12 V 60 Ah = 720 Wh) and a heavy truck (7 kW, 24 V 140 Ah = 3.4 kWh), both estimated |
 | Built-in battery wells | 30 % available, wells level out with a 10 min time constant | Form [KiBaM]; values **estimated** so that about a third of the charge comes out at cranking currents, as Peukert's law (exponent 1.2-1.3) gives for lead-acid, and a "dead" battery cranks again after a few minutes' rest |
 | Built-in battery voltage | 12.7 V full to 11.8 V empty, from the available well; flat (voltage collapse) at 2 % available, live again at 10 % | OCV [BU] BU-903. Flat and live levels **estimated** |
 | Built-in battery sag at stall | 20 % full and warm (the rated supply), × (1 + 1.5·(1 - level)), × (1 + (20 - T)/40) below 20 °C | **Estimated**; the cold factor doubles the sag at -20 °C, in line with lead-acid giving about half its power at -18 °C ([SAE J537] rating point, [BU] BU-502) |
 | Built-in battery charging | 0.25 C bulk, tapering to 0 as the available well fills from 80 %; 85 % charge efficiency | [BU] BU-403: bulk 0.1-0.3 C, lead-acid coulombic efficiency 80-90 %. No trickle charge while the engine is off |
-| Alternator | charges at up to 1.5 × the starter's rated power (in proportion to speed below idle), as much as the battery accepts; crank load = charging power / 0.55 / ω | Efficiency: [Bosch] claw-pole alternators 50-65 %. The 1.5 sizing is **estimated** (part of a real alternator's output feeds lights and electronics, which are not modelled). It also charges a linked ACE battery, through that battery's own charge acceptance |
+| Alternator | charges at up to 1.5 × the starter's rated power (in proportion to speed below idle), as much as the battery accepts; crank load = charging power / 0.55 / ω | Efficiency 0.55: **Estimated**, [Alternator] gives about 50 %. The 1.5 sizing is **estimated** (part of a real alternator's output feeds lights and electronics, which are not modelled). It also charges a linked ACE battery, through that battery's own charge acceptance |
 
 Resulting start times (engine alone in neutral, from Active = 1 to running; `Engine.SimulateStart`,
 also shown in the engine menu): 5.7 L V8 petrol 0.46 s warm, 0.59 s at 20 °C, 1.1 s at -20 °C;

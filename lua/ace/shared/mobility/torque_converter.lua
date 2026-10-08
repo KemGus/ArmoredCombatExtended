@@ -5,11 +5,12 @@
 	factor K = N_pump / √T_pump [rpm/√(N·m)] and torque ratio TR = T_turbine / T_pump, both as
 	functions of speed ratio SR = N_turbine / N_pump.
 
-	The curve shape follows a typical three-element converter: TR ≈ 2.0 at stall falling
-	linearly to 1.0 at the coupling point SR ≈ 0.87, and K roughly flat to SR ≈ 0.6 before
-	rising steeply as SR → 1 (Naunheimer et al., Automotive Transmissions, 2nd ed., §6.3;
-	Kotwicki, SAE 820393). Above the coupling point the stator freewheels and the converter
-	behaves as a fluid coupling (TR = 1).
+	The curve shape follows a typical three-element converter: TR ≈ 2.0 at stall (automotive
+	converters 1.8-2.5) falling linearly to 1.0 at the coupling point, reached with the turbine
+	at about 90 % of impeller speed (en.wikipedia.org/wiki/Torque_converter); SR 0.87 is used
+	(estimated). K roughly flat to SR ≈ 0.6 before rising steeply as SR → 1 (estimated). Above
+	the coupling point the stator freewheels and the converter behaves as a fluid coupling
+	(TR = 1).
 ]]
 
 ACE = ACE or {}

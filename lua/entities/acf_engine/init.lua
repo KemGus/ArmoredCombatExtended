@@ -802,8 +802,7 @@ end
 	           it, and so does the built-in battery; the starter and battery's extra mass is
 	           added to the engine's (StarterKgPerW of the starter's rated power per unit of
 	           size: 2.2 kg/kW for a reduction-gear starter plus 12.5 kg/kW of lead-acid battery
-	           at 0.5 Wh/W and 40 Wh/kg; estimated from Bosch / Delco Remy catalogue masses and
-	           typical flooded battery energy density).
+	           at 0.5 Wh/W and 40 Wh/kg; estimated).
 	  Preheat  glow plug preheat at -20 °C in seconds, 0-60 (diesels; 0 = no glow plugs; nil =
 	           ACE.Mobility.Engine.DefaultPreheat).
 	The starter sound is set with the engine's sound banks (sound replacer tool, ace_enginestartersound).
@@ -934,8 +933,8 @@ end
 --[[
 	Alternator. While the engine runs it recharges the starter battery (the built-in one, or a
 	linked ACE battery) and loads the crank with the power that takes over its efficiency.
-	AlternatorEff: 0.55, claw-pole alternators convert 50-65 % (Bosch Automotive Handbook,
-	  alternators; estimated midpoint).
+	AlternatorEff: 0.55 (estimated; claw-pole alternators are about 50 % efficient, Motor
+	  magazine, May 2000, motor.com/magazine/pdfs/052000_04.pdf).
 	AlternatorPerW: most charging power per watt of the starter's rated power, 1.5 (car: a 1.4 kW
 	  starter and a 1.5-2 kW alternator, of which part feeds the vehicle's own loads, which are
 	  not modelled; estimated). Below idle the alternator gives proportionally less.
