@@ -249,6 +249,59 @@ local function wheelHub(W, Chassis)
 end
 
 --[[
+	Spin groups. A common way to build tank running gear is to tie every road wheel to the
+	sprocket with a rotation-only AdvBallsocket whose limits are a fraction of a degree, so all
+	of them turn as one: the sprocket is linked to the gearbox, the road wheels carry the tank.
+	Read and driven alone, the sprocket looked like a light wheel in the air; the drivetrain
+	gave it impulses sized for its own inertia, which the ballsockets then fought every tick.
+	The sprocket swung between -100 and +140 rad/s and the T-64 crawled at 13 km/h in second,
+	the engine on its limiter. The wheels locked to the driven one are one rotating body: their
+	inertias add, their speed is read together, and the group rolls on whichever member touches
+	the ground.
+]]
+local SpinLockDeg = 5 -- an AdvBallsocket whose every limit is within this many degrees locks rotation
+local SpinGroupMax = 32
+local LimitKeys = { "xmin", "xmax", "ymin", "ymax", "zmin", "zmax" }
+
+local function locksSpin(C)
+	if C.Type == "Weld" then return true end
+	if C.Type ~= "AdvBallsocket" then return false end
+	for _, K in ipairs(LimitKeys) do
+		local V = tonumber(C[K])
+		if not V or math.abs(V) > SpinLockDeg then return false end
+	end
+	return true
+end
+
+-- Props whose spin is locked to the wheel, not counting the wheel, its hub, the chassis or
+-- the gearbox mounting. Each entry: { Ent, Phys, LocalAxis, Radius }.
+local function spinGroup(W, Ctx)
+	local Skip = { [W.Ent] = true }
+	if IsValid(Ctx.Chassis) then Skip[Ctx.Chassis] = true end
+	if IsValid(W.Hub) then Skip[W.Hub] = true end
+	local Mount = ACE.GetPhysicalParent(W.Box)
+	if IsValid(Mount) then Skip[Mount] = true end
+	local Members, Queue = {}, { W.Ent }
+	while #Queue > 0 and #Members < SpinGroupMax do
+		local E = table.remove(Queue)
+		for _, C in pairs(constraint.GetTable(E) or {}) do
+			local Other = C.Ent1 == E and C.Ent2 or C.Ent1
+			if IsValid(Other) and not Skip[Other] and locksSpin(C) then
+				Skip[Other] = true
+				local P = Other:GetPhysicsObject()
+				-- Another driven wheel is read and driven on its own.
+				if IsValid(P) and Other:GetClass() == "prop_physics" and not IsValid(Other:GetParent()) and Other.ACEWheelW == nil then
+					local LocalAxis = P:WorldToLocalVector(W.AxisWorld)
+					Members[#Members + 1] = { Ent = Other, Phys = P, LocalAxis = LocalAxis, Radius = wheelRadius(Other, LocalAxis) }
+					Queue[#Queue + 1] = Other
+				end
+			end
+		end
+	end
+	return Members
+end
+
+--[[
 	Only the spin about the axle is locked; the other two rotations stay free, so a wheel hung
 	on ballsockets (steering knuckles, suspension arms) keeps steering and travelling while it
 	is held. A ragdoll constraint's limits are about the axes of its own frame, which is the
@@ -346,7 +399,8 @@ local function readWheel(Box, Link, BoxAngVel, Ctx)
 
 	local AxisWorld = Phys:LocalToWorldVector(Link.Axis)
 	Desc.AxisWorld = AxisWorld
-	Desc.Radius = Desc.Radius or wheelRadius(Ent, Link.Axis)
+	Desc.OwnRadius = Desc.OwnRadius or wheelRadius(Ent, Link.Axis)
+	Desc.Radius = Desc.OwnRadius
 
 	-- Forward rotation is about -axis (the convention the old drivetrain used).
 	--[[
@@ -361,6 +415,7 @@ local function readWheel(Box, Link, BoxAngVel, Ctx)
 		local Hub = wheelHub(Desc, Ctx.Chassis)
 		Desc.Hub = IsValid(Hub) and ACE.GetPhysicalParent(Hub) or nil
 		Desc.HubAt = Now + 2
+		Desc.Group = spinGroup(Desc, Ctx)
 	end
 	local HubPhys = IsValid(Desc.Hub) and Desc.Hub:GetPhysicsObject()
 	local RefAngVel = IsValid(HubPhys) and HubPhys:LocalToWorldVector(HubPhys:GetAngleVelocity()) or BoxAngVel
@@ -382,6 +437,27 @@ local function readWheel(Box, Link, BoxAngVel, Ctx)
 	local AngVel = Phys:LocalToWorldVector(Phys:GetAngleVelocity()) - RefAngVel
 	local PrevW, PrevOut, Applied = Desc.W, Desc.WOut, Desc.AppliedDW
 	Desc.W = -AngVel:Dot(AxisWorld) * DegToRad
+	-- A spin group turns as one body: its speed is the inertia-weighted mean of its members,
+	-- which the ground-rolling road wheels keep steady while the sprocket alone jitters.
+	local Group = Desc.Group
+	if Group and #Group > 0 then
+		local OwnJ = max(inertiaAbout(Phys, AxisWorld) * Units.SourceInertiaToSI, 1e-3)
+		local SumJ, SumJW = OwnJ, OwnJ * Desc.W
+		for I = #Group, 1, -1 do
+			local G = Group[I]
+			if not IsValid(G.Phys) then
+				table.remove(Group, I)
+			else
+				G.J = max(inertiaAbout(G.Phys, AxisWorld) * Units.SourceInertiaToSI, 1e-3)
+				local GW = -(G.Phys:LocalToWorldVector(G.Phys:GetAngleVelocity()) - RefAngVel):Dot(AxisWorld) * DegToRad
+				SumJ, SumJW = SumJ + G.J, SumJW + G.J * GW
+			end
+		end
+		Desc.OwnJ, Desc.GroupJ = OwnJ, SumJ
+		Desc.W = SumJW / SumJ
+	else
+		Desc.OwnJ, Desc.GroupJ = nil, nil
+	end
 	Ent.ACEWheelW = Desc.W -- for the acfWheelRPM accessors
 	-- What the road (and anything else) did to the wheel's spin since last tick, beyond the
 	-- impulse the drivetrain applied: the tyre's actual pass-through, N*m*s.
@@ -396,14 +472,32 @@ local function readWheel(Box, Link, BoxAngVel, Ctx)
 		Desc.SlideCap = nil
 	end
 
-	-- Ground contact under the wheel.
+	-- Ground contact under the wheel, or under any member of its spin group (which then sets
+	-- the rolling radius: every member turns at the same speed).
 	local R = Desc.Radius
 	local Center = Phys:GetPos()
+	local ContactPhys = Phys
 	local Tr = util.TraceLine({
 		start = Center,
 		endpos = Center + Vector(0, 0, -1) * (R / InchToMeter + 4),
 		filter = Ctx.Filter,
 	})
+	if not Tr.Hit and Group then
+		for _, G in ipairs(Group) do
+			local GC = G.Phys:GetPos()
+			local GTr = util.TraceLine({
+				start = GC,
+				endpos = GC + Vector(0, 0, -1) * (G.Radius / InchToMeter + 4),
+				filter = Ctx.Filter,
+			})
+			if GTr.Hit then
+				Tr, Center, ContactPhys = GTr, GC, G.Phys
+				R = G.Radius
+				Desc.Radius = R
+				break
+			end
+		end
+	end
 
 	--[[
 		Load detection for wheels the ground trace cannot see: tank sprockets and idlers ride
@@ -470,12 +564,13 @@ local function readWheel(Box, Link, BoxAngVel, Ctx)
 
 	-- Own inertia about the axle.
 	Desc.J = max((Link.Axis * Phys:GetInertia()):Length() * Units.SourceInertiaToSI, 1e-3)
+	if Desc.GroupJ then Desc.J = Desc.J + Desc.GroupJ - Desc.OwnJ end
 
 	Desc.Grounded = not Upright and (Tr.Hit or Desc.Loaded == true)
 	Desc.Meshed = not Tr.Hit and Desc.Loaded == true
 	Desc.GroundNormal = Tr.Hit and Tr.HitNormal or nil
 	if Tr.Hit then
-		Desc.Mu = contactMu(Phys, Tr.SurfaceProps)
+		Desc.Mu = contactMu(ContactPhys, Tr.SurfaceProps)
 	elseif Desc.Grounded then
 		-- Driving through a track: steel on the ground.
 		Desc.Mu = SteelMuCap
@@ -1054,7 +1149,16 @@ local function solveGroup(Ctx, EngineDescs, Roots, PhysMass, TotalMass, Dt)
 			W.AppliedDW = Imp / max(W.J or 1, 1e-3)
 			W.ImpOut = Imp
 			local Src = Units.ToSourceAngularImpulse(Imp)
-			W.Phys:ApplyTorqueCenter(W.AxisWorld * -Src)
+			if W.GroupJ and W.Group and #W.Group > 0 then
+				-- Each member of a spin group takes its share by inertia, so the constraints that
+				-- tie them carry no extra load from the drive.
+				W.Phys:ApplyTorqueCenter(W.AxisWorld * (-Src * W.OwnJ / W.GroupJ))
+				for _, G in ipairs(W.Group) do
+					if IsValid(G.Phys) and G.J then G.Phys:ApplyTorqueCenter(W.AxisWorld * (-Src * G.J / W.GroupJ)) end
+				end
+			else
+				W.Phys:ApplyTorqueCenter(W.AxisWorld * -Src)
+			end
 			--[[
 				The reaction goes through the gearbox mounts, except when the gearbox rides on the
 				very body its wheels turn on and that body is not the engine's chassis: a solid axle

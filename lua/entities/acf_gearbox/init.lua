@@ -848,7 +848,15 @@ function ENT:MobilityControl(Dt)
 	if self.Dual then Engaged = math.max(Engaged, self.RClutch or Max) end
 	local Pedal = Max > 0 and 1 - Engaged / Max or 0
 
-	if Shifting and self.DCT then
+	--[[
+		Tracked steering boxes (dual) are planetary power-shift transmissions: each gear is held
+		by a hydraulic clutch or band brake, and a shift hands the torque from one friction
+		element to the next under load (T-64/T-72, Allison CD-850, RENK HSWL). There is no
+		synchromesh and no driver clutch to wait for; the friction elements slip the engine to
+		the new speed. Left on the synchromesh path, a tank whose chip shifts at full throttle
+		(no clutch) sat in neutral for good after its first shift.
+	]]
+	if Shifting and (self.DCT or self.Dual) then
 		-- Dual-clutch: the next gear is already selected on the other input shaft, and the two
 		-- clutches hand the torque over during the shift time, so drive is never interrupted.
 		local Frac = 1 - math.Clamp((self.ChangeFinished - Now) / math.max(self.SwitchTime, 0.05), 0, 1)
