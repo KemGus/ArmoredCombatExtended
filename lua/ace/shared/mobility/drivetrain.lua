@@ -111,6 +111,7 @@ local function wheelBody(Sys, Wheel)
 		B.GroundBody = GB
 		Sys.Bodies[#Sys.Bodies + 1] = GB
 		B.TyreC = addConstraint(Sys, { B, GB }, { 1, -1 }, Ground.Cap, 0, "tyre")
+		B.TyreC.CapLo, B.TyreC.CapHi = Ground.CapLo, Ground.CapHi
 	end
 	return B
 end
@@ -560,6 +561,8 @@ function Drivetrain.Step(Sys, Dt, Substeps, Iterations)
 		B.Wheel.GroundImpulse = Ground
 		B.Wheel.Impulse = B.InvJ == 0 and 0 or B.J * (B.W - B.W0) + Ground
 		B.Wheel.WOut = B.W
+		-- Torque the tyre carried this tick, N·m (nil without ground), for its relaxation next tick.
+		B.Wheel.TyreTorque = B.TyreC and B.TyreSum / Dt or nil
 	end
 
 	for _, Gearbox in ipairs(Sys.Gearboxes) do

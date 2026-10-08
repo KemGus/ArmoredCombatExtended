@@ -205,6 +205,10 @@ Digitised charts were read from rendered PDF pages. Expect about ±1% error on t
   ordinary car tyres on concrete/new asphalt 0.010-0.015.
 - **[Track Crr]** https://pmc.ncbi.nlm.nih.gov/articles/PMC10490626/ : a tracked vehicle measured
   0.045 and 0.06 on a cement and a sand road.
+- **[Relaxation]** Lee et al., *Vehicle System Dynamics*, 2016,
+  https://doi.org/10.1080/00423114.2016.1252048 : measured car-tyre relaxation lengths 0.60-0.63 m;
+  the force lags the slip with a time constant of relaxation length / speed. Used for every tyre and
+  track (estimated for tracks); convar `ace_mobility_tyre_relaxation`.
 - **[ETB μ]** https://www.engineeringtoolbox.com/friction-coefficients-d_778.html : dry steel on
   steel 0.5-0.8 static, 0.42 kinetic.
 - **[Lewis]** https://ns1.engineersedge.com/gears/lewis-factor.htm : W = σ·b·m·Y (read through a

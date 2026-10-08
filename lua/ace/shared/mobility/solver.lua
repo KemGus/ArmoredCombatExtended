@@ -52,6 +52,12 @@ local function prepare(C, H)
 	end
 	C.Mass = Denominator > 0 and 1 / Denominator or 0
 	C.Max = C.Cap and C.Cap * H or huge
+	C.Min = -C.Max
+	-- An optional window [CapLo, CapHi] (N·m) inside ±Cap, for an element whose torque cannot
+	-- jump within a tick (a tyre's force builds over its relaxation length).
+	if C.CapLo then C.Min = math.max(C.Min, C.CapLo * H) end
+	if C.CapHi then C.Max = math.min(C.Max, C.CapHi * H) end
+	if C.Min > C.Max then C.Min, C.Max = C.Max, C.Max end
 end
 
 local function solveOne(C)
@@ -65,8 +71,8 @@ local function solveOne(C)
 	local Lambda = -Cdot * C.Mass
 	local Old = C.Acc
 	local New = Old + Lambda
-	local Max = C.Max
-	if New > Max then New = Max elseif New < -Max then New = -Max end
+	local Max, Min = C.Max, C.Min
+	if New > Max then New = Max elseif New < Min then New = Min end
 	Lambda = New - Old
 	if Lambda == 0 then return end
 	C.Acc = New
@@ -171,7 +177,7 @@ local function directSolve(Constraints, Count)
 		local Single = Round > N
 		local Free = {}
 		for I = 1, N do
-			if State[I] == 0 then Free[#Free + 1] = I else L[I] = State[I] * Idx[I].Max end
+			if State[I] == 0 then Free[#Free + 1] = I else L[I] = State[I] == 1 and Idx[I].Max or Idx[I].Min end
 		end
 		local M = #Free
 		local Sys, Rhs = {}, {}
@@ -195,10 +201,10 @@ local function directSolve(Constraints, Count)
 		local Changed = false
 		for I = 1, N do
 			if State[I] == 0 then
-				local Max = Idx[I].Max
-				local Tol = Max * 1e-9 + 1e-12
+				local Max, Min = Idx[I].Max, Idx[I].Min
+				local Tol = (Max - Min) * 1e-9 + 1e-12
 				if L[I] > Max + Tol then State[I], Changed = 1, true
-				elseif L[I] < -Max - Tol then State[I], Changed = -1, true end
+				elseif L[I] < Min - Tol then State[I], Changed = -1, true end
 				if Changed and Single then break end
 			end
 		end
@@ -233,8 +239,8 @@ local function directSolve(Constraints, Count)
 	for I = 1, N do
 		local C = Idx[I]
 		local Lambda = L[I]
-		local Max = C.Max
-		if Lambda > Max then Lambda = Max elseif Lambda < -Max then Lambda = -Max end
+		local Max, Min = C.Max, C.Min
+		if Lambda > Max then Lambda = Max elseif Lambda < Min then Lambda = Min end
 		C.Acc = Lambda
 		if Lambda ~= 0 then
 			for K = 1, #C.Bodies do
@@ -281,7 +287,7 @@ function Solver.Step(Bodies, Constraints, H, Iterations)
 			local C = Constraints[I]
 			local Warm = C.Prev or 0
 			if Warm ~= 0 and C.Mass ~= 0 then
-				if Warm > C.Max then Warm = C.Max elseif Warm < -C.Max then Warm = -C.Max end
+				if Warm > C.Max then Warm = C.Max elseif Warm < C.Min then Warm = C.Min end
 				C.Acc = Warm
 				for J = 1, #C.Bodies do
 					local B = C.Bodies[J]
@@ -305,6 +311,7 @@ function Solver.Reset(Constraints)
 		Constraints[I].Acc = 0
 		Constraints[I].Prev = nil
 		Constraints[I].Max = nil
+		Constraints[I].Min = nil
 	end
 end
 

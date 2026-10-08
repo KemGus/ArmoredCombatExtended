@@ -192,6 +192,15 @@ function M.BrakePedal(Value)
 	return math.min((Value or 0) / BrakeFullConVar:GetFloat(), 1)
 end
 
+local RelaxationConVar = CreateConVar("ace_mobility_tyre_relaxation", "0.6", FCVAR_ARCHIVE,
+	"Tyre relaxation length in metres: how far a tyre rolls while its force builds. 0 = the tyre force can jump within a tick.", 0, 5)
+
+local function clampTo(V, Lim)
+	if V > Lim then return Lim end
+	if V < -Lim then return -Lim end
+	return V
+end
+
 local MeasuredGripConVar = CreateConVar("ace_mobility_measured_grip", "1", FCVAR_ARCHIVE,
 	"1 = a sliding tyre is limited to the grip the physics engine actually gave it last tick. 0 = use the friction product (overestimates sliding grip).", 0, 1)
 
@@ -1035,6 +1044,25 @@ local function solveGroup(Ctx, EngineDescs, Roots, PhysMass, TotalMass, Dt)
 			W.Ground.Cap = min(W.Ground.Cap, max(W.SlideCap * 1.1, 0.05 * W.Ground.Cap))
 		end
 		W.WasSliding = Sliding
+		--[[
+			A tyre's force does not jump: it builds as the tread deflects, over the relaxation
+			length, with a time constant of about relaxation length / speed (car tyres 0.60-0.63 m,
+			Lee et al., Vehicle System Dynamics 2016, doi.org/10.1080/00423114.2016.1252048; the
+			same length is used for every tyre and track, estimated). Each tick the tyre's torque
+			may move from last tick's only that far towards anything within its grip. Without it
+			the drivetrain's flywheel reset a tank's sprocket to its own speed every tick at full
+			grip, the hull rocked on its suspension and swung the road wheels' speed back, and the
+			two fed each other at about 5 Hz (T-64 in reverse: +-1265 N·m·s each tick, the
+			vehicle shaking).
+		]]
+		local G = W.Ground
+		if G and not W.Meshed and W.TyreTorque and RelaxationConVar:GetFloat() > 0 then
+			local Rate = max(abs(W.GroundSpeed or 0), abs(W.W * W.Radius - (W.GroundSpeed or 0)))
+			local A = 1 - math.exp(-Dt * Rate / RelaxationConVar:GetFloat())
+			local Prev = clampTo(W.TyreTorque, G.Cap)
+			G.CapLo = (1 - A) * Prev - A * G.Cap
+			G.CapHi = (1 - A) * Prev + A * G.Cap
+		end
 		--[[
 			Rolling resistance: about 0.012 of the load for tyres on a hard road (car tyres on
 			concrete/asphalt 0.010-0.015, engineeringtoolbox.com/rolling-friction-resistance-d_1303.html).
