@@ -88,15 +88,18 @@ local function EmitHaze(Em, Pos, Dir, Vel, Load, Scale)
 	if not Particle then return end
 
 	local Spread = VectorRand() * 0.15
+	-- Haze is hot clear gas mixing into the air within a metre or two of the outlet, so it does
+	-- not grow with engine size the way a smoke plume does (estimated).
+	Scale = math.min(Scale, 1.2)
 
-	Particle:SetVelocity(Vel + (Dir + Spread) * (150 + Load * 450) * Scale)
-	Particle:SetDieTime(0.5 + Load * 0.4 + Rand(0, 0.2))
+	Particle:SetVelocity(Vel + (Dir + Spread) * (100 + Load * 250) * Scale)
+	Particle:SetDieTime(0.3 + Load * 0.25 + Rand(0, 0.1))
 	Particle:SetAirResistance(120)
 	Particle:SetGravity(Rise)
 	Particle:SetStartAlpha(255)
 	Particle:SetEndAlpha(0)
 	Particle:SetStartSize(4 * Scale)
-	Particle:SetEndSize((14 + Load * 36) * Scale)
+	Particle:SetEndSize((8 + Load * 22) * Scale)
 	Particle:SetRoll(Rand(-1, 1))
 	Particle:SetRollDelta(Rand(-1, 1))
 	Particle:SetCollide(false)
