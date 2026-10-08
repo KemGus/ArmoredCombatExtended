@@ -1351,7 +1351,12 @@ local function accumulate(Group, Ctx, Dt)
 	end
 	for _, Box in ipairs(Ctx.BoxList) do
 		local Mob = Box.Mob
-		if Mob then Box.MobAccHeatJ = (Box.MobAccHeatJ or 0) + (Mob.ClutchHeatJ or 0) end
+		-- Taken, not copied: a physics step in which the drivetrain did not solve must not count
+		-- the last solve's (or the last Think's total) clutch heat again.
+		if Mob then
+			Box.MobAccHeatJ = (Box.MobAccHeatJ or 0) + (Mob.ClutchHeatJ or 0)
+			Mob.ClutchHeatJ = 0
+		end
 	end
 end
 

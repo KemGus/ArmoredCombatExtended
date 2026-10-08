@@ -1118,6 +1118,7 @@ function ENT:MobilityApply()
 	local Tau = self.Dual and 6 or 120
 	local T = self.ClutchTemp or ACE.AmbientTemp
 	T = T + (Mob.ClutchHeatJ or 0) * HeatRate / (ClutchSpecificHeat * Mass)
+	Mob.ClutchHeatJ = 0 -- used up
 	T = T - (T - ACE.AmbientTemp) * (1 - math.exp(-Dt * HeatRate / Tau))
 	self.ClutchTemp = T
 

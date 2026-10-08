@@ -139,7 +139,7 @@ function Log.Frame(Kind, Group, Ctx, Dt)
 			Bundle.Boxes[#Bundle.Boxes + 1] = row({ Head, id(Box), Box.Gear or 0, D.Ratio or 0, Box.LBrake or 0, Box.RBrake or 0,
 				M.BrakePedal(Box.LBrake), M.BrakePedal(Box.RBrake), Box.LClutch or 0, Box.RClutch or 0, Box.MobClutchCap or "",
 				Box.MobCapFull == true, D.ClutchFree == true, tostring(D.Diff), (D.InputW or 0) * 30 / math.pi, M.IsAssisted(Box),
-				D.BrakeOnly == true, Box.SteerRate or 0, (D.Brake or {})[0] or 0, (D.Brake or {})[1] or 0, id(ACE.GetPhysicalParent(Box)) })
+				D.BrakeOnly == true, Box.SteerRate or 0, (D.Brake or {})[0] or 0, (D.Brake or {})[1] or 0, id(ACE.GetPhysicalParent(Box)), Box.ClutchTemp or "", D.ClutchHeatJ or 0, Box.ClutchLife or 1, Box.MobFade or 1 })
 			local Key = format("gear %s, brakes %.2f/%.2f, clutch %.0f/%.0f", tostring(Box.Gear), Box.LBrake or 0, Box.RBrake or 0,
 				Box.LClutch or 0, Box.RClutch or 0)
 			if Rec.Last[Box] ~= Key then
@@ -281,7 +281,7 @@ end
 local Headers = {
 	frames = "frame,t,tick,kind,dt,chassis,x,y,z,pitch,yaw,roll,vel_fwd,vel_left,vel_up,angvel_x,angvel_y,angvel_z,speed_kmh,frozen,asleep,wheels,instep\n",
 	engines = "frame,t,tick,kind,dt,engine,active,running,stalled,cranking,rpm,throttle,torque,phys_mass,total_mass,leader\n",
-	boxes = "frame,t,tick,kind,dt,box,gear,ratio,lbrake_in,rbrake_in,lbrake_pedal,rbrake_pedal,lclutch,rclutch,clutch_cap,cap_full,clutch_free,diff,input_rpm,assisted,brake_only,steer,brake_torque_l,brake_torque_r,phys_parent\n",
+	boxes = "frame,t,tick,kind,dt,box,gear,ratio,lbrake_in,rbrake_in,lbrake_pedal,rbrake_pedal,lclutch,rclutch,clutch_cap,cap_full,clutch_free,diff,input_rpm,assisted,brake_only,steer,brake_torque_l,brake_torque_r,phys_parent,clutch_temp,clutch_heat_j,clutch_life,fade\n",
 	wheels = "frame,t,tick,kind,dt,wheel,box,side,hub,grounded,meshed,loaded,load_ema,free_ticks,player_held,held_still,anchored,lock_want,lock_on,lock_why,braking,pedal,brake_max,brake_slipped,anchor_torque,mu,radius,J,w,w_out,ground_speed,ground_speed_as_w,ground_w,ground_cap,impulse,ground_impulse,impulse_applied,applied_dw,tyre_imp,slide_cap,roll_drag,spin_vs_hub_x,spin_vs_hub_y,spin_vs_hub_z,asleep\n",
 	bodies = "frame,t,tick,kind,dt,body,is_chassis,is_hub,x,y,z,vel_x,vel_y,vel_z,angvel_x,angvel_y,angvel_z,angvel_vs_chassis_x,angvel_vs_chassis_y,angvel_vs_chassis_z,frozen,asleep\n",
 }

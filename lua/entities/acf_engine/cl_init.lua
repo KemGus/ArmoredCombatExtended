@@ -340,7 +340,10 @@ do -- What the drivetrain model does with an engine, and its starter setup
 		local StarterLabel = acemenupanel.CData["MobStarter_text"]
 		if IsValid( Label ) then
 			local Key, NextCheck = nil, 0
+			-- DLabel's own Think shrinks a wrapped label to its text (AutoStretchVertical).
+			local BaseThink = Label.Think
 			Label.Think = function( Self )
+				BaseThink( Self )
 				local Now = RealTime()
 				if Now < NextCheck then return end
 				NextCheck = Now + 0.3
