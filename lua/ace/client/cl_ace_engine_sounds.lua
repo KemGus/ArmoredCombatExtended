@@ -33,9 +33,11 @@ EngineSound.CabinOpening   = EngineSound.CabinOpening or 0 -- 0 closed .. 1 open
 -- Starter motor. At pitch 100 the recording is taken to be a crank turning at StarterRefRPM; a
 -- slower crank plays it lower, a faster one never plays it above its recorded pitch. Sounds
 -- without loop points are started again from the beginning when they run out while it cranks.
+-- The standard one is the steady middle of starter1.wav with a loop point, so it whirs on
+-- without the engagement clunk and the spin-down at the end of the original.
 -- An engine can carry its own starter sound (set in the sound bank editor of the sound replacer tool), networked as the
 -- "ACE_StarterSound" string; it is played the same way.
-EngineSound.StarterSound  = "acf_extra/vehiclefx/starters/starter1.wav"
+EngineSound.StarterSound  = "acf_extra/vehiclefx/starters/starter1_loop.wav"
 EngineSound.StarterRefRPM = 250
 EngineSound.StarterLevel  = 75 -- SNDLVL_75dB ("busy traffic"); a starter is quieter than the engine
 
@@ -459,6 +461,24 @@ local function InCabin(Ent, Seat)
 	return ACE.GetPhysicalParent(Seat) == ACE.GetPhysicalParent(Ent)
 end
 
+local LoopCache = {}
+
+-- Whether a .wav carries loop points (a "cue " chunk); Source then loops it by itself.
+local function HasLoopPoints(Path)
+	local Known = LoopCache[Path]
+	if Known ~= nil then return Known end
+
+	local Loops = false
+	if string.lower(string.GetExtensionFromFilename(Path) or "") == "wav" then
+		local Data = file.Read("sound/" .. Path, "GAME")
+		Loops = Data ~= nil and string.find(Data, "cue ", 1, true) ~= nil
+	end
+
+	LoopCache[Path] = Loops
+
+	return Loops
+end
+
 -- Starter motor: pitch follows the crank (the starter drives it through a fixed gear), volume
 -- follows the motor current (highest when bogged down). Every compression stroke loads the
 -- starter, so the volume pulses at the compression frequency, crank rev/s * cylinders / 2:
@@ -487,7 +507,7 @@ local function UpdateStarter(Ent, State, Dt, Shift, Muffle)
 		State.StarterPath = Path
 		State.StarterPhase = 0
 		State.StarterPlayed = 0 -- seconds of the recording played
-		State.StarterLength = SoundDuration(Path) or 0
+		State.StarterLength = HasLoopPoints(Path) and 0 or SoundDuration(Path) or 0
 
 		if not State.Starter then return end
 	end
