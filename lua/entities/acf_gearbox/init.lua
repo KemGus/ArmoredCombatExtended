@@ -16,6 +16,8 @@ local GearboxTable = ACE.Weapons.Gearboxes
 ]]
 local ClutchSetupMin, ClutchSetupMax = 1.2, 2.5
 local ClutchMaxPlates = 2
+-- Extra wire outputs on dual (steering) boxes: each side clutch's slip and temperature.
+local DualOutputs = { "Left Clutch Slip", "Right Clutch Slip", "Left Clutch Temp", "Right Clutch Temp" }
 
 do
 
@@ -190,6 +192,13 @@ do
 			table.insert(Outputs,"Min Target RPM")
 			table.insert(Outputs,"Max Target RPM")
 			table.insert(OutputTypes,"NORMAL")
+			table.insert(OutputTypes,"NORMAL")
+		end
+		if Gearbox.Dual then
+			for _, Name in ipairs(DualOutputs) do
+				table.insert(Outputs, Name)
+				table.insert(OutputTypes, "NORMAL")
+			end
 		end
 
 		Gearbox.Inputs = Wire_CreateInputs( Gearbox, Inputs )
@@ -309,6 +318,7 @@ function ENT:Update( ArgsTable )
 
 	-- Updating the gearbox fits a new clutch.
 	self.ClutchLife, self.ClutchBurnt, self.ClutchTemp = nil, nil, nil
+	self.MainClutchTemp, self.LClutchTemp, self.RClutchTemp = nil, nil, nil
 
 	if self.Id ~= Id then
 
@@ -356,6 +366,13 @@ function ENT:Update( ArgsTable )
 			table.insert(Outputs,"Min Target RPM")
 			table.insert(Outputs,"Max Target RPM")
 			table.insert(OutputTypes,"NORMAL")
+			table.insert(OutputTypes,"NORMAL")
+		end
+		if self.Dual then
+			for _, Name in ipairs(DualOutputs) do
+				table.insert(Outputs, Name)
+				table.insert(OutputTypes, "NORMAL")
+			end
 		end
 
 		local phys = self:GetPhysicsObject()
@@ -1117,11 +1134,21 @@ function ENT:MobilityApply()
 	]]
 	local HeatRate = ACE.GetHeatRate()
 	local Mass = 4 + (self.MobClutchRated or self.MaxTorque or 0) / 100
-	local Tau = self.Dual and 6 or 120
-	local T = self.ClutchTemp or ACE.AmbientTemp
-	T = T + (Mob.ClutchHeatJ or 0) * HeatRate / (ClutchSpecificHeat * Mass)
-	Mob.ClutchHeatJ = 0 -- used up
-	T = T - (T - ACE.AmbientTemp) * (1 - math.exp(-Dt * HeatRate / Tau))
+	local Cool = 1 - math.exp(-Dt * HeatRate / (self.Dual and 6 or 120))
+	local function heat(Temp, HeatJ)
+		Temp = (Temp or ACE.AmbientTemp) + (HeatJ or 0) * HeatRate / (ClutchSpecificHeat * Mass)
+		return Temp - (Temp - ACE.AmbientTemp) * Cool
+	end
+	-- A dual box's side clutches are packs of their own, each heated by its own slip; the box
+	-- reports (and fades and burns by) its hottest clutch.
+	self.MainClutchTemp = heat(self.MainClutchTemp or self.ClutchTemp, Mob.ClutchHeatJ)
+	local T = self.MainClutchTemp
+	if self.Dual then
+		self.LClutchTemp = heat(self.LClutchTemp, Mob.LHeatJ)
+		self.RClutchTemp = heat(self.RClutchTemp, Mob.RHeatJ)
+		T = math.max(T, self.LClutchTemp, self.RClutchTemp)
+	end
+	Mob.ClutchHeatJ, Mob.LHeatJ, Mob.RHeatJ = 0, 0, 0 -- used up
 	self.ClutchTemp = T
 
 	local Damage = ACE.GetHeatSetting("ace_gearbox_damage") ~= 0
@@ -1171,6 +1198,12 @@ function ENT:MobilityApply()
 	Wire_TriggerOutput(self, "Input RPM", math.Round((Mob.InputW or 0) * 30 / math.pi))
 	Wire_TriggerOutput(self, "Clutch Slip", math.Round(math.abs(Mob.ClutchSlip or 0) * 30 / math.pi))
 	Wire_TriggerOutput(self, "Clutch Temp", math.Round(T))
+	if self.Dual then
+		Wire_TriggerOutput(self, "Left Clutch Slip", math.Round(math.abs(Mob.LSlip or 0) * 30 / math.pi))
+		Wire_TriggerOutput(self, "Right Clutch Slip", math.Round(math.abs(Mob.RSlip or 0) * 30 / math.pi))
+		Wire_TriggerOutput(self, "Left Clutch Temp", math.Round(self.LClutchTemp or T))
+		Wire_TriggerOutput(self, "Right Clutch Temp", math.Round(self.RClutchTemp or T))
+	end
 	Wire_TriggerOutput(self, "Output Torque", math.Round(Mob.OutputTorque or 0))
 
 	-- Kept for E2/Starfall acfTorqueOut, which divides by GearRatio.

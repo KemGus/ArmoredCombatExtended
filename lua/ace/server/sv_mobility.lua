@@ -1419,7 +1419,9 @@ local function accumulate(Group, Ctx, Dt)
 		-- the last solve's (or the last Think's total) clutch heat again.
 		if Mob then
 			Box.MobAccHeatJ = (Box.MobAccHeatJ or 0) + (Mob.ClutchHeatJ or 0)
-			Mob.ClutchHeatJ = 0
+			Box.MobAccLHeatJ = (Box.MobAccLHeatJ or 0) + (Mob.LHeatJ or 0)
+			Box.MobAccRHeatJ = (Box.MobAccRHeatJ or 0) + (Mob.RHeatJ or 0)
+			Mob.ClutchHeatJ, Mob.LHeatJ, Mob.RHeatJ = 0, 0, 0
 		end
 	end
 end
@@ -1437,8 +1439,10 @@ local function takeAccumulated(Group, Ctx)
 		E.MobAcc = nil
 	end
 	for _, Box in ipairs(Ctx.BoxList) do
-		if Box.Mob then Box.Mob.ClutchHeatJ = Box.MobAccHeatJ or 0 end
-		Box.MobAccHeatJ = nil
+		if Box.Mob then
+			Box.Mob.ClutchHeatJ, Box.Mob.LHeatJ, Box.Mob.RHeatJ = Box.MobAccHeatJ or 0, Box.MobAccLHeatJ or 0, Box.MobAccRHeatJ or 0
+		end
+		Box.MobAccHeatJ, Box.MobAccLHeatJ, Box.MobAccRHeatJ = nil, nil, nil
 	end
 	return Dt
 end

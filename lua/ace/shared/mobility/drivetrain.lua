@@ -260,7 +260,7 @@ buildGearbox = function(Sys, Gearbox)
 					if Gearbox.DriveCap then OutCap = OutCap and min(OutCap, Gearbox.DriveCap) or Gearbox.DriveCap end
 					local C = addConstraint(Sys, { In, outputBody(Sys, Out) }, { 1, -R }, OutCap, 0, "gear")
 					Gearbox.Drive[#Gearbox.Drive + 1] = C
-					if Gearbox.Dual then Gearbox.SideClutches[#Gearbox.SideClutches + 1] = { C = C, Scale = 1 } end
+					if Gearbox.Dual then Gearbox.SideClutches[#Gearbox.SideClutches + 1] = { C = C, Scale = 1, Side = S } end
 				end
 			end
 		elseif Gearbox.Dual then
@@ -283,7 +283,7 @@ buildGearbox = function(Sys, Gearbox)
 						OutCap = OutCap and min(OutCap, Out.Gearbox.ClutchCap) or Out.Gearbox.ClutchCap
 					end
 					local C = addConstraint(Sys, { SB, outputBody(Sys, Out) }, { 1, -1 }, OutCap, 0, "side clutch")
-					Gearbox.SideClutches[#Gearbox.SideClutches + 1] = { C = C, Scale = abs(R) }
+					Gearbox.SideClutches[#Gearbox.SideClutches + 1] = { C = C, Scale = abs(R), Side = S }
 				end
 			end
 			Gearbox.Drive[1] = addConstraint(Sys, { In, SideBodies[0], SideBodies[1] }, { 1, -R / 2, -R / 2 }, Gearbox.DriveCap, 0, "diff")
@@ -468,7 +468,7 @@ function Drivetrain.Step(Sys, Dt, Substeps, Iterations)
 		Engine.FuelKg, Engine.HeatJ, Engine.TorqueSum = 0, 0, 0
 		Crank.Opts = { NoStall = Engine.NoStall, HasFuel = Engine.HasFuel }
 	end
-	for _, Gearbox in ipairs(Sys.Gearboxes) do Gearbox.ClutchHeatJ = 0 end
+	for _, Gearbox in ipairs(Sys.Gearboxes) do Gearbox.ClutchHeatJ, Gearbox.LHeatJ, Gearbox.RHeatJ = 0, 0, 0 end
 	for _, B in ipairs(Sys.Wheels) do B.TyreSum = 0 end
 
 	for _ = 1, Substeps do
@@ -528,10 +528,15 @@ function Drivetrain.Step(Sys, Dt, Substeps, Iterations)
 				local Slip = abs(C.Bodies[1].W * C.Coefs[1] + C.Bodies[2].W * C.Coefs[2])
 				Gearbox.ClutchHeatJ = Gearbox.ClutchHeatJ + abs(C.Acc) * Slip
 			end
+			-- Side clutches heat their own side (each is its own clutch pack).
 			for _, E in ipairs(Gearbox.SideClutches or {}) do
 				local C = E.C
-				local Slip = abs(C.Bodies[1].W * C.Coefs[1] + C.Bodies[2].W * C.Coefs[2])
-				Gearbox.ClutchHeatJ = Gearbox.ClutchHeatJ + abs(C.Acc) * Slip
+				local Heat = abs(C.Acc) * abs(C.Bodies[1].W * C.Coefs[1] + C.Bodies[2].W * C.Coefs[2])
+				if E.Side == 0 then
+					Gearbox.LHeatJ = Gearbox.LHeatJ + Heat
+				else
+					Gearbox.RHeatJ = Gearbox.RHeatJ + Heat
+				end
 			end
 		end
 	end
@@ -574,11 +579,18 @@ function Drivetrain.Step(Sys, Dt, Substeps, Iterations)
 		if C then
 			Gearbox.ClutchSlip = C.Bodies[1].W * C.Coefs[1] + Gearbox.Body.W * C.Coefs[2]
 		end
-		-- Dual boxes slip at their side clutches; report the worst one in input-shaft speed.
+		-- Dual boxes slip at their side clutches: each side's worst in input-shaft speed, and the
+		-- worst overall as the clutch slip.
+		Gearbox.LSlip, Gearbox.RSlip = nil, nil
 		for _, E in ipairs(Gearbox.SideClutches or {}) do
 			local SC = E.C
 			local Slip = (SC.Bodies[1].W * SC.Coefs[1] + SC.Bodies[2].W * SC.Coefs[2]) * E.Scale
 			if abs(Slip) > abs(Gearbox.ClutchSlip or 0) then Gearbox.ClutchSlip = Slip end
+			if E.Side == 0 then
+				if abs(Slip) >= abs(Gearbox.LSlip or 0) then Gearbox.LSlip = Slip end
+			elseif abs(Slip) >= abs(Gearbox.RSlip or 0) then
+				Gearbox.RSlip = Slip
+			end
 		end
 	end
 end
