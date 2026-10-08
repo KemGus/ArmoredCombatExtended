@@ -274,14 +274,46 @@ local SpinLockDeg = 5 -- an AdvBallsocket whose every limit is within this many 
 local SpinGroupMax = 32
 local LimitKeys = { "xmin", "xmax", "ymin", "ymax", "zmin", "zmax" }
 
-local function locksSpin(C)
+--[[
+	Many tanks lock only one axis: x within a fraction of a degree, y and z free. That holds
+	the spin when x lies along the axle, and the limits are about the constraint's own frame,
+	fixed to the bodies when it was made. constraint.AdvBallsocket makes it at world angles, so
+	the frame is recorded against Ent1 then, and the axle is compared with it later, wherever
+	the vehicle has turned since.
+]]
+hook.Add("OnEntityCreated", "ACE_Mobility_ConstraintFrame", function(Ent)
+	if Ent:GetClass() ~= "phys_ragdollconstraint" then return end
+	timer.Simple(0, function()
+		if not IsValid(Ent) then return end
+		local T = Ent:GetTable()
+		if T.Type == "AdvBallsocket" and IsValid(T.Ent1) and not T.ACEFrame then
+			T.ACEFrame = T.Ent1:WorldToLocalAngles(Ent:GetAngles())
+		end
+	end)
+end)
+
+local AxleAlignCos = math.cos(math.rad(10))
+
+local function locksSpin(C, AxisWorld)
 	if C.Type == "Weld" then return true end
 	if C.Type ~= "AdvBallsocket" then return false end
-	for _, K in ipairs(LimitKeys) do
-		local V = tonumber(C[K])
-		if not V or math.abs(V) > SpinLockDeg then return false end
+	local Tight, All = {}, true
+	for I = 1, 3 do
+		local Lo, Hi = tonumber(C[LimitKeys[I * 2 - 1]]), tonumber(C[LimitKeys[I * 2]])
+		Tight[I] = Lo ~= nil and Hi ~= nil and math.abs(Lo) <= SpinLockDeg and math.abs(Hi) <= SpinLockDeg
+		All = All and Tight[I]
 	end
-	return true
+	if All then return true end
+	if not AxisWorld or not (Tight[1] or Tight[2] or Tight[3]) then return false end
+	-- Without a recorded frame (made before this file loaded) the frame is taken as world.
+	local Frame = Angle(0, 0, 0)
+	local Store = IsValid(C.Constraint) and C.Constraint:GetTable() or C
+	if Store.ACEFrame and IsValid(C.Ent1) then Frame = C.Ent1:LocalToWorldAngles(Store.ACEFrame) end
+	local Axes = { Frame:Forward(), Frame:Right(), Frame:Up() }
+	for I = 1, 3 do
+		if Tight[I] and math.abs(Axes[I]:Dot(AxisWorld)) >= AxleAlignCos then return true end
+	end
+	return false
 end
 
 -- Props whose spin is locked to the wheel, not counting the wheel, its hub, the chassis or
@@ -297,7 +329,7 @@ local function spinGroup(W, Ctx)
 		local E = table.remove(Queue)
 		for _, C in pairs(constraint.GetTable(E) or {}) do
 			local Other = C.Ent1 == E and C.Ent2 or C.Ent1
-			if IsValid(Other) and not Skip[Other] and locksSpin(C) then
+			if IsValid(Other) and not Skip[Other] and locksSpin(C, W.AxisWorld) then
 				Skip[Other] = true
 				local P = Other:GetPhysicsObject()
 				-- Another driven wheel is read and driven on its own.
