@@ -77,6 +77,7 @@ local function WriteCreate(Engine, State)
 	net.WriteUInt(Clamp(Round(Engine.MaxDB or 75), 0, 255), 8)
 	net.WriteUInt(Clamp(Round(Engine.LimitRPM or 6000), 1, 65535), 16)
 	net.WriteBool(Engine.EngineType ~= "Electric" and Engine.FuelType ~= "Electric") -- burns fuel: has exhaust smoke
+	net.WriteBool(Engine.EngineType == "Turbine" or Engine.EngineType == "GroundTurbine") -- clean hot gas, not smoke
 	net.WriteBool(Banks ~= nil)
 
 	if Banks then

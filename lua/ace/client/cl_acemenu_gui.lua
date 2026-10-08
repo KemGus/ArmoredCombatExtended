@@ -986,6 +986,10 @@ function ACE.SVGUICreate()	--Serverside folder content
 		"Engines lose health once the block passes about 200 °C (180 °C for motor windings) or the oil passes 150 °C. When off, they only lose power.")
 	addSettingNote("Realistic: on.", heat)
 
+	addHeatControl(addCheckbox("Gearboxes take damage", "ace_gearbox_damage", heat, setMapHeatSetting), "ace_gearbox_damage",
+		"Cooked clutches and overloaded gears wear the gearbox's health, and a burnt-out clutch stays burnt until it is repaired with the torch. When off, a burnt-out clutch recovers by itself once it has cooled down.")
+	addSettingNote("Realistic: on. ACE default: off.", heat)
+
 	local heatReset = vgui.Create("DButton", heat)
 	heatReset:SetText("Use the server defaults on this map")
 	heatReset:SetTooltip("Deletes this map's saved heat settings.")

@@ -474,7 +474,7 @@ function ENT:UpdateOverlayText()
 		if self.ClutchHousingLimited then text = text .. "\nClutch limited by gearbox size: " .. math.Round( self.MobClutchRated or 0 ) .. " Nm" end
 	end
 	if self.ClutchBurnt then
-		text = text .. "\nClutch burnt out - update the gearbox to replace it"
+		text = text .. "\n" .. self:OverTorqueReason()
 	elseif ( self.ClutchLife or 1 ) < 1 then
 		text = text .. "\nClutch facing: " .. math.Round( self.ClutchLife * 100 ) .. " % left"
 	end
@@ -645,9 +645,29 @@ local ClutchDamageTemp = 350          -- °C
 	below ClutchWornLife the facing grips less and less, and with none left the clutch is burnt
 	out: it carries no torque, so it makes no more heat and cools down. A new clutch is fitted
 	by updating the gearbox with the menu tool.
+	With ace_gearbox_damage on, burning out also takes the gearbox down to ClutchBurntHealth of
+	its health, and the torch fits new facings as it repairs it (ENT:OnTorchRepair). With it off
+	(the default), the facings come back by themselves below ClutchRecoverTemp at
+	ClutchRecoverRate per second: a burnt-out clutch drives again about 15 s after it has cooled
+	(gameplay, not physics).
 ]]
 local ClutchBurnRate = 0.02
 local ClutchWornLife = 0.25
+local ClutchBurntHealth = 0.5
+local ClutchRecoverTemp = 150         -- °C
+local ClutchRecoverRate = 0.02        -- facing life per second
+
+--- Called by the ACE torch after it restored health to this gearbox: a burnt or worn clutch
+-- gets new facings in step with the repair, from none at ClutchBurntHealth to new at full health.
+-- @param Gained Health the torch just restored.
+function ENT:OnTorchRepair(Gained)
+	if (self.ClutchLife or 1) >= 1 or not self.ACE or not self.ACE.MaxHealth then return end
+	local Share = Gained / (self.ACE.MaxHealth * (1 - ClutchBurntHealth))
+	self.ClutchLife = math.min((self.ClutchLife or 0) + Share, 1)
+	if self.ACE.Health >= self.ACE.MaxHealth then self.ClutchLife = 1 end
+	if self.ClutchBurnt and self.ClutchLife >= ClutchWornLife then self.ClutchBurnt = nil end
+	self:UpdateOverlayText()
+end
 
 -- The engine driving this gearbox, directly or through parent gearboxes.
 local function masterEngine(Box, Depth)
@@ -924,12 +944,20 @@ function ENT:MobilityControl(Dt)
 		capacity a half-pressed pedal could still carry several times the engine's torque and
 		would never slip. The pedal scales this capacity linearly (0.5 = half the clamp force).
 	]]
+	--[[
+		The clutch belongs to the engine, not to the gears: its rating has nothing to do with the
+		gearbox's, which is the fatigue limit of the gear teeth. Capped at the gearbox rating, a
+		box rated a little above the engine's torque slipped its clutch on every shock (wheels
+		gripping again while drifting, braking in gear) and cooked it with nobody on the pedal.
+		Only the bell housing limits it: no more than ClutchMaxPlates discs of the gearbox's size.
+		A gearbox rated below the engine now wears its gears instead (see UpdateGearOverload).
+	]]
 	local Rated = Max
 	local EngineTorque = 0
 	for _, Master in pairs(self.Master or {}) do
 		if IsValid(Master) and Master:GetClass() == "acf_engine" then EngineTorque = EngineTorque + (Master.PeakTorque or 0) end
 	end
-	if EngineTorque > 0 then Rated = math.min(Max, 1.5 * EngineTorque) end
+	if EngineTorque > 0 then Rated = math.min(Max * ClutchMaxPlates, 1.5 * EngineTorque) end
 	--[[
 		A custom clutch is sized to the engine, not the gearbox: it can be made stronger than the
 		gears behind it (they then wear when overloaded, see MobilityApply) or weaker. Clutch
@@ -948,7 +976,7 @@ function ENT:MobilityControl(Dt)
 		local Plates = Rated > Max and 2 or 1
 		self.ClutchPlates = Plates
 		-- Each plate's disc inertia grows with its capacity to the 4/3 power (see above).
-		local Matched = math.min(Max, 1.5 * EngineTorque)
+		local Matched = math.min(Max * ClutchMaxPlates, 1.5 * EngineTorque)
 		ClutchJ = math.max(0.005 * (Plates * (Rated / Plates / 300) ^ (4 / 3) - (Matched / 300) ^ (4 / 3)), 0)
 	end
 	self.MobClutchJ = ClutchJ
@@ -981,7 +1009,7 @@ function ENT:MobilityControl(Dt)
 	-- What over-torque detection needs: the clutch fully engaged, and why it could be too weak.
 	self.MobCapFull = Cap > 0 and Cap >= Rated * Fade * 0.98 and Pedal < 0.1
 	self.MobEngineTorque = EngineTorque
-	self.MobRatingLimited = EngineTorque > 0 and Max < 1.5 * EngineTorque
+	self.MobRatingLimited = EngineTorque > 0 and Max * ClutchMaxPlates < 1.5 * EngineTorque
 	self.MobFade = Fade
 end
 
@@ -1047,13 +1075,16 @@ end
 -- @return string
 function ENT:OverTorqueReason()
 	if self.ClutchBurnt then
-		return "Gearbox clutch burnt out - it carries no torque. Update the gearbox with the menu tool to fit a new one"
+		if ACE.GetHeatSetting("ace_gearbox_damage") ~= 0 then
+			return "Gearbox clutch burnt out - it carries no torque. Repair the gearbox with the torch"
+		end
+		return "Gearbox clutch burnt out - it carries no torque until it has cooled down"
 	elseif self.MobRatingLimited then
 		-- The clutch carries the engine's torque plus what it takes to speed up or slow down the
-		-- engine's rotating mass (shifts, wheels gripping again, braking in gear), so a rating
-		-- only a little above the engine's peak still slips. Clutches are sized 1.2-2 times peak.
-		return string.format("Gearbox over torque: its clutch is slipping. It is rated %d Nm, the engine makes up to %d Nm, and shocks from shifts or braking in gear add more - use a gearbox rated about %d Nm",
-			math.Round(self.MaxTorque or 0), math.Round(self.MobEngineTorque or 0), math.Round(1.5 * (self.MobEngineTorque or 0)))
+		-- engine's rotating mass (shifts, wheels gripping again, braking in gear), so it is sized
+		-- 1.5 times the engine's peak; the largest that fits this gearbox's housing is smaller.
+		return string.format("Gearbox over torque: its clutch is slipping. The largest clutch this gearbox fits carries %d Nm, the engine makes up to %d Nm plus shocks from shifts or braking in gear - use a bigger gearbox",
+			math.Round(self.MobClutchRated or 0), math.Round(self.MobEngineTorque or 0))
 	elseif (self.MobFade or 1) < 1 then
 		return string.format("Gearbox clutch slipping: it is overheated (%d C) and has lost grip", math.Round(self.ClutchTemp or 0))
 	end
@@ -1090,7 +1121,8 @@ function ENT:MobilityApply()
 	T = T - (T - ACE.AmbientTemp) * (1 - math.exp(-Dt * HeatRate / Tau))
 	self.ClutchTemp = T
 
-	if T > ClutchDamageTemp and self.ACE and self.ACE.Health then
+	local Damage = ACE.GetHeatSetting("ace_gearbox_damage") ~= 0
+	if Damage and T > ClutchDamageTemp and self.ACE and self.ACE.Health then
 		-- A cooked clutch wears its facings away: lose health in proportion to the overheat.
 		local Wear = (T - ClutchDamageTemp) / 100 * Dt * HeatRate * 0.01 * self.ACE.MaxHealth
 		self.ACE.Health = math.max(self.ACE.Health - Wear, self.ACE.MaxHealth * 0.05)
@@ -1099,6 +1131,20 @@ function ENT:MobilityApply()
 		self.ClutchLife = math.max((self.ClutchLife or 1) - (T - ClutchDamageTemp) / 100 * ClutchBurnRate * Dt * HeatRate, 0)
 		if self.ClutchLife <= 0 then
 			self.ClutchBurnt = true
+			-- With gearbox damage on, a burnt-out clutch is damage the torch has to repair.
+			if Damage and self.ACE and self.ACE.Health then
+				self.ACE.Health = math.min(self.ACE.Health, self.ACE.MaxHealth * ClutchBurntHealth)
+				ACE.UpdateVisualHealth(self)
+			end
+			self:UpdateOverlayText()
+		end
+	elseif not Damage and T < ClutchRecoverTemp and (self.ClutchLife or 1) < 1 then
+		-- Gearbox damage off: the clutch recovers by itself once it has cooled down.
+		self.ClutchLife = math.min(self.ClutchLife + ClutchRecoverRate * Dt * HeatRate, 1)
+		if self.ClutchBurnt and self.ClutchLife >= ClutchWornLife then
+			self.ClutchBurnt = nil
+			self:UpdateOverlayText()
+		elseif self.ClutchLife >= 1 then
 			self:UpdateOverlayText()
 		end
 	end
@@ -1140,7 +1186,7 @@ function ENT:UpdateGearOverload(Mob, Dt)
 	local Torque = math.abs((Mob.OutputTorque or 0) * (self.GearRatio or 0))
 	local Over = Max > 0 and Torque / Max - 1 or 0
 	local Overloaded = Over > 0.02
-	if Overloaded and self.ACE and self.ACE.Health then
+	if Overloaded and self.ACE and self.ACE.Health and ACE.GetHeatSetting("ace_gearbox_damage") ~= 0 then
 		local Wear = 0.04 * Over * Dt * self.ACE.MaxHealth
 		self.ACE.Health = math.max(self.ACE.Health - Wear, self.ACE.MaxHealth * 0.05)
 	end

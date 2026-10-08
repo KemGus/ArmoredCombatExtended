@@ -194,6 +194,7 @@ net.Receive("ACE_EngineSound_Create", function()
 	local MaxDB   = net.ReadUInt(8)
 	local Limit   = net.ReadUInt(16)
 	local Burns   = net.ReadBool()
+	local Turbine = net.ReadBool()
 	local IsBanks = net.ReadBool()
 	local Banks, Legacy
 
@@ -223,6 +224,7 @@ net.Receive("ACE_EngineSound_Create", function()
 		Level    = EngineSound.SoundLevel(MaxDB),
 		Limit    = math.max(Limit, 1),
 		Burns    = Burns, -- combustion engine, so its exhaust smokes
+		Turbine  = Turbine, -- gas turbine: its exhaust is hot clear gas, drawn as heat haze
 		Exhaust  = IsValid(Exhaust) and Exhaust or nil,
 		Legacy   = Legacy,
 		RPM      = Old and Old.RPM or 0,

@@ -21,7 +21,8 @@ do
 		["Capacity"]    = "Returns the max capacity of this fuel tank. Batteries: the capacity left after wear, in kWh.",
 		["Leaking"]     = "Is the fuel tank leaking?",
 		["Temperature"] = "Batteries only: cell temperature in °C. Charging stops at 50 °C, discharging at 60 °C.",
-		["Health"]      = "Batteries only: capacity left, in % of a new battery's."
+		["Health"]      = "Batteries only: capacity left, in % of a new battery's.",
+		["Power"]       = "Batteries only: power the battery is giving out now, in kW (negative while it charges), averaged over about a second."
 	}
 
 	local Names = { "Fuel", "Capacity", "Leaking" }
@@ -37,7 +38,7 @@ do
 		end
 		Out[#Out + 1], Types[#Types + 1] = "Entity", "ENTITY"
 		if Electric then
-			for _, Name in ipairs({ "Temperature", "Health" }) do
+			for _, Name in ipairs({ "Temperature", "Health", "Power" }) do
 				Out[#Out + 1] = Name .. " (" .. FueltankWireDescs[Name] .. ")"
 				Types[#Types + 1] = "NORMAL"
 			end
@@ -385,7 +386,9 @@ function ENT:UpdateOverlayText()
 		local State = self.BatteryState
 		if State then
 			local Battery = ACE.Mobility.Battery
-			text = text .. "\n\nTemperature: " .. math.Round( State.T, 1 ) .. " °C"
+			local Power = self.PowerKW or 0
+			text = text .. "\n\n" .. ( Power < 0 and "Charging: " or "Output: " ) .. math.Round( math.abs( Power ), 1 ) .. " kW"
+			text = text .. "\nTemperature: " .. math.Round( State.T, 1 ) .. " °C"
 			if #(self.RadLink or {}) > 0 then
 				text = text .. "\nLiquid cooled by " .. #self.RadLink .. (#self.RadLink == 1 and " radiator" or " radiators")
 			end
@@ -489,6 +492,8 @@ local function batteryTransfer(Tank, TerminalKWh, Dt)
 	Tank.Fuel = math.Clamp(Tank.Fuel + Stored, 0, Tank.Capacity)
 	local Moved = Tank.Fuel - Before
 	Battery.AddThroughput(State, Moved / math.max(Tank.NominalCapacity, 1e-6), Tank.Fuel / math.max(Tank.Capacity, 1e-6))
+	-- Terminal energy since the last think, for the Power output.
+	Tank.TerminalKWh = (Tank.TerminalKWh or 0) + TerminalKWh
 	return Moved
 end
 
@@ -630,6 +635,10 @@ local function batteryThink(Tank, Dt)
 	end
 	Wire_TriggerOutput( Tank, "Temperature", State.T )
 	Wire_TriggerOutput( Tank, "Health", Battery.Health(State) * 100 )
+	-- kWh over Dt seconds to kW; positive while the battery gives power out.
+	Tank.PowerKW = -(Tank.TerminalKWh or 0) * 3600 / Dt
+	Tank.TerminalKWh = 0
+	Wire_TriggerOutput( Tank, "Power", math.Round(Tank.PowerKW, 2) )
 end
 
 function ENT:Update( ArgsTable )

@@ -75,6 +75,33 @@ local function Outlet(Exhaust, State)
 	return Exhaust:LocalToWorld(State.SmokeOutlet)
 end
 
+--[[
+	Gas turbines burn lean with a large excess of air (overall air-fuel ratio 50-100:1 against
+	about 15:1 in a piston engine), so their exhaust carries almost no soot: what shows is the
+	hot gas bending the light behind it. Drawn as refracting heat haze (HL2's sprites/heatwave),
+	blown out fast and growing with load.
+]]
+local HazeMaterial = "sprites/heatwave"
+
+local function EmitHaze(Em, Pos, Dir, Vel, Load, Scale)
+	local Particle = Em:Add(HazeMaterial, Pos)
+	if not Particle then return end
+
+	local Spread = VectorRand() * 0.15
+
+	Particle:SetVelocity(Vel + (Dir + Spread) * (150 + Load * 450) * Scale)
+	Particle:SetDieTime(0.5 + Load * 0.4 + Rand(0, 0.2))
+	Particle:SetAirResistance(120)
+	Particle:SetGravity(Rise)
+	Particle:SetStartAlpha(255)
+	Particle:SetEndAlpha(0)
+	Particle:SetStartSize(4 * Scale)
+	Particle:SetEndSize((14 + Load * 36) * Scale)
+	Particle:SetRoll(Rand(-1, 1))
+	Particle:SetRollDelta(Rand(-1, 1))
+	Particle:SetCollide(false)
+end
+
 local function EmitOne(Em, Pos, Dir, Vel, Load, Scale, Dark)
 	local Particle = Em:Add(Materials[random(1, 16)], Pos)
 	if not Particle then return end
@@ -152,13 +179,20 @@ function Smoke.Think(State, Dt)
 
 	Em:SetPos(Pos)
 
-	for _ = 1, Count do
-		EmitOne(Em, Pos, Dir, Vel, Load, Scale, 0)
-	end
+	if State.Turbine then
+		for _ = 1, Count do
+			EmitHaze(Em, Pos, Dir, Vel, Load, Scale)
+		end
+		Puff = 0
+	else
+		for _ = 1, Count do
+			EmitOne(Em, Pos, Dir, Vel, Load, Scale, 0)
+		end
 
-	-- Unburnt fuel from the first firings: a short dark puff
-	for _ = 1, Puff do
-		EmitOne(Em, Pos, Dir, Vel, 0.6, Scale, 50)
+		-- Unburnt fuel from the first firings: a short dark puff
+		for _ = 1, Puff do
+			EmitOne(Em, Pos, Dir, Vel, 0.6, Scale, 50)
+		end
 	end
 
 	Budget = Budget - Count - Puff

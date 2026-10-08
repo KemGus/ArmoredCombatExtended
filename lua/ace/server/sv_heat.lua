@@ -34,6 +34,8 @@ do
 			Help = "Cooling every engine has without a radiator entity, as a share of its full-power heat. 0 - none, 1 - enough for full power." },
 		{ Name = "ace_engine_overheat_damage", Default = 1, Min = 0, Max = 1,
 			Help = "1 - engines lose health when their block metal or oil overheats, 0 - they only lose power." },
+		{ Name = "ace_gearbox_damage", Default = 0, Min = 0, Max = 1,
+			Help = "1 - cooked clutches and overloaded gears damage the gearbox, and a burnt-out clutch stays burnt until repaired with the torch. 0 - no gearbox damage; a burnt-out clutch recovers once it has cooled down." },
 	}
 
 	local ByName = {}

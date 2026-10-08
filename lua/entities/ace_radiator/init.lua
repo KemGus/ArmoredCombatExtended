@@ -10,7 +10,8 @@ do
 
 	local RadiatorWireDescs = {
 		--Inputs
-		["ActiveCooling"]	= "Active uses engine power to cool the radiator. Pushes an additional 20mph of airflow through the radiator.",
+		["Fan Mode"]	= "0 - automatic (default): the fan speeds up from 90 °C coolant to full at 100 °C. 1 - manual, at Fan Effort. 2 - off.",
+		["Fan Effort"]	= "Fan speed in manual mode, 0-100 %. The fan's power draw goes with the cube of its speed.",
 
 		--Outputs
 		["Coolant"]        = "Returns the current coolant level.",
@@ -36,7 +37,9 @@ do
 		self.NextMassUpdate   = 0
 		self.NextGUIUpdate    = 0
 		self.Id               = nil	--model id
-		self.Active           = false
+		self.FanMode          = 0
+		self.FanEffortInput   = 0
+		self.FanEffort        = 0 -- speed the fan is driven at now, 0..1
 		self.FanRunning		  = 0
 		self.NextLegalCheck   = ACE.CurTime + math.random(ACE.Legal.Min, ACE.Legal.Max) -- give any spawning issues time to iron themselves out
 		self.Legal            = true
@@ -54,10 +57,10 @@ do
 		self.RadiatorStats    = "" --Used to cache radiator stats. No reason to recalculate these constantly.
 		self.Heat = ACE.AmbientTemp
 
-		self.Inputs = Wire_CreateInputs( self, { "ActiveCooling (" .. RadiatorWireDescs["ActiveCooling"] .. ")" } )
+		self.Inputs = Wire_CreateInputs( self, { "Fan Mode (" .. RadiatorWireDescs["Fan Mode"] .. ")", "Fan Effort (" .. RadiatorWireDescs["Fan Effort"] .. ")" } )
 		self.Outputs = WireLib.CreateSpecialOutputs( self,
-			{  "Temperature (" .. RadiatorWireDescs["Temperature"] .. ")", "Coolant (" .. RadiatorWireDescs["Coolant"] .. ")", "Capacity (" .. RadiatorWireDescs["Capacity"] .. ")", "Leaking (" .. RadiatorWireDescs["Leaking"] .. ")", "FanRunning", "Entity" },
-			{ "NORMAL", "NORMAL", "NORMAL", "NORMAL", "NORMAL", "ENTITY" }
+			{  "Temperature (" .. RadiatorWireDescs["Temperature"] .. ")", "Coolant (" .. RadiatorWireDescs["Coolant"] .. ")", "Capacity (" .. RadiatorWireDescs["Capacity"] .. ")", "Leaking (" .. RadiatorWireDescs["Leaking"] .. ")", "FanRunning", "Fan Effort", "Entity" },
+			{ "NORMAL", "NORMAL", "NORMAL", "NORMAL", "NORMAL", "NORMAL", "ENTITY" }
 		)
 		Wire_TriggerOutput( self, "Leaking", 0 )
 		Wire_TriggerOutput( self, "Entity", self )
@@ -245,7 +248,13 @@ duplicator.RegisterEntityClass("ace_radiator", ACE.MakeRadiator, "Pos", "Angle",
 
 
 local Wall = 0.75 -- wall thickness in inches
-local FanOnTemp = 85 -- deg C; coolant thermostats open at about 82-90 °C and switch the fan on above it
+--[[
+	Automatic fan: electronically controlled radiator fans run proportionally to coolant
+	temperature above the thermostat's opening point (about 82-90 °C), reaching full speed a few
+	degrees past normal running temperature (PWM fan control). Here: off below 90 °C, full at 100 °C.
+]]
+local FanAutoStart = 90 -- °C
+local FanAutoFull = 100 -- °C
 
 function ENT:UpdateRadiator(_, _)
 
@@ -302,7 +311,7 @@ function ENT:UpdateRadiator(_, _)
 	text = text .. "\n- Standing, fan off: " .. math.Round(Rating(Thermal.FaceVelocity(self.CoreDepthM, 0, 0)), 1) .. " kW"
 	text = text .. "\n- Standing, fan on: " .. math.Round(Rating(Thermal.FaceVelocity(self.CoreDepthM, 0, 1)), 1) .. " kW"
 	text = text .. "\n- 40 km/h, fan on: " .. math.Round(Rating(Thermal.FaceVelocity(self.CoreDepthM, 40 / 3.6, 1)), 1) .. " kW"
-	text = text .. "\nFan uses " .. math.Round(self.ActiveTorqueDemand / 745.7, 2) .. " hp when needed\n"
+	text = text .. "\nFan uses up to " .. math.Round(self.ActiveTorqueDemand / 745.7, 2) .. " hp at full speed\n"
 
 	self.RadiatorStats = text
 
@@ -325,10 +334,11 @@ function ENT:UpdateOverlayText()
 
 	local Stats
 
+	local Mode = self.FanMode == 1 and "manual" or self.FanMode == 2 and "off" or "automatic"
 	if self.FanRunning > 0 then
-		Stats = "Cooling Actively - Fan using engine power"
+		Stats = "Fan " .. math.Round((self.FanEffort or 0) * 100) .. " % (" .. Mode .. ")"
 	else
-		Stats = "Cooling Passively"
+		Stats = "Cooling passively - fan " .. Mode
 	end
 
 	local text = "- " .. Stats .. " -\n"
@@ -386,12 +396,11 @@ end
 
 function ENT:TriggerInput( iname, value )
 
-	if (iname == "ActiveCooling") then
-		if value >	 0 then
-			self.Active = true
-		else
-			self.Active = false
-		end
+	if iname == "Fan Mode" then
+		self.FanMode = math.Clamp(math.floor(value), 0, 2)
+		self:UpdateOverlayText()
+	elseif iname == "Fan Effort" then
+		self.FanEffortInput = math.Clamp(value, 0, 100)
 	end
 
 end
@@ -403,13 +412,22 @@ function ENT:Think()
 	local ECount = #self.Master
 
 	--[[
-		Active cooling: a fan driven from the engines, switched on by the ActiveCooling input and
-		run by its thermostat only while the coolant is above the thermostat's opening point
-		(the thermostatic fan clutch of real cooling systems). The fan's power is taken from the
-		crank as a torque, P / omega, at idle speed and above; below idle it falls with the square
-		of the crank speed.
+		The fan, driven from the engines. Automatic (Fan Mode 0) runs it in proportion to the
+		coolant temperature, manual (1) at the Fan Effort input, and 2 keeps it off. Its airflow
+		goes with its speed and its power with the cube of it (fan affinity laws). The power is
+		taken from the crank as a torque, P / omega, at idle speed and above; below idle it falls
+		with the square of the crank speed.
 	]]
-	local FanWanted = self.Active and (self.Heat or 0) > FanOnTemp
+	local Mode = self.FanMode or 0
+	local Effort
+	if Mode == 1 then
+		Effort = (self.FanEffortInput or 0) / 100
+	elseif Mode == 2 then
+		Effort = 0
+	else
+		Effort = math.Clamp(((self.Heat or 0) - FanAutoStart) / (FanAutoFull - FanAutoStart), 0, 1)
+	end
+	local FanWanted = Effort > 0
 	self.FanRunning = 0
 
 	for Key in pairs(self.Master) do
@@ -421,7 +439,7 @@ function ENT:Think()
 			local Idle = Spec and Spec.IdleW or 0
 			local Speed = math.abs(State and State.W or 0)
 			local Omega = math.max(Speed, Idle > 0 and Idle or 80)
-			local Torque = self.ActiveTorqueDemand / math.max(ECount, 1) / Omega
+			local Torque = self.ActiveTorqueDemand * Effort ^ 3 / math.max(ECount, 1) / Omega
 			--[[
 				Below idle (the starter cranking, the engine stalling or spinning down) a belt-driven
 				fan turns slower with the crank, and a fan's torque goes with the square of its speed
@@ -442,11 +460,13 @@ function ENT:Think()
 		battery while the cells are warm (acf_fueltank batteryLoop sets BatteryFanWanted).
 	]]
 	local Battery = self.FanBattery
-	if self.FanRunning == 0 and self.Active and self.BatteryFanWanted and IsValid(Battery) and Battery.DrawEnergy then
+	if Mode == 0 and self.BatteryFanWanted then Effort = 1 end
+	if self.FanRunning == 0 and Effort > 0 and (Mode == 1 or self.BatteryFanWanted) and IsValid(Battery) and Battery.DrawEnergy then
 		local Dt = CT - (self.LastThink or CT)
-		if Dt > 0 then Battery:DrawEnergy(self.ActiveTorqueDemand * Dt / 3.6e6, Dt) end
+		if Dt > 0 then Battery:DrawEnergy(self.ActiveTorqueDemand * Effort ^ 3 * Dt / 3.6e6, Dt) end
 		self.FanRunning = 1
 	end
+	self.FanEffort = self.FanRunning == 1 and Effort or 0
 
 
 
@@ -455,8 +475,9 @@ function ENT:Think()
 		if self.FanRunning == 1 then --The Fan is running
 
 
-			if self.FanSpeed > 0 then --Fan is ramping up
-				self.FanSpeed = math.min(self.FanSpeed + 0.03,1)
+			if self.FanSpeed > 0 then --Fan is ramping towards its effort
+				local Target = math.max(self.FanEffort, 0.01)
+				self.FanSpeed = self.FanSpeed < Target and math.min(self.FanSpeed + 0.03, Target) or math.max(self.FanSpeed - 0.03, Target)
 				if self.Sound then
 					self.Sound:ChangePitch( self.SoundPitch * self.FanSpeed )
 				end
@@ -549,6 +570,7 @@ function ENT:Think()
 
 		Wire_TriggerOutput( self, "Temperature", self.Heat )
 		Wire_TriggerOutput( self, "FanRunning", self.FanRunning )
+		Wire_TriggerOutput( self, "Fan Effort", math.Round((self.FanEffort or 0) * 100) )
 
 		self.LastThink2 = CT --Used for heat deltatime
 		self.NextHeatLogic = CT + 0.25 --Executes heat logic every 0.5 seconds.

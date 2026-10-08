@@ -139,7 +139,10 @@ do
 
 				if ACE.Check( ent ) and ent.ACE.Health < ent.ACE.MaxHealth then
 
+					local OldHealth = ent.ACE.Health
 					ent.ACE.Health = math.min(ent.ACE.Health + (600 / ent.ACE.MaxArmour), ent.ACE.MaxHealth)
+					-- Parts with something to fix beyond health (a gearbox's burnt clutch).
+					if ent.OnTorchRepair then ent:OnTorchRepair(ent.ACE.Health - OldHealth) end
 					ent.ACE.Armour = math.min(ent.ACE.MaxArmour * (ent.ACE.Health / ent.ACE.MaxHealth), ent.ACE.MaxArmour)
 					ent:EmitSound( "ambient/energy/NewSpark0" .. tostring( math.random( 3, 5 ) ) .. ".wav", 75, 100, 1, CHAN_WEAPON )
 					ACE.TeslaSpark(tr.HitPos , 1 )
