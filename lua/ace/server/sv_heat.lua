@@ -656,9 +656,8 @@ do
 			local Face = Thermal.FaceVelocity(Engine.BuiltinCoreDepthM, SpeedMS, Fan and 1 or 0)
 			local UA, Cair = Thermal.RadiatorAir(Engine.BuiltinCoreFrontM2, Engine.BuiltinCoreDepthM, Face)
 			Exchangers[#Exchangers + 1] = { UA = UA, Cair = Cair }
-			local Tank = Engine.MobTank
-			if Fan and IsValid(Tank) and Tank.DrawEnergy then
-				Tank:DrawEnergy(Engine.BuiltinCoreFanW * Dt / 3.6e6, Dt)
+			if Fan and IsValid(Engine.MobTank) then
+				Engine:DrawFuel(Engine.BuiltinCoreFanW * Dt / 3.6e6)
 			end
 		end
 

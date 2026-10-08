@@ -699,8 +699,10 @@ end
 	  GlowTau = 1.5 s (95 % in 4.5 s; steel glow plugs reach 850 °C in 2-5 s, Bosch glow plug
 	  data) and draw GlowW = 150 W each (12 V plugs take 10-25 A heating up, ~8 A hot; estimated).
 	  The controller preheats before cranking, longest when cold: PreheatMax (a setting, default
-	  5 s) at -20 °C coolant and below, nothing at 60 °C and above, linear in between (estimated
-	  from glow-time-against-coolant maps of ~2-20 s). PreheatMax 0 means no glow plugs.
+	  5 s) at -20 °C coolant and below, nothing at 10 °C and above, linear in between (estimated
+	  from glow-time-against-coolant maps of ~2-20 s; passenger-car direct-injection diesels skip
+	  the preheat above about +10 °C coolant and start at once). The plugs stay on while it
+	  cranks. PreheatMax 0 means no glow plugs.
 	CatchMargin: the engine counts as running (the starter drops out) once it fires past 1.15 x
 	  its stall speed, the speed below which a running engine stalls (estimated).
 ]]
@@ -723,7 +725,7 @@ local GlowBoostK     = 100
 local GlowTau        = 1.5
 local GlowW          = 150
 local PreheatColdC   = -20
-local PreheatWarmC   = 60
+local PreheatWarmC   = 10
 local DefaultPreheat = 5
 local CatchMargin    = 1.15
 -- Temperatures when the entity has not set them: a warm engine on a 20 °C day.

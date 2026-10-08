@@ -7,6 +7,8 @@ include("shared.lua")
 
 local EngineTable = ACE.Weapons.Engines
 local FuelLinkDistBase = 512
+local FeedRescan = 0.5 -- s; how often the fuel feed's tanks and shares are rebuilt (ENT:ScanFeed)
+local FeedFlush = 0.1 -- s; how often the fuel burned is taken from the tanks (ENT:FlushFeed)
 
 do
 
@@ -662,6 +664,12 @@ function ENT:Think()
 	Wire_TriggerOutput(self, "Oil Temp", self.OilHeat or 0)
 	Wire_TriggerOutput(self, "Block Temp", self.BlockHeat or self.Heat)
 
+	if ACE.CurTime >= (self.NextFeedFlush or 0) then
+		self:FlushFeed(ACE.CurTime - (self.LastFeedFlush or ACE.CurTime))
+		self.LastFeedFlush = ACE.CurTime
+		self.NextFeedFlush = ACE.CurTime + FeedFlush
+	end
+
 	if ACE.CurTime > self.NextUpdate then
 
 		self.TotalFuel = self:GetMaxFuel()
@@ -786,18 +794,6 @@ function ENT:GetMaxFuel()
 	end
 
 	return TFuel
-end
-
---- Returns the first linked battery that can take charge from regenerative braking.
--- @return An active, legal Electric acf_fueltank that accepts charge (CC-CV, not too hot), and
--- the power it accepts in W; or nil.
-function ENT:GetChargeTank()
-	for _, Tank in ipairs(self.FuelLink) do
-		if IsValid(Tank) and Tank.FuelType == "Electric" and Tank.ChargeAcceptW then
-			local Accept = Tank:ChargeAcceptW()
-			if Accept > 0 then return Tank, Accept end
-		end
-	end
 end
 
 --[[
@@ -1032,17 +1028,125 @@ local function IsValidfueltank( Tank )
 	return IsValid(Tank) and Tank.Fuel > 0 and Tank.Active and Tank.Legal
 end
 
+--[[
+	Fuel feed. All linked tanks feed the engine together, as a crossfeed system does: liquid fuel
+	is drawn from each in proportion to what it holds, so they run dry together and the weight
+	stays balanced. Batteries are wired in parallel: each gives current in proportion to its
+	conductance (capacity over internal resistance, held back by its BMS derate) and to how far
+	its open-circuit voltage stands above an empty cell's, so fuller and larger packs give more
+	and the packs even out (an estimated stand-in for solving the parallel circuit). Regenerative
+	braking charges every battery in proportion to the charge it accepts.
+
+	The tank list and the shares are rebuilt every FeedRescan seconds, and the fuel burned is
+	added up and taken from the tanks every FeedFlush seconds (constants at the top of the file),
+	so the per-tick cost does not grow with the number of tanks.
+]]
+
+-- Rebuilds the tanks feeding the engine and their shares.
+function ENT:ScanFeed()
+	local Battery = ACE.Mobility.Battery
+	local EmptyV = Battery.OCV(0)
+	local Feed, Charge = self.Feed or {}, self.ChargeFeed or {}
+	local NFeed, NCharge = 0, 0
+	local DerateSum, CapSum, AcceptSum = 0, 0, 0
+	for _, Tank in ipairs(self.FuelLink) do
+		if IsValid(Tank) then
+			local State = Tank.BatteryState
+			if IsValidfueltank(Tank) then
+				local Share = Tank.Fuel
+				if State then
+					local SOC = Tank.Fuel / math.max(Tank.Capacity, 1e-6)
+					local Derate = Battery.DischargeDerate(State)
+					local Cap = Tank.NominalCapacity * Battery.Health(State)
+					Share = Cap / Battery.Resistance(State) * Derate * math.max(Battery.OCV(SOC) - EmptyV, 0.01)
+					DerateSum = DerateSum + Cap * Derate
+					CapSum = CapSum + Cap
+				end
+				NFeed = NFeed + 1
+				Feed[NFeed] = Tank
+				Tank.FeedShare = Share
+			end
+			if State and Tank.ChargeAcceptW then
+				local Accept = Tank:ChargeAcceptW()
+				if Accept > 0 then
+					NCharge = NCharge + 1
+					Charge[NCharge] = Tank
+					Tank.ChargeShare = Accept
+					AcceptSum = AcceptSum + Accept
+				end
+			end
+		end
+	end
+	for I = NFeed + 1, #Feed do Feed[I] = nil end
+	for I = NCharge + 1, #Charge do Charge[I] = nil end
+	self.Feed, self.ChargeFeed = Feed, Charge
+	-- The packs' BMS limits add up: the bank gives the capacity-weighted share of full power.
+	self.FeedDerate = CapSum > 0 and DerateSum / CapSum or 1
+	self.ChargeAcceptSum = AcceptSum
+	self.NextFeedScan = ACE.CurTime + FeedRescan
+end
+
+--- Burns fuel from the engine's tanks (all of them together, see ScanFeed).
+-- @param Amount number Litres of fuel, or kWh for batteries.
+function ENT:DrawFuel(Amount)
+	self.FeedPending = (self.FeedPending or 0) + Amount
+end
+
+--- Stores regenerated energy in the engine's batteries, shared by their charge acceptance.
+-- @param KWh number Energy at the terminals, kWh.
+function ENT:ChargeFuel(KWh)
+	self.ChargePending = (self.ChargePending or 0) + KWh
+end
+
+-- Takes the fuel added up since the last flush (Dt seconds ago) from the tanks.
+function ENT:FlushFeed(Dt)
+	local Draw, Store = self.FeedPending or 0, self.ChargePending or 0
+	self.FeedPending, self.ChargePending = 0, 0
+	if Dt <= 0 then return end
+
+	local Feed = self.Feed
+	if Draw > 0 and Feed then
+		local Sum = 0
+		for I = 1, #Feed do
+			local Tank = Feed[I]
+			if IsValid(Tank) and Tank.Fuel > 0 then Sum = Sum + Tank.FeedShare end
+		end
+		if Sum > 0 then
+			for I = 1, #Feed do
+				local Tank = Feed[I]
+				if IsValid(Tank) and Tank.Fuel > 0 then
+					local Part = Draw * Tank.FeedShare / Sum
+					if Tank.BatteryState then
+						Tank:DrawEnergy(Part, Dt) -- the battery also loses its resistive heat
+					else
+						Tank.Fuel = math.max(Tank.Fuel - Part, 0)
+						if Tank.Fuel <= 0 then self.NextFeedScan = 0 end
+					end
+				end
+			end
+		end
+	end
+
+	local Charge = self.ChargeFeed
+	local AcceptSum = self.ChargeAcceptSum or 0
+	if Store > 0 and Charge and AcceptSum > 0 then
+		for I = 1, #Charge do
+			local Tank = Charge[I]
+			if IsValid(Tank) then Tank:StoreEnergy(Store * Tank.ChargeShare / AcceptSum, Dt) end
+		end
+	end
+end
+
 -- Per-tick checks that decide whether the engine may run: fuel, driver, legality, heat and
 -- damage. Torque and RPM come from the drivetrain solve in ace/server/sv_mobility.lua.
 function ENT:CalcRPM()
 
-	-- First active fuel tank among the linked ones.
-	local Tank
-	for _, FuelTank in ipairs(self.FuelLink) do
-		if IsValidfueltank( FuelTank ) then
-			Tank = FuelTank
-			break
-		end
+	if ACE.CurTime >= (self.NextFeedScan or 0) then self:ScanFeed() end
+	-- The first feeding tank stands for the fuel type the engine burns.
+	local Tank = self.Feed[1]
+	if Tank ~= nil and not IsValidfueltank(Tank) then
+		self:ScanFeed()
+		Tank = self.Feed[1]
 	end
 	self.MobTank = Tank
 
@@ -1072,8 +1176,8 @@ function ENT:CalcRPM()
 	-- An overheated engine also loses torque (ACE.EngineThermalThink).
 	self.PeakTorque = self.BaseTorque * self.TorqueMult * DriverBoost * (self.ThermalDerate or 1)
 	-- A hot battery pack is held back by its management system (battery_model.lua).
-	if self.FuelType == "Electric" and IsValid(Tank) and Tank.DischargeDerate then
-		self.PeakTorque = self.PeakTorque * Tank:DischargeDerate()
+	if self.FuelType == "Electric" and IsValid(Tank) then
+		self.PeakTorque = self.PeakTorque * (self.FeedDerate or 1)
 	end
 
 	local HealthRatio = self.ACE.Health / self.ACE.MaxHealth
@@ -1130,9 +1234,8 @@ function ENT:MobilityDesc(Ctx)
 	if self.FuelType == "Electric" and self.MobState then
 		-- Regenerative braking needs somewhere to put the charge, and a battery only takes as
 		-- much as its CC-CV charge acceptance allows: nothing once every linked battery is full.
-		local ChargeTank, Accept = self:GetChargeTank()
-		self.MobChargeTank = ChargeTank
-		self.MobState.RegenLimitW = IsValid(ChargeTank) and Accept or 0
+		if not self.ChargeFeed then self:ScanFeed() end
+		self.MobState.RegenLimitW = self.ChargeAcceptSum or 0
 		self.MobState.Direction = self.ReverseInput and -1 or 1
 	end
 	-- Belt-driven accessories such as a radiator fan.
@@ -1176,19 +1279,15 @@ function ENT:MobilityApply()
 		local Used
 		if self.FuelType == "Electric" then
 			Used = FuelKg / 3.6e6 -- electric "fuel" is energy: J to kWh
-			Tank:DrawEnergy(Used, Dt) -- the battery also loses its resistive heat
 		else
 			Used = FuelKg / (ACE.FuelDensity[Tank.FuelType] or 0.745) -- kg to litres
-			Tank.Fuel = math.max(Tank.Fuel - Used, 0)
 		end
+		self:DrawFuel(Used)
 		Wire_TriggerOutput(self, "Fuel Use", math.Round(60 * Used / Dt, 3))
 	elseif self.Active and FuelKg < 0 and self.FuelType == "Electric" then
 		-- Regenerative braking: the motor returned energy, which charges a battery with room.
-		local ChargeTank = self.MobChargeTank
 		local Charged = -FuelKg / 3.6e6
-		if IsValid(ChargeTank) then
-			ChargeTank:StoreEnergy(Charged, Dt)
-		end
+		self:ChargeFuel(Charged)
 		Wire_TriggerOutput(self, "Fuel Use", -math.Round(60 * Charged / Dt, 3))
 	end
 	if self.FuelType ~= "Electric" then self:StarterApply(State, Dt) end
@@ -1487,6 +1586,7 @@ do
 
 		table.insert( self.FuelLink, Target )
 		table.insert( Target.Master, self )
+		self.NextFeedScan = 0
 
 		return true, "Link successful!"
 	end
@@ -1496,6 +1596,7 @@ do
 		for Key, Value in pairs( self.FuelLink ) do
 			if Value == Target then
 				table.remove( self.FuelLink, Key )
+				self.NextFeedScan = 0
 				return true, "Unlink successful!"
 			end
 		end

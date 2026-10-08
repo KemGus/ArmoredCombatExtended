@@ -224,6 +224,7 @@ do -- What the drivetrain model does with an engine, and its starter setup
 	local SizeVar    = "acemenu_eng_startersize"
 	local PreheatVar = "acemenu_eng_preheat"
 	local CoolingVar = "acemenu_eng_cooling"
+	local LastCoolingId -- engine the cooling choice was made for
 
 	-- Plain-language summary of each kind of engine.
 	local KindText = {
@@ -310,8 +311,14 @@ do -- What the drivetrain model does with an engine, and its starter setup
 		Build = Build .. string.format( ", flywheel %.2f kg·m²", Spec.Inertia )
 		Text( "MobBuild", Build, "With the engine off its cylinders act as gas springs: the trapped air holds a parked car in gear, creeps as it leaks past the rings, and rocks a stopping engine back." )
 
-		-- The menu's cooling choice overrides the definition's (ENT:SetStarterSetup).
+		-- The menu's cooling choice overrides the definition's (ENT:SetStarterSetup). It belongs to
+		-- the engine it was picked for: choosing another engine goes back to that one's default.
 		local Choice = GetConVar( CoolingVar ):GetString()
+		if Table.id ~= LastCoolingId then
+			LastCoolingId = Table.id
+			Choice = ""
+			RunConsoleCommand( CoolingVar, "" )
+		end
 		local Air = Choice == "air" or Choice ~= "liquid" and ACE.Mobility.Engine.IsAirCooled( Table )
 		if Air then
 			Text( "MobCooling", "Air-cooled: finned cylinders cooled by the engine's own fan or propeller wash plus the air it moves through. EngineHeat output = oil °C; Block Temp = cylinder heads, limit 260 °C.",
@@ -352,9 +359,9 @@ do -- What the drivetrain model does with an engine, and its starter setup
 			local Box = vgui.Create( "DComboBox" )
 			Box:SetTall( 20 )
 			Box:SetTooltip( "Air-cooled engines have finned cylinders and no coolant; liquid-cooled ones have a water jacket and need radiators under load. Weight and power stay the same (estimated). Applies to engines this tool spawns or updates." )
-			Box:AddChoice( "Cooling: as built (" .. ( ACE.Mobility.Engine.IsAirCooled( Table ) and "air" or "liquid" ) .. ")", "", Choice == "" )
-			Box:AddChoice( "Cooling: air", "air", Choice == "air" )
-			Box:AddChoice( "Cooling: liquid", "liquid", Choice == "liquid" )
+			local BuiltAir = ACE.Mobility.Engine.IsAirCooled( Table )
+			Box:AddChoice( "Cooling: liquid" .. ( BuiltAir and "" or " (default)" ), BuiltAir and "liquid" or "", Choice == "liquid" or not BuiltAir and Choice == "" )
+			Box:AddChoice( "Cooling: air" .. ( BuiltAir and " (default)" or "" ), BuiltAir and "" or "air", Choice == "air" or BuiltAir and Choice == "" )
 			Box.OnSelect = function( _, _, _, Data )
 				RunConsoleCommand( CoolingVar, Data )
 				local Label = acemenupanel.CData["MobCooling_text"]
@@ -370,7 +377,7 @@ do -- What the drivetrain model does with an engine, and its starter setup
 			"Torque and current of the starter and its battery against the standard size. Bigger cranks faster and starts cold engines, but adds weight." )
 		if Spec.Kind == "diesel" then
 			Slider( "StarterPreheat", "Glow plug preheat at -20 °C (s)", 0, 30, 0, PreheatVar,
-				"How long the glow plugs heat before cranking on a frozen engine. Shorter as the coolant warms, none above 60 °C. 0 = no glow plugs." )
+				"How long the glow plugs heat before cranking on a frozen engine. Shorter as the coolant warms, none above 10 °C. 0 = no glow plugs." )
 		end
 	end
 end

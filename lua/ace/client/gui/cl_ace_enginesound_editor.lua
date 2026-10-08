@@ -40,6 +40,7 @@ local function TogglePreview(Button, Path)
 end
 
 local RowHeight = 22
+local PreviewWide = 64 -- preview buttons, wide enough to hit easily
 
 local function SendBanks(Engine, Banks, Reset, Starter)
 	net.Start("ACE_EngineSound_MenuSet")
@@ -103,7 +104,7 @@ local function BuildSoundRow(List, Bank, Index, Rebuild)
 		TogglePreview(Play, Snd.Path)
 	end)
 	Play:Dock(RIGHT)
-	Play:SetWide(RowHeight)
+	Play:SetWide(PreviewWide)
 
 	AddNumber(Row, "Crossfade width: how many neighbouring sounds this one fades across (0 = only the next one)", 0, EngineSound.MaxWidth, 0, Snd.Width, function(V) Snd.Width = math.Round(V) end)
 	AddNumber(Row, "Volume (0-2)", 0, EngineSound.MaxVolume, 2, Snd.Volume, function(V) Snd.Volume = V end)
@@ -263,12 +264,14 @@ function EngineSound.OpenEditor(Engine, IsLegacy, IdleRPM, LimitRPM, Banks, Star
 	local StarterEntry = StarterRow:Add("DTextEntry")
 	StarterEntry:SetValue(Starter or "")
 	StarterEntry:SetPlaceholderText("blank = standard (" .. (EngineSound.StarterSound or "") .. ")")
-	StarterEntry:SetTooltip("A .wav, .mp3 or .ogg path under sound/. It loops while the engine cranks;\nits pitch follows the crank speed, 100 at 250 rpm.")
+	StarterEntry:SetTooltip("A .wav, .mp3 or .ogg path under sound/. It repeats while the engine cranks;\nits pitch follows the crank speed, 100 at 250 rpm and never higher.")
 
-	AddButton(StarterRow, "", "icon16/sound.png", "Preview", function(Self)
+	local StarterPlay = AddButton(StarterRow, "", "icon16/sound.png", "Preview", function(Self)
 		local Path = string.Trim(StarterEntry:GetValue())
 		TogglePreview(Self, Path ~= "" and Path or EngineSound.StarterSound or "")
-	end):Dock(RIGHT)
+	end)
+	StarterPlay:Dock(RIGHT)
+	StarterPlay:SetWide(PreviewWide)
 	StarterEntry:Dock(FILL)
 
 	local Footer = Frame:Add("DPanel")

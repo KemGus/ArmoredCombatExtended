@@ -30,11 +30,12 @@ EngineSound.DSPCrossfade   = 0.05 -- seconds; old patches fade out and new ones 
 EngineSound.ThirdPersonDistance = 48 -- units between the camera and the player's eyes that count as third person
 EngineSound.CabinOpening   = EngineSound.CabinOpening or 0 -- 0 closed .. 1 open, set by Starfall (acf.setCabinOpening)
 
--- Starter motor. v8_start_loop1.wav is the HL2 jeep's cranking loop (hl2_sound_misc VPK, loops
--- from 1.8 s to its end); at pitch 100 it is taken to be a crank turning at StarterRefRPM.
+-- Starter motor. At pitch 100 the recording is taken to be a crank turning at StarterRefRPM; a
+-- slower crank plays it lower, a faster one never plays it above its recorded pitch. Sounds
+-- without loop points are started again from the beginning when they run out while it cranks.
 -- An engine can carry its own starter sound (set in the sound bank editor of the sound replacer tool), networked as the
 -- "ACE_StarterSound" string; it is played the same way.
-EngineSound.StarterSound  = "vehicles/v8/v8_start_loop1.wav"
+EngineSound.StarterSound  = "acf_extra/vehiclefx/starters/starter1.wav"
 EngineSound.StarterRefRPM = 250
 EngineSound.StarterLevel  = 75 -- SNDLVL_75dB ("busy traffic"); a starter is quieter than the engine
 
@@ -485,6 +486,8 @@ local function UpdateStarter(Ent, State, Dt, Shift, Muffle)
 		State.Starter = NewPatch(Ent, Path, math.min(EngineSound.StarterLevel, State.Level + 5), Muffle >= EngineSound.MuffleDSPFrom and EngineSound.MuffleDSP or nil)
 		State.StarterPath = Path
 		State.StarterPhase = 0
+		State.StarterPlayed = 0 -- seconds of the recording played
+		State.StarterLength = SoundDuration(Path) or 0
 
 		if not State.Starter then return end
 	end
@@ -500,7 +503,17 @@ local function UpdateStarter(Ent, State, Dt, Shift, Muffle)
 	local Pitch = 100 * RPM / EngineSound.StarterRefRPM * (1 - 0.12 * Depth * Pulse)
 	local Volume = (0.4 + 0.5 * Load) * (1 - Depth * (1 - Pulse)) * (1 - EngineSound.MaxMuffleCut * Muffle)
 
-	State.Starter:ChangePitch(Clamp(Pitch * Shift, 30, 160), 0)
+	Pitch = Clamp(Pitch * Shift, 50, 100)
+
+	-- A recording without loop points has stopped by now: play it again.
+	State.StarterPlayed = State.StarterPlayed + Dt * Pitch / 100
+	if State.StarterLength > 0.2 and State.StarterPlayed >= State.StarterLength - 0.05 then
+		State.Starter:Stop()
+		State.Starter:PlayEx(0, Pitch)
+		State.StarterPlayed = 0
+	end
+
+	State.Starter:ChangePitch(Pitch, 0)
 	State.Starter:ChangeVolume(Clamp(Volume, 0, 1), 0)
 end
 

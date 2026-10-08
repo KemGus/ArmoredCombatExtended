@@ -246,7 +246,7 @@ do
 	local Big, Mul2 = E.SimulateStart(spec(V12), Frozen), E.SimulateStart(spec(V12, 2), Frozen)
 	check(Big == nil and Mul2 ~= nil, "frozen 27 L V12 needs a bigger starter", Big, Mul2)
 	local BigWarm, BigMild = E.SimulateStart(spec(V12), Warm), E.SimulateStart(spec(V12), Mild)
-	check(BigWarm and BigWarm < 2 and BigMild and BigMild > BigWarm + 2, "27 L V12: about a second warm, preheat and longer at 20 °C", BigWarm, BigMild)
+	check(BigWarm and BigWarm < 2 and BigMild and BigMild > BigWarm + 0.5 and BigMild < 4, "27 L V12: about a second warm, longer through cold oil at 20 °C (no preheat above 10 °C)", BigWarm, BigMild)
 	local Small, Large = E.SimulateStart(spec(V8, 0.5), Mild), E.SimulateStart(spec(V8, 2), Mild)
 	check(Small and Large and Large < Small, "a bigger starter starts sooner", Large, Small)
 	check(E.StarterRating(spec(V8, 2)) == 2 * E.StarterRating(spec(V8)), "starter size scales its torque")

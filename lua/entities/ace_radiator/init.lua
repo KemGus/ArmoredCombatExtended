@@ -115,6 +115,62 @@ function ENT:ACF_Activate( Recalc )
 
 end
 
+--[[
+	Coolant leaks. A round through the core leaves a hole about the size of its frontal area
+	(capped at MaxHoleCm2 per hit; estimated). Coolant runs out through the holes as through an
+	orifice, Q = Cd·A·sqrt(2·dp/rho) (Cd = 0.6, sharp-edged orifice), pushed by the system's
+	pressure while it is hot (pressure caps hold 0.9-1.1 bar; LeakBar = 0.3 bar is taken for a
+	system that can no longer hold its full pressure, scaled by how far the coolant is from the
+	air temperature to 100 °C; estimated) plus the head of coolant above the hole
+	(LeakHeadM, estimated). With less coolant only part of the core is wet, so the radiator
+	rejects heat in proportion to the coolant left (see Think). Torch repairs seal the holes;
+	a fully repaired radiator is topped up again.
+]]
+local MaxHoleCm2 = 20
+local LeakCd = 0.6
+local LeakBar = 0.3
+local LeakHeadM = 0.3
+
+function ENT:ACF_OnDamage( Entity, Energy, FrArea, Angle, Inflictor, Bone, Type )
+	local HitRes = ACE.PropDamage( Entity, Energy, FrArea, Angle, Inflictor, Bone, Type )
+	if (HitRes.Damage or 0) > 0 and (HitRes.Overkill or 0) > 0 or HitRes.Kill then
+		-- FrArea carries ACE's penetration area exponent; undo it for the hole in cm².
+		self.HoleCm2 = (self.HoleCm2 or 0) + math.min((FrArea or 0) ^ (1 / ACE.PenAreaMod), MaxHoleCm2)
+	end
+	return HitRes
+end
+
+--- Torch repairs: patches the coolant holes in step with the health restored, and refills the
+-- radiator once it is whole again.
+-- @param Gained number Health the torch restored.
+function ENT:OnTorchRepair(Gained)
+	local Max = self.ACE and self.ACE.MaxHealth or 0
+	if Max <= 0 or Gained <= 0 then return end
+	local Missing = Max - self.ACE.Health + Gained
+	self.HoleCm2 = math.max((self.HoleCm2 or 0) * (1 - Gained / math.max(Missing, 1e-6)), 0)
+	if self.ACE.Health >= Max then
+		self.HoleCm2 = 0
+		self.Coolant = self.Capacity
+	end
+end
+
+-- Coolant lost through the holes over Dt seconds; sets self.Leaking (litres per second).
+function ENT:LeakStep(Dt)
+	local Hole = (self.HoleCm2 or 0) * 1e-4
+	if Hole <= 0 or (self.Coolant or 0) <= 0 then
+		self.Leaking = 0
+		return
+	end
+	local Level = self.Coolant / math.max(self.Capacity, 1e-6)
+	local Ambient = ACE.AmbientTemp or 20
+	local Hot = math.Clamp(((self.Heat or Ambient) - Ambient) / math.max(100 - Ambient, 1), 0, 1)
+	local Pa = LeakBar * 1e5 * Hot + 1000 * 9.81 * LeakHeadM * Level
+	local Litres = LeakCd * Hole * math.sqrt(2 * Pa / 1000) * 1000 -- per second
+	self.Leaking = Litres
+	self.Coolant = math.max(self.Coolant - Litres * Dt, 0)
+	self:UpdateRadiatorMass()
+end
+
 do
 
 	-- Checks if the provided string vector matches the desired format.
@@ -549,8 +605,13 @@ function ENT:Think()
 		local Thermal = ACE.Mobility.Thermal
 		local SpeedMS = ACE.GetPhysicalParent(self):GetVelocity():Length() * 0.01905 -- units/s to m/s
 		local Face = Thermal.FaceVelocity(self.CoreDepthM or 0.05, SpeedMS, self.FanRunning == 1 and self.FanSpeed or 0)
+		self:LeakStep(DeltaTime2)
+		Wire_TriggerOutput( self, "Leaking", self.Leaking > 0 and 1 or 0 )
+		Wire_TriggerOutput( self, "Coolant", math.Round(self.Coolant, 2) )
 		if self.Legal and (self.Coolant or 0) > 0 then
-			self.ThermalUA, self.ThermalCair = Thermal.RadiatorAir(self.CoreFrontM2 or 0, self.CoreDepthM or 0, Face)
+			-- Only the part of the core still full of coolant passes heat to the air.
+			local Wet = math.Clamp(self.Coolant / math.max(self.Capacity, 1e-6), 0, 1)
+			self.ThermalUA, self.ThermalCair = Thermal.RadiatorAir((self.CoreFrontM2 or 0) * Wet, self.CoreDepthM or 0, Face)
 		else
 			self.ThermalUA, self.ThermalCair = 0, 0
 		end
