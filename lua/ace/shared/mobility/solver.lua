@@ -129,7 +129,7 @@ local function directSolve(Constraints, Count)
 		if C.Mass ~= 0 then Idx[#Idx + 1] = C end
 	end
 	local N = #Idx
-	if N == 0 then return true end
+	if N == 0 then return true, true end
 	if N > Solver.DirectLimit then return false end
 
 	local B, A = {}, {}
@@ -161,7 +161,14 @@ local function directSolve(Constraints, Count)
 	local State, L = {}, {}
 	for I = 1, N do State[I], L[I] = 0, 0 end
 
-	for _ = 1, 2 * N + 2 do
+	--[[
+		All violated limits are switched at once, which usually settles in a few rounds. Should it
+		still be switching after N rounds, it changes only the first violated one per round
+		(Murty's least-index rule, which cannot cycle on this symmetric positive definite system).
+	]]
+	local Converged = false
+	for Round = 1, 4 * N + 4 do
+		local Single = Round > N
 		local Free = {}
 		for I = 1, N do
 			if State[I] == 0 then Free[#Free + 1] = I else L[I] = State[I] * Idx[I].Max end
@@ -189,8 +196,10 @@ local function directSolve(Constraints, Count)
 		for I = 1, N do
 			if State[I] == 0 then
 				local Max = Idx[I].Max
-				if L[I] > Max then State[I], Changed = 1, true
-				elseif L[I] < -Max then State[I], Changed = -1, true end
+				local Tol = Max * 1e-9 + 1e-12
+				if L[I] > Max + Tol then State[I], Changed = 1, true
+				elseif L[I] < -Max - Tol then State[I], Changed = -1, true end
+				if Changed and Single then break end
 			end
 		end
 		if not Changed then
@@ -202,16 +211,30 @@ local function directSolve(Constraints, Count)
 					for J = 1, N do V = V + Ai[J] * L[J] end
 					if (State[I] == 1 and V > 1e-9) or (State[I] == -1 and V < -1e-9) then
 						State[I], Changed = 0, true
+						if Single then break end
 					end
 				end
 			end
 		end
-		if not Changed then break end
+		if not Changed then
+			Converged = true
+			break
+		end
 	end
 
+	--[[
+		The active-set loop can cycle without settling (a dual steering box feeding two more dual
+		boxes: 22 constraints, still switching after 46 rounds). Its last round then holds impulses
+		for constraints it had just clamped, far past their limits (a 0.12 N·m·s gearbox loss
+		applied as 59), and those kicked a 0.02 kg·m² shaft to 1,000 rad/s in one substep: the
+		clutches slipping against it read as megawatts of heat. Every impulse is held to its
+		limit, and an unsettled solve is finished by Gauss-Seidel from there.
+	]]
 	for I = 1, N do
 		local C = Idx[I]
 		local Lambda = L[I]
+		local Max = C.Max
+		if Lambda > Max then Lambda = Max elseif Lambda < -Max then Lambda = -Max end
 		C.Acc = Lambda
 		if Lambda ~= 0 then
 			for K = 1, #C.Bodies do
@@ -220,7 +243,7 @@ local function directSolve(Constraints, Count)
 			end
 		end
 	end
-	return true
+	return true, Converged
 end
 
 --- Runs one substep: applies body torques, then solves all constraints.
@@ -247,8 +270,11 @@ function Solver.Step(Bodies, Constraints, H, Iterations)
 	end
 
 	local Sweeps = Iterations or 8
-	if directSolve(Constraints, Count) then
-		Sweeps = 2
+	local Direct, Converged = directSolve(Constraints, Count)
+	if Direct then
+		-- Settled: two sweeps absorb round-off. Not settled: the clamped impulses are a feasible
+		-- warm start for a full Gauss-Seidel solve.
+		Sweeps = Converged and 2 or Sweeps * 4
 	else
 		-- Warm start from the previous substep's impulses, clamped to this substep's capacity.
 		for I = 1, Count do
