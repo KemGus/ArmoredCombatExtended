@@ -370,9 +370,12 @@ function Drivetrain.Build(Group)
 			buildGearbox(Sys, Gearbox)
 		end
 	end
-	for _, Gearbox in ipairs(Sys.Gearboxes) do
+	-- Upstream gearboxes first (each is listed after its chained ones), so a cross-shaft takes
+	-- the wheels of its side gearboxes before they are looked at on their own.
+	for I = #Sys.Gearboxes, 1, -1 do
+		local Gearbox = Sys.Gearboxes[I]
 		-- Not while a dual box steers: its two sides are meant to run at different speeds.
-		if false then shareRoad(Sys, Gearbox) end
+		if Gearbox.Diff == "locked" and not Gearbox.Steering then shareRoad(Sys, Gearbox) end
 	end
 	--[[
 		Engine friction and gearbox losses are friction constraints on their shafts, solved with
@@ -424,27 +427,87 @@ end
 	contact handed each push straight back, a little larger: a car in neutral with its diffs
 	locked rocked its wheels at 3-5 rad/s and its body at 3 deg/s of yaw (Volvo, buggy, MRAP).
 	So each locked axle's wheels share one road body, and the solver only carries the drive.
+
+	A locked cross-shaft feeding a side gearbox per track is the same axle one step removed, as
+	long as both side gearboxes are commanded alike (same gear, clutch and brake). Each sprocket
+	on its own share of the hull, the hull's yaw read as one track's road running ahead of the
+	other's, the solver reconciled them through the tracks, and the tank swung 10 deg/s left
+	and right on a straight run (Abrams; the same tank in neutral ran straight). While the side
+	gearboxes are commanded differently the tank is steering and each side keeps its own road.
 ]]
+local SameCommand = 0.02 -- relative tolerance for "commanded alike"
+
+local function near(A, B)
+	return abs(A - B) <= SameCommand * max(abs(A), abs(B), 1e-6)
+end
+
+-- The one side a gearbox drives, or nil when it drives both (or neither).
+local function onlySide(Gearbox)
+	local Side
+	for _, Out in ipairs(Gearbox.Outputs or {}) do
+		if not (Out.Gearbox and Out.Gearbox.BrakeOnly) then
+			local S = Out.Side == 0 and 0 or 1
+			if Side and Side ~= S then return nil end
+			Side = S
+		end
+	end
+	return Side
+end
+
+--[[
+	Collects the ground-coupled wheels a gearbox turns rigidly, through chained side gearboxes
+	commanded alike, with each wheel's sign against the first: mirrored side gearboxes (ratios
+	-4 and +4) turn their sprockets the opposite way about their own axles for the same road
+	speed. Returns false when the chained gearboxes differ (the vehicle is steering).
+]]
+local function rigidWheels(Sys, Gearbox, Wheels, Sign)
+	local Ref
+	for _, Out in ipairs(Gearbox.Outputs or {}) do
+		local Child = Out.Gearbox
+		if Out.Wheel then
+			local B = Sys.WheelBodies[Out.Wheel.Key]
+			-- Track sprockets keep their own: a track's slip against the ground is left to the physics engine.
+			if B and B.GroundBody and B.TyreC and not B.GroundBody.Shared and not Out.Wheel.Meshed then
+				B.RoadSign = Sign
+				Wheels[#Wheels + 1] = B
+			end
+		elseif Child and not Child.BrakeOnly then
+			local S = Child.Diff == "locked" and 0 or onlySide(Child)
+			if not S or Child.Steering or Child.ClutchFree or Child.Converter or (Child.Ratio or 0) == 0 then return false end
+			local Cap = Child.Dual and Child.SideCap and Child.SideCap[S] or 0
+			local Brake = Child.Brake and Child.Brake[S] or 0
+			local Ratio = abs(Child.Ratio)
+			if Ref then
+				if not (near(Ref[1], Ratio) and near(Ref[2], Cap) and near(Ref[3], Brake)) then return false end
+			else
+				Ref = { Ratio, Cap, Brake }
+			end
+			if rigidWheels(Sys, Child, Wheels, Child.Ratio < 0 and -Sign or Sign) == false then return false end
+		end
+	end
+	return true
+end
+
 shareRoad = function(Sys, Gearbox)
 	local Wheels = {}
-	for _, Out in ipairs(Gearbox.Outputs or {}) do
-		local B = Out.Wheel and Sys.WheelBodies[Out.Wheel.Key]
-		-- Track sprockets keep their own: a track's slip against the ground is left to the physics engine.
-		if B and B.GroundBody and B.TyreC and not Out.Wheel.Meshed then Wheels[#Wheels + 1] = B end
+	if not rigidWheels(Sys, Gearbox, Wheels, 1) or #Wheels < 2 then
+		for _, B in ipairs(Wheels) do B.RoadSign = nil end
+		return
 	end
-	if #Wheels < 2 then return end
 	local J, Momentum = 0, 0
 	for _, B in ipairs(Wheels) do
 		J = J + B.GroundBody.J
-		Momentum = Momentum + B.GroundBody.J * B.GroundBody.W
+		Momentum = Momentum + B.GroundBody.J * B.GroundBody.W * B.RoadSign
 	end
 	local Road = Solver.Body(J, Momentum / J)
 	Road.W0 = Road.W
+	Road.Shared = true
 	local Gone = {}
 	for _, B in ipairs(Wheels) do
 		Gone[B.GroundBody] = true
 		B.GroundBody = Road
 		B.TyreC.Bodies[2] = Road
+		B.TyreC.Coefs[2] = -B.RoadSign
 	end
 	for I = #Sys.Bodies, 1, -1 do
 		if Gone[Sys.Bodies[I]] then table.remove(Sys.Bodies, I) end
@@ -514,7 +577,7 @@ function Drivetrain.Step(Sys, Dt, Substeps, Iterations)
 		for _, B in ipairs(Sys.Wheels) do
 			local GB = B.GroundBody
 			local Tq = GB and B.Wheel.Ground.Torque
-			if Tq then GB.Torque = GB.Torque + Tq end
+			if Tq then GB.Torque = GB.Torque + Tq * (B.RoadSign or 1) end
 		end
 
 		Solver.Step(Sys.Bodies, Sys.Constraints, H, Iterations or 6)
