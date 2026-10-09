@@ -502,6 +502,7 @@ local function readWheel(Box, Link, BoxAngVel, Ctx)
 		Desc.OwnJ, Desc.GroupJ = nil, nil
 	end
 	Ent.ACEWheelW = Desc.W -- for the acfWheelRPM accessors
+	Ent.ACEWheelAt = CurTime() -- they read 0 once no drivetrain has driven the wheel for a while
 	-- What the road (and anything else) did to the wheel's spin since last tick, beyond the
 	-- impulse the drivetrain applied: the tyre's actual pass-through, N*m*s.
 	Desc.TyreImp = PrevW and Applied and Desc.J and Desc.J * (Desc.W - PrevW - Applied) or nil
@@ -1495,11 +1496,15 @@ function M.PhysicsStep(Engine, Phys, Dt)
 	-- objects come as a new userdata on every call, so they are told apart by their entity.
 	local Key = Phys:GetEntity()
 	local Seen = Engine.MobStepSeen
-	if Seen and not Seen[Key] then
+	if not Seen then
+		Seen = {}
+		Engine.MobStepSeen = Seen
+	elseif not Seen[Key] then
 		Seen[Key] = true
 		return
 	end
-	Engine.MobStepSeen = { [Key] = true }
+	for K in pairs(Seen) do Seen[K] = nil end
+	Seen[Key] = true
 
 	local Group = Engine.MobGroup
 	if not Group then return end

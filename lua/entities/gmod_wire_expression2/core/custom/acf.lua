@@ -792,6 +792,7 @@ do
 	e2function number entity:acfWheelRPM()
 		if not IsValid(this) or this.ACEWheelW == nil then return self:throw("Entity is not a wheel driven by an ACF gearbox", 0) end
 		if restrictInfo(self.player, this) then return 0 end
+		if (this.ACEWheelAt or 0) < CurTime() - 0.5 then return 0 end -- no longer driven
 
 		return round(this.ACEWheelW * 30 / pi)
 	end

@@ -209,9 +209,9 @@ do
 		return Scale
 	end
 
-	-- Tries to convert a scale id, having a string format, to a vector scale. If its already a vector, skip the process.
+	-- Converts a scale id, a string or a vector (from a dupe), to a clamped vector scale.
 	local function ConvertStringScale( ScaleId )
-		if isvector( ScaleId ) then return ScaleId end
+		if isvector( ScaleId ) then return ClampScale( Vector( ScaleId ) ) end
 		if not IsValidStringScale( ScaleId ) then return end
 
 		local Scale = ParseToVector( ScaleId )
@@ -289,8 +289,6 @@ do
 				Owner:AddCount( "_ace_misc", Tank )
 				Owner:AddCleanup( "acemenu", Tank )
 			end
-
-			--table.insert(ACE.FuelTanks, Tank)
 
 			return Tank
 		end
@@ -588,7 +586,7 @@ function ENT:Think()
 		if CT > self.NextLegalCheck then
 			--local minmass = math.floor(self.Mass-6)  -- water is light, may as well save complexity and just check it's above empty mass
 			self.Legal, self.LegalIssues = ACE.CheckLegal(self, self.Model, math.Round(self.EmptyMass,2), nil, true, true) -- mass-6, as mass update is granular to 5 kg
-			self.NextLegalCheck = ACE.Legal.NextCheck(self.legal)
+			self.NextLegalCheck = ACE.Legal:NextCheck(self.Legal)
 			--make sure it's not made spherical
 			if self.EntityMods and self.EntityMods.MakeSphericalCollisions then self.Coolant = 0 end
 			self:UpdateOverlayText()

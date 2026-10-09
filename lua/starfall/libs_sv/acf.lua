@@ -1709,7 +1709,7 @@ do
 	function ents_methods:acfWheelRPM()
 		local this = getent(self)
 
-		if this.ACEWheelW == nil then return 0 end
+		if this.ACEWheelW == nil or (this.ACEWheelAt or 0) < CurTime() - 0.5 then return 0 end
 		if restrictInfo(this) then return 0 end
 
 		return round(this.ACEWheelW * 30 / math.pi)

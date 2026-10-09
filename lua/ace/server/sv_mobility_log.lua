@@ -31,6 +31,7 @@ local format = string.format
 local abs = math.abs
 
 local Rec -- the running recording, or nil
+local MaxEvents = 50000 -- events kept per recording
 
 local function canUse(Ply)
 	return not IsValid(Ply) or game.SinglePlayer() or Ply:IsSuperAdmin() or Ply:IsListenServerHost()
@@ -203,6 +204,7 @@ function Log.Event(Ent, Kind, Text)
 	if not Rec then return end
 	if Ent and IsValid(Ent) and not Rec.Members[Ent] then return end
 	local Events = Rec.Events
+	if #Events >= MaxEvents then return end -- a runaway event source must not fill memory
 	Events[#Events + 1] = row({ format("%.4f", now() - Rec.Start), engine.TickCount(), Rec.FrameNo, Kind,
 		Ent and id(Ent) or -1, Ent and IsValid(Ent) and Ent:GetClass() or "", '"' .. tostring(Text or ""):gsub('"', "'") .. '"' })
 end
