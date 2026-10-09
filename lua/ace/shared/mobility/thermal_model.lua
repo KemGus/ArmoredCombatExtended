@@ -600,7 +600,8 @@ end
 -- air (air-cooled engines), Exchangers = {
 -- { UA = W/K, Cair = W/K }, ... }, ExtraC = extra coolant heat capacity from radiators [J/K],
 -- CoolantHeat = heat from engine heaters [W]: into the coolant, or into the metal of an
--- air-cooled engine }.
+-- air-cooled engine; BlockHeat, OilHeat = heater heat put straight into the metal and the oil
+-- [W] (the oil's share goes to the metal when the engine has no oil node) }.
 -- Sets T.Tb, T.Tc, T.To (oil; nil for motors, the coolant for turbines), T.Thermostat,
 -- T.Boiling, T.Qrad (radiator heat rejection, W), T.OilHeat and T.OilToCoolant (W), and for
 -- air-cooled engines T.FinV (air speed between the fins, m/s) and T.Qfin (fin heat, W).
@@ -660,10 +661,13 @@ function Thermal.Step(T, TS, Heat, W, H, Opts)
 		conserved.
 	]]
 	Heat = max(Heat, 0)
-	local Pb, Pc = Heat, 0
+	local AuxOil = Opts and Opts.OilHeat or 0
+	local Pb, Pc = Heat + (Opts and Opts.BlockHeat or 0), 0
 	if TS.Co then
 		local To = T.To or T.Tc
 		local Qo = Thermal.OilHeat(TS, Heat, W, Opts and Opts.Load)
+		Pb = Pb - Qo
+		Qo = Qo + AuxOil
 		local Goc = TS.Goc * (K.OilStill + (1 - K.OilStill) * min(PumpFrac, 1)) * (1 - (1 - K.FilmBoil) * Boil)
 		local G = Goc + TS.Gos
 		local Teq = (Qo + Goc * T.Tc + TS.Gos * Ta) / G
@@ -672,8 +676,9 @@ function Thermal.Step(T, TS, Heat, W, H, Opts)
 		local Avg = Teq + (To - Teq) * (1 - Decay) / Kh
 		T.To = Teq + (To - Teq) * Decay
 		Pc = Goc * (Avg - T.Tc)
-		Pb = Heat - Qo
-		T.OilHeat, T.OilToCoolant = Qo, Pc
+		T.OilHeat, T.OilToCoolant = Qo - AuxOil, Pc
+	else
+		Pb = Pb + AuxOil
 	end
 
 	-- Engine heaters (entities/ace_engine_heater) circulate the coolant with their own pump.

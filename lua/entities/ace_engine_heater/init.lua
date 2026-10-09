@@ -17,13 +17,18 @@ DEFINE_BASECLASS( "base_wire_entity" )
 ]]
 local OnC, OffC = 65, 75
 local ThinkDelay = 0.5
+-- Burner efficiency of the rapid preheater, from the Thermo E+ 320's 32 kW on 3.2 kg/h, and the
+-- fuel's lower heating value (diesel, 42.8 MJ/kg).
+local RapidEff, FuelLHV = 0.84, 42.8e6
 
 function ENT:Initialize()
 	self.Master    = {}  -- the engine it heats (at most one)
 	self.Active    = true
 	self.Burning   = false
-	self.HeatW     = 0
-	self.Status    = "Not linked"
+	self.HeatW      = 0 -- into the coolant, W
+	self.HeatBlockW = 0 -- into the metal (rapid preheater), W
+	self.HeatOilW   = 0 -- into the oil (rapid preheater), W
+	self.Status     = "Not linked"
 	self.LastThink = CurTime()
 
 	self.Inputs = WireLib.CreateInputs(self, {
@@ -31,7 +36,7 @@ function ENT:Initialize()
 	})
 	self.Outputs = WireLib.CreateOutputs(self, {
 		"Burning (1 while the heater is burning fuel)",
-		"Heat Output (Heat put into the engine's coolant, kW)",
+		"Heat Output (Heat put into the engine, kW)",
 		"Fuel Use (Fuel burned, litres per hour)",
 		"Coolant Temp (The linked engine's coolant temperature, °C)",
 	})
@@ -129,7 +134,7 @@ function ENT:Think()
 	local Def = self.Def
 	local Engine = self.Master[1]
 	local Coolant
-	local HeatW, FuelLph = 0, 0
+	local HeatW, BlockW, OilW, FuelLph = 0, 0, 0, 0
 
 	if not IsValid(Engine) then
 		self.Burning = false
@@ -155,17 +160,28 @@ function ENT:Think()
 			else
 				self.Burning = true
 				self.Status = "Heating"
-				local Litres = Def.fuelkgh / 3600 * Dt / (ACE.FuelDensity[Tank.FuelType] or 0.84)
-				Tank.Fuel = math.max(Tank.Fuel - Litres, 0)
+				local FuelKgh = Def.fuelkgh
 				HeatW = Def.heatw
-				FuelLph = Def.fuelkgh / (ACE.FuelDensity[Tank.FuelType] or 0.84)
+				local TS = Def.rapidk and ACE.EngineThermalSpec(Engine)
+				if TS then
+					-- Shared by heat capacity so metal, coolant and oil warm together.
+					local Co = TS.Co or 0
+					local Ct = TS.Cb + TS.Cc + Co
+					local P = Ct * Def.rapidk / math.max(ACE.ThermalTimeScale or 1, 0.01)
+					HeatW, BlockW, OilW = P * TS.Cc / Ct, P * TS.Cb / Ct, P * Co / Ct
+					FuelKgh = P / (RapidEff * FuelLHV) * 3600
+				end
+				local Density = ACE.FuelDensity[Tank.FuelType] or 0.84
+				Tank.Fuel = math.max(Tank.Fuel - FuelKgh / 3600 * Dt / Density, 0)
+				FuelLph = FuelKgh / Density
 			end
 		end
 	end
 
-	self.HeatW = HeatW
+	self.HeatW, self.HeatBlockW, self.HeatOilW = HeatW, BlockW, OilW
+	self.HeatTotalW = HeatW + BlockW + OilW
 	WireLib.TriggerOutput(self, "Burning", self.Burning and 1 or 0)
-	WireLib.TriggerOutput(self, "Heat Output", HeatW / 1000)
+	WireLib.TriggerOutput(self, "Heat Output", self.HeatTotalW / 1000)
 	WireLib.TriggerOutput(self, "Fuel Use", FuelLph)
 	WireLib.TriggerOutput(self, "Coolant Temp", Coolant or 0)
 	self.Coolant = Coolant
@@ -177,8 +193,8 @@ end
 function ENT:UpdateOverlayText()
 	local Def = self.Def
 	local Text = (Def and Def.name or "Engine heater") .. "\nStatus: " .. (self.Status or "")
-	if self.Burning and Def then
-		Text = Text .. "\nHeat: " .. math.Round(Def.heatw / 1000, 1) .. " kW"
+	if self.Burning then
+		Text = Text .. "\nHeat: " .. math.Round((self.HeatTotalW or 0) / 1000, 1) .. " kW"
 	end
 	if self.Coolant then
 		Text = Text .. "\nCoolant: " .. math.Round(self.Coolant) .. " °C"

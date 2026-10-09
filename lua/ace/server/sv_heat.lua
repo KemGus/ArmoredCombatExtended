@@ -671,15 +671,20 @@ do
 			AirSpeed = IsValid(Parent) and Parent:GetVelocity():Length() * 0.01905 or 0 -- units/s to m/s
 		end
 		-- Coolant heaters (entities/ace_engine_heater) linked to the engine.
-		local HeaterW = 0
+		local HeaterW, HeaterBlockW, HeaterOilW = 0, 0, 0
 		for _, Heater in ipairs(Engine.HeaterLink or {}) do
-			if IsValid(Heater) then HeaterW = HeaterW + (Heater.HeatW or 0) end
+			if IsValid(Heater) then
+				HeaterW = HeaterW + (Heater.HeatW or 0)
+				HeaterBlockW = HeaterBlockW + (Heater.HeatBlockW or 0)
+				HeaterOilW = HeaterOilW + (Heater.HeatOilW or 0)
+			end
 		end
-		Engine.HeaterW = HeaterW
+		Engine.HeaterW = HeaterW + HeaterBlockW + HeaterOilW
 
 		Thermal.Step(T, TS, HeatW, W, Dt * Scale, {
 			Ambient = Ambient, Running = Engine.Active, Exchangers = Exchangers, ExtraC = ExtraC,
 			Load = MobState and MobState.Load or 0, AirSpeed = AirSpeed, CoolantHeat = HeaterW,
+			BlockHeat = HeaterBlockW, OilHeat = HeaterOilW,
 		})
 
 		Engine.Heat = T.Tc

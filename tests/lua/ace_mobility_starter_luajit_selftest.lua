@@ -344,6 +344,21 @@ do
 	check(T.Tc > Cold.Tc + 10 and T.To > -15, "the heater warms the coolant and the oil", T.Tc, T.To)
 	local Heated = coldStart(T)
 	check(Heated and Heated < 10, "27 L V12 starts at -20 °C after 4 minutes of a 32 kW heater", Heated)
+
+	-- The rapid preheater (gameplay, rapidk 8 °C per real second at ace_heat_timescale 2) warms
+	-- metal, coolant and oil together by heat capacity: running within 8 s in all.
+	local R = Th.NewState(-20)
+	local Ct = TS.Cb + TS.Cc + TS.Co
+	local P = Ct * 8 / 2
+	local Total
+	for Q = 0, 32 do -- quarter seconds
+		if Q > 0 then
+			Th.Step(R, TS, 0, 0, 0.5, { Ambient = -20, CoolantHeat = P * TS.Cc / Ct, BlockHeat = P * TS.Cb / Ct, OilHeat = P * TS.Co / Ct })
+		end
+		local Crank = coldStart(R)
+		if Crank and Q * 0.25 + Crank < (Total or 99) then Total = Q * 0.25 + Crank end
+	end
+	check(Total and Total < 8, "rapid preheater: 27 L V12 running within 8 s at -20 °C", Total)
 end
 
 print(("Mobility starter self-test: PASS (%d assertions)"):format(Passed))

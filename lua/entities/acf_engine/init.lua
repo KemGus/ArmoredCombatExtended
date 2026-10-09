@@ -1709,7 +1709,7 @@ function ENT:UnlinkHeater( Target )
 	end
 	table.RemoveByValue( self.HeaterLink, Target )
 	table.RemoveByValue( Target.Master, self )
-	Target.HeatW = 0
+	Target.HeatW, Target.HeatBlockW, Target.HeatOilW = 0, 0, 0
 	return true, "Unlink successful!"
 end
 
