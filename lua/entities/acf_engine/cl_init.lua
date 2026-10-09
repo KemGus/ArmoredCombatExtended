@@ -222,14 +222,13 @@ end
 do -- What the drivetrain model does with an engine, and its starter setup
 
 	local SizeVar    = "acemenu_eng_startersize"
-	local PreheatVar = "acemenu_eng_preheat"
 	local CoolingVar = "acemenu_eng_cooling"
 	local LastCoolingId -- engine the cooling choice was made for
 
 	-- Plain-language summary of each kind of engine.
 	local KindText = {
 		si = "Spark ignition. Fires once the starter turns it past 60-100 rpm and the first fuel has reached the cylinders, slower when cold. Throttled, so it brakes hard off the throttle.",
-		diesel = "Compression ignition: the squeezed air itself must get hot enough to light the fuel. Cold, it needs glow plug preheat and a fast crank; warm, it starts at once. Weak engine braking; the governor gives full fuel to hold idle, so it crawls in gear.",
+		diesel = "Compression ignition: the squeezed air itself must get hot enough to light the fuel. Cold, its glow plugs preheat before it cranks, and below about -10 °C a big diesel needs an engine heater; warm, it starts at once. Weak engine braking; the governor gives full fuel to hold idle, so it crawls in gear.",
 		rotary = "Wankel rotary. Starts like a petrol engine and brakes like one.",
 		turbine = "Gas turbine with a free power turbine: lights up without a starter battery and cannot stall; the output can sit at 0 rpm under load. The gas generator burns fuel whatever the output does.",
 		electric = "Electric motor: full torque from 0 rpm, no starter and no stall. Reverse input drives it backwards; a negative throttle regenerates into the battery.",
@@ -256,7 +255,6 @@ do -- What the drivetrain model does with an engine, and its starter setup
 		local Model = ACE.Mobility.Engine
 		local Thermal = ACE.Mobility.Thermal
 		Spec.StarterMul = math.Clamp( GetConVar( SizeVar ):GetFloat(), 0.5, 3 )
-		Spec.PreheatMax = math.Clamp( GetConVar( PreheatVar ):GetFloat(), 0, 60 )
 		local TS = Thermal and Thermal.Build( Spec, Table.weight or 100 )
 		local function Try( C )
 			local Mul = ( TS and C < 80 ) and Thermal.FrictionMul( TS, C ) or nil
@@ -333,7 +331,7 @@ do -- What the drivetrain model does with an engine, and its starter setup
 		Text( "MobStarter", StarterLine( Spec ),
 			"Cranking runs the battery down; a flat battery recovers some charge after a few minutes' rest. Link an ACE battery to the engine (menu tool, right click both) to start from it instead. The starter cuts out after about 30 s of cranking and cranks again once it cools." )
 		Text( "MobStart", Start,
-			"Engine alone in neutral, from the request (Active = 1) to running. Cold oil and a cold charge slow it; a bigger starter and glow plug preheat speed it up." )
+			"Engine alone in neutral, from the request (Active = 1) to running. Cold oil and a cold charge slow it; a bigger starter or an engine heater (Mobility - Engine Heaters) speeds it up." )
 
 		-- Follow the starter setup sliders.
 		local Label = acemenupanel.CData["MobStart_text"]
@@ -347,7 +345,7 @@ do -- What the drivetrain model does with an engine, and its starter setup
 				local Now = RealTime()
 				if Now < NextCheck then return end
 				NextCheck = Now + 0.3
-				local New = GetConVar( SizeVar ):GetString() .. "|" .. GetConVar( PreheatVar ):GetString()
+				local New = GetConVar( SizeVar ):GetString()
 				if Key == nil then Key = New return end
 				if New == Key then return end
 				Key = New
@@ -378,9 +376,5 @@ do -- What the drivetrain model does with an engine, and its starter setup
 		end
 		Slider( "StarterSize", "Starter size (x)", 0.5, 3, 2, SizeVar,
 			"Torque and current of the starter and its battery against the standard size. Bigger cranks faster and starts cold engines, but adds weight." )
-		if Spec.Kind == "diesel" then
-			Slider( "StarterPreheat", "Glow plug preheat at -20 °C (s)", 0, 30, 0, PreheatVar,
-				"How long the glow plugs heat before cranking on a frozen engine. Shorter as the coolant warms, none above 10 °C. 0 = no glow plugs." )
-		end
 	end
 end

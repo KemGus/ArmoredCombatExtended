@@ -151,6 +151,15 @@ local EngineTargets = {
 		return DistanceResult(Engine:GetPos():Distance(Radiator:GetPos()), LinkVis.FuelLinkDist, "The radiator")
 	end,
 
+	ace_engine_heater = function(Engine, Heater)
+		local Def = EngineDef(Engine)
+		local EType = Def and Def.enginetype
+		if EType == "Electric" or EType == "Turbine" or EType == "GroundTurbine" then
+			return Result(ColorFail, "Only piston and rotary engines take a heater")
+		end
+		return DistanceResult(Engine:GetPos():Distance(Heater:GetPos()), LinkVis.FuelLinkDist, "The heater")
+	end,
+
 	ace_crewseat_driver = function()
 		return Result(ColorOk, "OK - the seat must be legal")
 	end,
@@ -181,7 +190,7 @@ local function CheckLink(SelectedEnt, Aimed)
 	if Engine then
 		local Check = EngineTargets[Other:GetClass()]
 		if not Check then
-			return Result(ColorFail, "Engines only link to gearboxes, fuel tanks, radiators or driver seats")
+			return Result(ColorFail, "Engines only link to gearboxes, fuel tanks, radiators, heaters or driver seats")
 		end
 
 		return Check(Engine, Other)

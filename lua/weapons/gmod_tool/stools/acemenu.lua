@@ -33,7 +33,6 @@ TOOL.ClientConVar[ "gb_assisted" ] = 0
 TOOL.ClientConVar[ "gb_dct" ] = 0
 -- Engine starter setup (see acf_engine ENT:SetStarterSetup).
 TOOL.ClientConVar[ "eng_startersize" ] = 1
-TOOL.ClientConVar[ "eng_preheat" ] = 5
 TOOL.ClientConVar[ "eng_cooling" ] = ""
 TOOL.ClientConVar[ "gb_clutch" ] = 0
 
@@ -91,7 +90,6 @@ end
 function TOOL:EngineStarterSetup()
 	return {
 		Size = self:GetClientNumber( "eng_startersize" ),
-		Preheat = self:GetClientNumber( "eng_preheat" ),
 		Cooling = self:GetClientInfo( "eng_cooling" ),
 	}
 end

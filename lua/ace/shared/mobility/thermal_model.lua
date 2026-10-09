@@ -598,7 +598,9 @@ end
 -- @param Opts table|nil { Ambient = °C, Running = bool (electric pump), Load = air/fuel
 -- fraction 0..1 (sets the friction share of the heat, default 1), AirSpeed = m/s through the
 -- air (air-cooled engines), Exchangers = {
--- { UA = W/K, Cair = W/K }, ... }, ExtraC = extra coolant heat capacity from radiators [J/K] }.
+-- { UA = W/K, Cair = W/K }, ... }, ExtraC = extra coolant heat capacity from radiators [J/K],
+-- CoolantHeat = heat from engine heaters [W]: into the coolant, or into the metal of an
+-- air-cooled engine }.
 -- Sets T.Tb, T.Tc, T.To (oil; nil for motors, the coolant for turbines), T.Thermostat,
 -- T.Boiling, T.Qrad (radiator heat rejection, W), T.OilHeat and T.OilToCoolant (W), and for
 -- air-cooled engines T.FinV (air speed between the fins, m/s) and T.Qfin (fin heat, W).
@@ -672,6 +674,12 @@ function Thermal.Step(T, TS, Heat, W, H, Opts)
 		Pc = Goc * (Avg - T.Tc)
 		Pb = Heat - Qo
 		T.OilHeat, T.OilToCoolant = Qo, Pc
+	end
+
+	-- Engine heaters (entities/ace_engine_heater) circulate the coolant with their own pump.
+	local Aux = Opts and Opts.CoolantHeat or 0
+	if Aux > 0 then
+		if K.AirCooled then Pb = Pb + Aux else Pc = Pc + Aux end
 	end
 
 	-- Air-cooled: the fins lose heat to the air blown through them, on top of the bare skin.

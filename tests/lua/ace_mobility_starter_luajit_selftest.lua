@@ -318,4 +318,32 @@ do
 	check(S.Running and S.Cranking == 0 and not S.StarterOn, "a motor needs no starter")
 end
 
+do
+	-- Engine heater (entities/ace_engine_heater): at -20 °C the 27 L V12 does not start on its
+	-- own cold battery; a 32 kW coolant heater (Thermo E+ 320) warms it enough within minutes.
+	-- The engine is stopped, so only the heater moves heat (ace_heat_timescale default 2).
+	local F = assert(io.open(root .. "/lua/ace/shared/mobility/thermal_model.lua", "rb"))
+	assert(loadstring(F:read("*a"), "thermal_model.lua"))()
+	F:close()
+	local Th = M.Thermal
+	local S = spec(V12)
+	local TS = Th.Build(S, V12.weight)
+	local function coldStart(T)
+		local _, StallW = E.StarterRating(S)
+		local V, Sag, J = B.StarterPackSupply(B.StarterPack(StallW / 4), -20)
+		return E.SimulateStart(S, { AirC = -20, BlockC = T.Tb, CoolantC = T.Tc, FrictionMul = Th.FrictionMul(TS, T.To),
+			MaxTime = 30, Supply = { Volt = V, Sag = Sag, EnergyJ = J } })
+	end
+	local T = Th.NewState(-20)
+	check(coldStart(T) == nil, "27 L V12 does not start at -20 °C on its own cold battery")
+	local Cold = Th.NewState(-20)
+	for _ = 1, 240 do
+		Th.Step(T, TS, 0, 0, 2, { Ambient = -20, CoolantHeat = 32000 })
+		Th.Step(Cold, TS, 0, 0, 2, { Ambient = -20 })
+	end
+	check(T.Tc > Cold.Tc + 10 and T.To > -15, "the heater warms the coolant and the oil", T.Tc, T.To)
+	local Heated = coldStart(T)
+	check(Heated and Heated < 10, "27 L V12 starts at -20 °C after 4 minutes of a 32 kW heater", Heated)
+end
+
 print(("Mobility starter self-test: PASS (%d assertions)"):format(Passed))

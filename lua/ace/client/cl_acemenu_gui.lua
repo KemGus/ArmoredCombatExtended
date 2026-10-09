@@ -203,6 +203,7 @@ function PANEL:Init( )
 		local Gearboxes   = Mobility:AddNode( "Gearboxes" , ItemIcon  )
 		local FuelTanks   = Mobility:AddNode( "Fuel Tanks" , ItemIcon  )
 		local Radiators   = Mobility:AddNode( "Radiators" , "icon16/cog.png"  )
+		local Heaters     = Mobility:AddNode( "Engine Heaters" , ItemIcon  )
 
 		local EngineCatNodes    = {} --Stores all Engine Cats Nodes (V12, V8, I4, etc)
 		local GearboxCatNodes   = {} --Stores all Gearbox Cats Nodes (CVT, Transfer, etc)
@@ -302,6 +303,17 @@ function PANEL:Init( )
 			end
 
 			break
+		end
+
+		-------------------- Engine heater folder --------------------
+
+		for _, HeaterData in pairs(FinalContainer["EngineHeaters"] or {}) do
+			local Item = Heaters:AddNode( HeaterData.name or "Missing Name", ItemIcon )
+
+			function Item:DoClick()
+				RunConsoleCommand( "acemenu_type", HeaterData.type )
+				acemenupanel:UpdateDisplay( HeaterData )
+			end
 		end
 	end
 	do

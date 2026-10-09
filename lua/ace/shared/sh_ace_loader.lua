@@ -20,6 +20,7 @@ local EngineTable       = {}
 local GearboxTable      = {}
 local FuelTankTable     = {}
 local RadiatorTable		= {}
+local EngineHeaterTable	= {}
 local FuelTankSizeTable = {}
 local MuzzleFlashTable  = {}
 
@@ -59,6 +60,10 @@ local fueltank_base = {
 local radiator_base = {
 	ent    = "ace_radiator",
 	type   = "Radiators"
+}
+local engine_heater_base = {
+	ent    = "ace_engine_heater",
+	type   = "EngineHeaters"
 }
 local rack_base = {
 	ent    = "acf_rack",
@@ -114,6 +119,9 @@ if CLIENT then
 
 	radiator_base.guicreate      = function( _, tbl ) ACE.RadiatorGUICreate( tbl )		end or nil
 	radiator_base.guiupdate      = function( _, tbl ) ACE.RadiatorGUIUpdate( tbl )		end or nil
+
+	engine_heater_base.guicreate = function( _, tbl ) ACE.EngineHeaterGUICreate( tbl )	end
+	engine_heater_base.guiupdate = function() return end
 
 	radar_base.guicreate         = function( _, Table ) ACE.RadarGUICreate( Table )	end
 	radar_base.guiupdate         = function() return end
@@ -281,6 +289,15 @@ function ACE.DefineRadiator( id, data )
 	table.Inherit( data, radiator_base )
 	RadiatorTable[ id ] = data
 	MobilityTable[ id ] = data
+end
+
+--- Defines an engine heater (entities/ace_engine_heater).
+-- @param id string Heater id.
+-- @param data table Definition: name, desc, model, weight, heatw (W), fuelkgh (kg/h), elecw (W).
+function ACE.DefineEngineHeater( id, data )
+	data.id = id
+	table.Inherit( data, engine_heater_base )
+	EngineHeaterTable[ id ] = data
 end
 
 -- Radar definition
@@ -472,6 +489,7 @@ ACE.Weapons.Engines         = EngineTable
 ACE.Weapons.Gearboxes       = GearboxTable
 ACE.Weapons.FuelTanks       = FuelTankTable
 ACE.Weapons.Radiators       = RadiatorTable
+ACE.Weapons.EngineHeaters   = EngineHeaterTable
 ACE.Weapons.FuelTanksSize   = FuelTankSizeTable
 ACE.Weapons.Radars          = Radars
 ACE.Weapons.Tools           = Tools

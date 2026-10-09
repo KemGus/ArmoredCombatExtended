@@ -38,6 +38,7 @@ do
 		self.FuelLink       = {}
 		self.RadLink       = {}
 		self.BatteryLink    = {} -- batteries feeding a combustion engine's starter
+		self.HeaterLink     = {} -- coolant heaters (entities/ace_engine_heater)
 		self.StarterSize    = 1  -- starter setup (ENT:SetStarterSetup)
 		self.StarterExtraKg = 0
 		self.OTWarnings		= {} --Used to remember all the one time warnings.
@@ -803,8 +804,8 @@ end
 	           added to the engine's (StarterKgPerW of the starter's rated power per unit of
 	           size: 2.2 kg/kW for a reduction-gear starter plus 12.5 kg/kW of lead-acid battery
 	           at 0.5 Wh/W and 40 Wh/kg; estimated).
-	  Preheat  glow plug preheat at -20 °C in seconds, 0-60 (diesels; 0 = no glow plugs; nil =
-	           ACE.Mobility.Engine.DefaultPreheat).
+	Glow plugs always preheat for ACE.Mobility.Engine.DefaultPreheat; the Preheat setting older
+	dupes carry is ignored.
 	The starter sound is set with the engine's sound banks (sound replacer tool, ace_enginestartersound).
 ]]
 local StarterKgPerW = ( 2.2 + 12.5 ) / 1000
@@ -821,22 +822,19 @@ local function StarterBaseRatedW( Ent )
 end
 
 --- Applies an engine's starter and cooling setup and stores it so it survives duplication.
--- @param Setup table|nil { Size = number (0.5-3), Preheat = number|nil (s, 0-60),
--- Cooling = "air"|"liquid"|nil (nil = as the engine was built) }.
+-- @param Setup table|nil { Size = number (0.5-3), Cooling = "air"|"liquid"|nil (nil = as the
+-- engine was built) }.
 function ENT:SetStarterSetup( Setup )
 	Setup = istable( Setup ) and Setup or {}
 	local Size = math.Clamp( tonumber( Setup.Size ) or 1, 0.5, 3 )
-	local Preheat = tonumber( Setup.Preheat )
-	if Preheat then Preheat = math.Clamp( Preheat, 0, 60 ) end
-	if Preheat == ACE.Mobility.Engine.DefaultPreheat then Preheat = nil end
-	self.StarterSize, self.StarterPreheat = Size, Preheat
+	self.StarterSize = Size
 	-- Air or liquid cooling in place of the engine's own (ACE.Mobility.EngineSpec reads it).
 	local Cooling = ( Setup.Cooling == "air" or Setup.Cooling == "liquid" ) and Setup.Cooling or nil
 	if Cooling ~= self.CoolingChoice then
 		self.CoolingChoice = Cooling
 		self.MobSpec, self.ThermalSpec = nil, nil
 	end
-	self.StarterSetup = { Size = Size, Preheat = Preheat, Cooling = Cooling }
+	self.StarterSetup = { Size = Size, Cooling = Cooling }
 	-- Setups saved while the sound lived here carry it; it now belongs with the sound banks.
 	if isstring( Setup.Sound ) and Setup.Sound ~= "" and ACE.EngineSound and ACE.EngineSound.SetStarterSound then
 		ACE.EngineSound.SetStarterSound( self, Setup.Sound )
@@ -851,7 +849,7 @@ function ENT:SetStarterSetup( Setup )
 		if IsValid( Phys ) then Phys:SetMass( self.Weight ) end
 	end
 
-	if Size == 1 and not Preheat and not Cooling then
+	if Size == 1 and not Cooling then
 		duplicator.ClearEntityModifier( self, "ACE_EngineStarter" )
 	else
 		duplicator.StoreEntityModifier( self, "ACE_EngineStarter", self.StarterSetup )
@@ -864,11 +862,10 @@ duplicator.RegisterEntityModifier( "ACE_EngineStarter", function( _, Ent, Data )
 end )
 
 --- Hands the starter setup and the temperatures that decide a start to the engine model.
--- @param Spec table Engine spec (gets StarterMul and PreheatMax).
+-- @param Spec table Engine spec (gets StarterMul).
 -- @param State table|nil Engine state (gets AirC, CoolantC and BlockC, °C).
 function ENT:StarterModelInputs( Spec, State )
 	Spec.StarterMul = self.StarterSize or 1
-	Spec.PreheatMax = self.StarterPreheat
 	if State then
 		State.AirC = ACE.AmbientTemp
 		State.CoolantC = self.Heat
@@ -1409,6 +1406,7 @@ do
 		acf_gearbox = true,
 		acf_fueltank = true,
 		ace_radiator = true,
+		ace_engine_heater = true,
 		ace_crewseat_driver = true,
 	}
 
@@ -1416,7 +1414,7 @@ do
 
 		if not IsValid( Target ) or not AllowedEnts[Target:GetClass()] then
 			print(Target:GetClass())
-			return false, "You can only link gearboxes, fueltanks or crewseats!"
+			return false, "You can only link gearboxes, fueltanks, radiators, heaters or crewseats!"
 		end
 
 		-- Gear links
@@ -1431,6 +1429,10 @@ do
 		if Target:GetClass() == "ace_radiator" then
 			return self:LinkRadiator( Target )
 		end
+		-- Heater links
+		if Target:GetClass() == "ace_engine_heater" then
+			return self:LinkHeater( Target )
+		end
 		-- Crew links
 		if Target:GetClass() == "ace_crewseat_driver" then
 			return self:LinkCrew( Target )
@@ -1440,7 +1442,7 @@ do
 	function ENT:Unlink( Target )
 
 		if not IsValid( Target ) or not AllowedEnts[Target:GetClass()] then
-			return false, "You can only unlink gearboxes, fueltanks, radiators, or crewseats!"
+			return false, "You can only unlink gearboxes, fueltanks, radiators, heaters or crewseats!"
 		end
 
 		-- Gear links
@@ -1454,6 +1456,10 @@ do
 		-- Radiator links
 		if Target:GetClass() == "ace_radiator" then
 			return self:UnlinkRadiator( Target )
+		end
+		-- Heater links
+		if Target:GetClass() == "ace_engine_heater" then
+			return self:UnlinkHeater( Target )
 		end
 		-- Crew links
 		if Target:GetClass() == "ace_crewseat_driver" then
@@ -1668,6 +1674,73 @@ function ENT:UnlinkRadiator( Target )
 	return false, "That radiator is not linked to this engine!"
 end
 
+--- Links a coolant heater (entities/ace_engine_heater) to this engine. A heater heats one
+-- engine; electric motors and turbines take none.
+-- @param Target Entity ace_engine_heater.
+-- @return boolean Success.
+-- @return string Message for the owner.
+function ENT:LinkHeater( Target )
+	if self.EngineType == "Electric" or self.EngineType == "Turbine" or self.EngineType == "GroundTurbine" then
+		return false, "Only piston and rotary engines take a heater."
+	end
+	if table.HasValue( self.HeaterLink, Target ) then
+		return false, "That heater is already linked to this engine!"
+	end
+	if IsValid( Target.Master[1] ) then
+		return false, "That heater already heats another engine."
+	end
+	if self:GetPos():Distance( Target:GetPos() ) > FuelLinkDistBase then
+		return false, "The heater is too far away."
+	end
+
+	table.insert( self.HeaterLink, Target )
+	Target.Master = { self }
+
+	return true, "Link successful!"
+end
+
+--- Unlinks a coolant heater from this engine.
+-- @param Target Entity ace_engine_heater.
+-- @return boolean Success.
+-- @return string Message for the owner.
+function ENT:UnlinkHeater( Target )
+	if not table.HasValue( self.HeaterLink, Target ) then
+		return false, "That heater is not linked to this engine!"
+	end
+	table.RemoveByValue( self.HeaterLink, Target )
+	table.RemoveByValue( Target.Master, self )
+	Target.HeatW = 0
+	return true, "Unlink successful!"
+end
+
+--- Draws power for an engine's accessories (coolant heaters) from its starter battery: the first
+-- linked starter battery that is on, legal and charged, else the engine's own lead-acid battery.
+-- @param Joules number Energy wanted [J].
+-- @param Dt number Seconds the draw covers.
+-- @return boolean Whether the battery could supply it.
+function ENT:DrawAuxPower( Joules, Dt )
+	if next( self.BatteryLink ) then
+		for _, Bat in ipairs( self.BatteryLink ) do
+			if IsValid( Bat ) and Bat.Fuel > 0 and Bat.Active and Bat.Legal and Bat.DrawEnergy then
+				Bat:DrawEnergy( Joules / 3.6e6, Dt )
+				return true
+			end
+		end
+		return false
+	end
+
+	local Spec = self.MobSpec or ACE.Mobility.EngineSpec( self )
+	local Pack = Spec and self:GetStarterPack( Spec )
+	if not Pack then return false end
+	local Battery = ACE.Mobility.Battery
+	local _, _, EnergyJ = Battery.StarterPackSupply( Pack, ACE.AmbientTemp )
+	if EnergyJ < Joules then return false end
+	Battery.StarterPackDraw( Pack, Joules )
+	-- The pack's wells settle in StarterApply, which runs only with a drivetrain linked.
+	if not next( self.GearLink ) then Battery.StarterPackStep( Pack, Dt ) end
+	return true
+end
+
 -------------------------- Duplicator related stuff --------------------------
 do
 	function ENT:PreEntityCopy()
@@ -1726,6 +1799,17 @@ do
 		rad_info.entities = rad_entids
 		if rad_info.entities then
 			duplicator.StoreEntityModifier( self, "RadLink", rad_info )
+		end
+
+		-- Heater link saving
+		local HeaterIds = {}
+		for _, Heater in ipairs( self.HeaterLink ) do
+			if IsValid( Heater ) then table.insert( HeaterIds, Heater:EntIndex() ) end
+		end
+		if next( HeaterIds ) then
+			duplicator.StoreEntityModifier( self, "HeaterLink", { entities = HeaterIds } )
+		else
+			duplicator.ClearEntityModifier( self, "HeaterLink" )
 		end
 
 		--driver seat link saving
@@ -1790,6 +1874,17 @@ do
 				end
 			end
 			Ent.EntityMods.RadLink = nil
+		end
+		-- Heater link pasting
+		local HeaterMod = Ent.EntityMods and Ent.EntityMods.HeaterLink
+		if HeaterMod and istable( HeaterMod.entities ) then
+			for _, ID in pairs( HeaterMod.entities ) do
+				local Linked = CreatedEntities[ ID ]
+				if IsValid( Linked ) and Linked:GetClass() == "ace_engine_heater" then
+					self:Link( Linked )
+				end
+			end
+			Ent.EntityMods.HeaterLink = nil
 		end
 		--ace_crewseat_gunner
 		if Ent.EntityMods and Ent.EntityMods.CrewLink and Ent.EntityMods.CrewLink.entities then
