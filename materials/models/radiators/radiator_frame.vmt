@@ -1,7 +1,7 @@
 "VertexLitGeneric"
 {
-	"$baseTexture" "models\radiators/Radiator"
-	"$bumpmap" "models/radiators/Radiator_normal"
+	"$baseTexture" "models/radiators/radiator"
+	"$bumpmap" "models/radiators/radiator_normal"
 	"$model" "1"
 	"$alphatest" "1"
 }
