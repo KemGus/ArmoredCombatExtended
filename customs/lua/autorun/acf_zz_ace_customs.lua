@@ -40,7 +40,6 @@ end
 
 local function Shared(Path) include(Path) end
 local function Server(Path) if SERVER then include(Path) end end
-local function Client(Path) if CLIENT then include(Path) end end
 
 -- The same order as the branch's acf_globals.lua.
 Shared(Patches .. "sh_globals.lua")
@@ -55,7 +54,8 @@ Server("ace/server/sv_mobility.lua")
 Server("ace/server/sv_mobility_log.lua")
 Server(Override .. "ace/server/sv_adminsettings.lua")
 
-Client(Override .. "ace/client/cl_acemenu_gui.lua")
+-- Customs' menu GUI (override/ace/client/cl_acemenu_gui.lua) is a vgui panel file: Customs'
+-- acemenu tool registers it with vgui.RegisterFile when its panel is built.
 
 -- Entities and weapons: Customs' version replaces ACE's as GMod registers the class.
 -- t is the table GMod is about to register; it is refilled in place from Customs' files.

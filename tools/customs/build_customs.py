@@ -223,7 +223,14 @@ def build(ref, out):
                 and os.path.splitext(parts[-1])[0] in OVERRIDE_TOOLS)
         )
         if overridable:
-            write(out, "lua/ace_customs/override/" + path[4:], show(ref, path))
+            body = show(ref, path)
+            # The menu tool builds its panel from the GUI file by path; point it at Customs' copy.
+            if path == "lua/weapons/gmod_tool/stools/acemenu.lua":
+                old, new = b'"ace/client/cl_acemenu_gui.lua"', b'"ace_customs/override/ace/client/cl_acemenu_gui.lua"'
+                if old not in body:
+                    errors.append(f"{path}: no vgui.RegisterFile of {old.decode()} to redirect")
+                body = body.replace(old, new)
+            write(out, "lua/ace_customs/override/" + path[4:], body)
             counts["override"] += 1
             continue
 
