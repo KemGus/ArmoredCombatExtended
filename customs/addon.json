@@ -1,0 +1,14 @@
+{
+  "title": "ACE Customs",
+  "type": "vehicle",
+  "tags": [
+    "build",
+    "realism"
+  ],
+  "ignore": [
+    "*.md",
+    "*.py",
+    "*.psd",
+    "*.txt"
+  ]
+}
