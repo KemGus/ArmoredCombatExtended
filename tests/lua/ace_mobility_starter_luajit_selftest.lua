@@ -242,11 +242,14 @@ do
 	NP.PreheatMax = 0
 	check(E.SimulateStart(NP, Frozen) == nil, "frozen diesel without glow plugs does not start")
 
-	-- A big diesel: the stock starter cannot spin it fast enough through frozen oil; a bigger one can.
+	-- A big diesel: its starter is sized to crank it through cold oil (StarterColdMul), so on a
+	-- full battery it starts frozen, and at -6 °C within seconds (it once could not below +8 °C).
 	local Big, Mul2 = E.SimulateStart(spec(V12), Frozen), E.SimulateStart(spec(V12, 2), Frozen)
-	check(Big == nil and Mul2 ~= nil, "frozen 27 L V12 needs a bigger starter", Big, Mul2)
+	check(Big and Mul2 and Mul2 < Big, "frozen 27 L V12 starts on its stock starter, sooner on a bigger one", Big, Mul2)
+	local Chilly = E.SimulateStart(spec(V12), { AirC = -6, BlockC = -6, CoolantC = -6, FrictionMul = 3.2 })
+	check(Chilly and Chilly < 6, "27 L V12 starts at -6 °C", Chilly)
 	local BigWarm, BigMild = E.SimulateStart(spec(V12), Warm), E.SimulateStart(spec(V12), Mild)
-	check(BigWarm and BigWarm < 2 and BigMild and BigMild > BigWarm + 0.5 and BigMild < 4, "27 L V12: about a second warm, longer through cold oil at 20 °C (no preheat above 10 °C)", BigWarm, BigMild)
+	check(BigWarm and BigWarm < 2 and BigMild and BigMild > BigWarm and BigMild < 4, "27 L V12: about a second warm, longer through cold oil at 20 °C (no preheat above 10 °C)", BigWarm, BigMild)
 	local Small, Large = E.SimulateStart(spec(V8, 0.5), Mild), E.SimulateStart(spec(V8, 2), Mild)
 	check(Small and Large and Large < Small, "a bigger starter starts sooner", Large, Small)
 	check(E.StarterRating(spec(V8, 2)) == 2 * E.StarterRating(spec(V8)), "starter size scales its torque")

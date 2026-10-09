@@ -625,9 +625,24 @@ local StarterDrag    = 1 / (1 + StarterFreeR) ^ 2
 local StarterHeatTime = StarterCoolTau * (1 - exp(-StarterDuty / StarterCoolTau))
 Engine.StarterRefSag = StarterRefSag
 
+--[[
+	Cold sizing. A starter is chosen to crank the engine on a cold morning, not a warm one: the
+	cold cranking amps a starter battery is rated by are measured at -18 °C (SAE J537). The
+	margin over warm losses alone left the engines with many cylinders, whose compression peaks
+	overlap and stay small, with starters that could not turn them past the firing speed once
+	the oil was cold (every diesel V12 failed to start below about +8 °C). So the stall torque is
+	also at least what turns the engine at StarterColdW with its oil StarterColdMul times as
+	viscous as warm (about -18 °C for the oils of thermal_model.lua) on the rated battery.
+	StarterColdW: 120 rpm, between the diesel firing speed (FireHiW) and the 150-250 rpm of a
+	  warm crank (estimated).
+]]
+local StarterColdMul = 3.9
+local StarterColdW   = 120 * RPMToRad
+
 --- Rated torque and power of an engine's starter.
 -- Stall torque is a margin over breakaway: four times the losses at rest plus 1.5 times the
--- cylinders' compression peak (estimated margin). Spec.StarterMul scales the result.
+-- cylinders' compression peak (estimated margin), and at least what cranks the engine cold
+-- (see StarterColdMul). Spec.StarterMul scales the result.
 -- @param Spec table Engine spec.
 -- @return number Stall torque at the crank [N·m], at the rated terminal voltage.
 -- @return number Electrical power drawn at stall [W] (Tstall·ωk); the most mechanical power
@@ -650,6 +665,11 @@ function Engine.StarterBaseStall(Spec)
 		Spec.FrictionMul = nil
 		local Breakaway = Spec.Gas and 1.5 * Spec.Gas.Peak or 0
 		Stall = 4 * (Engine.FrictionTorque(Spec, 0, 0) + Engine.PumpingTorque(Spec, 0)) + Breakaway
+		-- Cold: torque at StarterColdW on the rated voltage is Stall·(1/(1 + R)² - drag).
+		Spec.FrictionMul = StarterColdMul
+		local R = StarterColdW / StarterKneeW
+		local Cold = Engine.FrictionTorque(Spec, StarterColdW, 0) + Engine.PumpingTorque(Spec, 0, StarterColdW)
+		Stall = max(Stall, Cold / (1 / (1 + R) ^ 2 - StarterDrag))
 		Spec.FrictionMul = Mul
 		Spec.StarterStall = Stall
 	end
