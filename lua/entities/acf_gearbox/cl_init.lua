@@ -557,8 +557,17 @@ local function CreateSetupPanel( Table, Gears )
 	end
 end
 
+-- Id of the gearbox the page last showed: picking a different one starts it at size 1, while the
+-- page's own rebuilds (Rebuild) and a paste (ACE.GearboxMenuPaste) keep the size.
+local ShownId
+
 function ACE.GearboxGUICreate( Table )
 	local CData = acemenupanel.CData
+
+	if Table.id ~= ShownId then
+		ShownId = Table.id
+		SizeVar:SetFloat( 1 )
+	end
 
 	acemenupanel:CPanelText( "Name", Table.name, "DermaDefaultBold" )
 
@@ -668,5 +677,6 @@ function ACE.GearboxMenuPaste( Settings )
 		end
 	end
 
+	ShownId = Table.id
 	ACE.MenuShowItem( Table )
 end

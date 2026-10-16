@@ -272,14 +272,31 @@ function Size.Resolve( Def, Scale, Gears, Dual, Range, Split )
 	return Spec
 end
 
---- Name shown for a spawned gearbox: a scalable one adds its gear count and dual clutch.
+-- Names of the scalable items (lua/ace/shared/gearboxes/scalable.lua), for naming legacy items alike.
+local FamilyNames = { manual = "Manual", auto = "Automatic", cvt = "CVT", transfer = "Transfer case", diff = "Differential" }
+local LayoutNames = { L = "Inline", LD = "Inline", T = "Transaxial", TD = "Transaxial", ST = "Straight" }
+
+-- A legacy item named like the scalable item it maps to ("4-Speed, Inline, Small" -> "Manual, Inline").
+local function LegacyBaseName( Def, FamilyId )
+	if FamilyId == "clutch" then return "Clutch, Straight" end
+	if FamilyId == "doublediff" then return "Double Differential" end
+	local Layout
+	for Part in string.gmatch( Def.id or "", "[^%-]+" ) do
+		Layout = Layout or LayoutNames[Part]
+	end
+	local Name = FamilyNames[FamilyId] or "Gearbox"
+	return Layout and ( Name .. ", " .. Layout ) or Name
+end
+
+--- Name shown for a spawned gearbox: its family and layout, gear count, dual clutch and size.
+-- Legacy items are named the same way, from the family and scale they map to (Size.LegacyOf).
 -- @param Def table Gearbox definition.
 -- @param Spec table From Size.Resolve.
 -- @return string
 function Size.DisplayName( Def, Spec )
-	local Name = Def.name or "Gearbox"
-	if not Def.scalable then return Name end
-	local Family = Size.Families[Def.family] or {}
+	local FamilyId = Def.scalable and Def.family or Spec.Family
+	local Name = Def.scalable and ( Def.name or "Gearbox" ) or LegacyBaseName( Def, FamilyId )
+	local Family = Size.Families[FamilyId] or {}
 	if not Family.Fixed then
 		if Spec.Range or Spec.Split then
 			Name = Name .. ", " .. Spec.Gears .. " gears" .. ( Spec.Range and " x range" or "" ) .. ( Spec.Split and " x splitter" or "" )

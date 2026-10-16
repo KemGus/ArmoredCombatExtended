@@ -95,16 +95,23 @@ ACE.SoundToolSupport = ACE.SoundToolSupport or {
 		SetSound = function(ent, soundData)
 			ent.SoundPath = soundData.Sound
 			ent.SoundPitch = soundData.Pitch
+
+			-- A running fan picks the new sound up on its next think (ace_radiator Think).
+			if ent.Sound then
+				ent.Sound:Stop()
+				ent.Sound = nil
+				ent.FanSpeed = 0
+			end
 		end,
 
 		ResetSound = function(ent)
 
 			local pitch = 100
-			local sound = "acf_extra/ACE/miscellaneous/fans/HighPitchCoolingFan.wav"
+			local sound = ent.DefaultSound or "acf_extra/ACE/miscellaneous/fans/BuzzingCoolingFan.wav"
 
 			local soundData = { Sound = sound, Pitch = pitch }
 
-			local setSound = ACF.SoundToolSupport["ace_radiator"].SetSound
+			local setSound = ACE.SoundToolSupport["ace_radiator"].SetSound
 			setSound( ent, soundData )
 		end
 	},

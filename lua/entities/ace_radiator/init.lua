@@ -55,7 +55,8 @@ do
 		self.FanSpeed = 0
 
 		self.Sound = nil
-		self.SoundPath = "acf_extra/ACE/miscellaneous/fans/BuzzingCoolingFan.wav"
+		self.DefaultSound = "acf_extra/ACE/miscellaneous/fans/BuzzingCoolingFan.wav"
+		self.SoundPath = self.DefaultSound
 		self.SoundPitch = 100
 
 		self.RadiatorStats    = "" --Used to cache radiator stats. No reason to recalculate these constantly.
