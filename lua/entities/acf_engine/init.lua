@@ -1285,6 +1285,9 @@ function ENT:MobilityApply()
 		local Charged = -FuelKg / 3.6e6
 		self:ChargeFuel(Charged)
 		Wire_TriggerOutput(self, "Fuel Use", -math.Round(60 * Charged / Dt, 3))
+	else
+		-- Drawing nothing (a motor at rest, or no tank): without this the last value stayed up.
+		Wire_TriggerOutput(self, "Fuel Use", 0)
 	end
 	if self.FuelType ~= "Electric" then self:StarterApply(State, Dt) end
 
@@ -1667,6 +1670,7 @@ function ENT:UnlinkRadiator( Target )
 			table.remove( self.RadLink, Key )
 			-- The radiator must forget this engine too, or it keeps sharing its cooling with it.
 			table.RemoveByValue( Target.Master, self )
+			if Target.Circuits then Target.Circuits[self] = nil end
 			return true, "Unlink successful!"
 		end
 	end

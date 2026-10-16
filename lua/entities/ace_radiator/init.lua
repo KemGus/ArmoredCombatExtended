@@ -8,16 +8,20 @@ include("shared.lua")
 
 do
 
+	-- No parentheses inside these: Wire splits "Name (description)" at them, and the port gets a
+	-- broken name ("Fan Mode (0 - automatic") that TriggerInput never matches.
 	local RadiatorWireDescs = {
 		--Inputs
-		["Fan Mode"]	= "0 - automatic (default): the fan speeds up from 90 °C coolant to full at 100 °C. 1 - manual, at Fan Effort. 2 - off.",
+		["Fan Mode"]	= "0 - automatic, the default: the fan speeds up from 90 °C engine coolant to full at 100 °C, or from 30 °C battery cells to full at 40 °C. 1 - manual, at Fan Effort. 2 - off.",
 		["Fan Effort"]	= "Fan speed in manual mode, 0-100 %. The fan's power draw goes with the cube of its speed.",
 
 		--Outputs
 		["Coolant"]        = "Returns the current coolant level.",
 		["Capacity"]    = "Returns the max capacity of the radiator.",
 		["Leaking"]     = "Is the radiator leaking?",
-		["Temperature"]     = "Temperature of the coolant in the radiator, in °C (the coolant of the engines it is linked to)."
+		["Temperature"]     = "Temperature of the coolant in the radiator, in °C: the hottest circuit through it.",
+		["Circuit Temperatures"] = "Coolant temperature of each circuit through the radiator, in °C: one per linked engine or battery, in entity index order as the overlay lists them.",
+		["Circuit Heat"] = "Heat each circuit sheds through the radiator, in kW, in the same order as Circuit Temperatures."
 	}
 
 	function ENT:Initialize()
@@ -59,8 +63,8 @@ do
 
 		self.Inputs = Wire_CreateInputs( self, { "Fan Mode (" .. RadiatorWireDescs["Fan Mode"] .. ")", "Fan Effort (" .. RadiatorWireDescs["Fan Effort"] .. ")" } )
 		self.Outputs = WireLib.CreateSpecialOutputs( self,
-			{  "Temperature (" .. RadiatorWireDescs["Temperature"] .. ")", "Coolant (" .. RadiatorWireDescs["Coolant"] .. ")", "Capacity (" .. RadiatorWireDescs["Capacity"] .. ")", "Leaking (" .. RadiatorWireDescs["Leaking"] .. ")", "FanRunning", "Fan Effort", "Entity" },
-			{ "NORMAL", "NORMAL", "NORMAL", "NORMAL", "NORMAL", "NORMAL", "ENTITY" }
+			{  "Temperature (" .. RadiatorWireDescs["Temperature"] .. ")", "Coolant (" .. RadiatorWireDescs["Coolant"] .. ")", "Capacity (" .. RadiatorWireDescs["Capacity"] .. ")", "Leaking (" .. RadiatorWireDescs["Leaking"] .. ")", "Circuit Temperatures (" .. RadiatorWireDescs["Circuit Temperatures"] .. ")", "Circuit Heat (" .. RadiatorWireDescs["Circuit Heat"] .. ")", "FanRunning", "Fan Effort", "Entity" },
+			{ "NORMAL", "NORMAL", "NORMAL", "NORMAL", "ARRAY", "ARRAY", "NORMAL", "NORMAL", "ENTITY" }
 		)
 		Wire_TriggerOutput( self, "Leaking", 0 )
 		Wire_TriggerOutput( self, "Entity", self )
@@ -401,7 +405,16 @@ function ENT:UpdateOverlayText()
 
 	text = text .. self.RadiatorStats
 
-	text = text .. "\nCoolant: " .. math.Round(self.Heat or ACE.AmbientTemp or 20) .. " °C / " .. math.Round(((self.Heat or ACE.AmbientTemp or 20) * (9 / 5)) + 32) .. " °F\n"
+	local function temp(C) return math.Round(C) .. " °C / " .. math.Round(C * (9 / 5) + 32) .. " °F" end
+	-- One line per circuit through the radiator: what it cools, its coolant and the heat it sheds.
+	local List = self.CircuitList or {}
+	text = text .. "\n"
+	if #List == 0 then
+		text = text .. "Coolant: " .. temp(self.Heat or ACE.AmbientTemp or 20) .. "\n"
+	end
+	for _, C in ipairs(List) do
+		text = text .. C.Kind .. " [" .. C.Ent:EntIndex() .. "]: " .. temp(C.T) .. ", " .. math.Round(C.Q / 1000, 1) .. " kW\n"
+	end
 	text = text .. "Rejecting: " .. math.Round((self.HeatRejected or 0) / 1000, 1) .. " kW\n"
 
 	text = text .. "\nCurrent Coolant Remaining:"
@@ -464,13 +477,39 @@ function ENT:Think()
 	local CT = ACE.CurTime
 
 	local ECount = #self.Master
+	local Dt = CT - (self.LastThink or CT)
 
 	--[[
-		The fan, driven from the engines. Automatic (Fan Mode 0) runs it in proportion to the
-		coolant temperature, manual (1) at the Fan Effort input, and 2 keeps it off. Its airflow
-		goes with its speed and its power with the cube of it (fan affinity laws). The power is
-		taken from the crank as a torque, P / omega, at idle speed and above; below idle it falls
-		with the square of the crank speed.
+		The circuits through this radiator, each reported by its engine or battery
+		(ACE.RadiatorReport), dropping any that stopped reporting. Listed by entity index, as the
+		overlay and the Circuit wire outputs show them.
+	]]
+	local List, Q, Hottest, EngineT = {}, 0, nil, nil
+	local BatteryEffort, Battery = 0, nil
+	for Ent, C in pairs(self.Circuits or {}) do
+		if not IsValid(Ent) or CT - C.Time > 3 then
+			self.Circuits[Ent] = nil
+		else
+			List[#List + 1] = { Ent = Ent, Kind = C.Kind, T = C.T, Q = C.Q }
+			Q = Q + C.Q
+			Hottest = math.max(Hottest or C.T, C.T)
+			if C.Kind == "Engine" then
+				EngineT = math.max(EngineT or C.T, C.T)
+			elseif not Battery or C.FanEffort > BatteryEffort then
+				Battery, BatteryEffort = Ent, C.FanEffort
+			end
+		end
+	end
+	table.sort(List, function(A, B) return A.Ent:EntIndex() < B.Ent:EntIndex() end)
+	self.CircuitList, self.HeatRejected = List, Q
+	if Hottest then self.Heat = Hottest end
+
+	--[[
+		The fan. Automatic (Fan Mode 0) runs it in proportion to the coolant temperature, manual (1)
+		at the Fan Effort input, and 2 keeps it off. Its airflow goes with its speed and its power
+		with the cube of it (fan affinity laws). A combustion engine turns it from the crank, as a
+		torque P / omega at idle speed and above; below idle it falls with the square of the crank
+		speed. Electric motors and batteries run it as an electric fan from their battery.
 	]]
 	local Mode = self.FanMode or 0
 	local Effort
@@ -479,17 +518,24 @@ function ENT:Think()
 	elseif Mode == 2 then
 		Effort = 0
 	else
-		Effort = math.Clamp(((self.Heat or 0) - FanAutoStart) / (FanAutoFull - FanAutoStart), 0, 1)
+		-- Its thermostat switch reads the hottest engine circuit.
+		Effort = math.Clamp(((EngineT or ACE.AmbientTemp) - FanAutoStart) / (FanAutoFull - FanAutoStart), 0, 1)
 	end
-	local FanWanted = Effort > 0
+	-- A warm battery loop asks for more fan than the engines' coolant does: the battery runs it.
+	local ForBattery = Mode == 0 and BatteryEffort > Effort
+	if ForBattery then Effort = BatteryEffort end
+	local FanWanted = Effort > 0 and not ForBattery
 	self.FanRunning = 0
 
 	for Key in pairs(self.Master) do
 		local Ent = self.Master[Key]
-		if FanWanted and IsValid( Ent ) and Ent.Active then
+		if FanWanted and IsValid( Ent ) and Ent.Active and Ent.FuelType == "Electric" then
+			if IsValid(Ent.MobTank) and Dt > 0 then
+				Ent:DrawFuel(self.ActiveTorqueDemand * Effort ^ 3 / math.max(ECount, 1) * Dt / 3.6e6)
+			end
+			self.FanRunning = 1
+		elseif FanWanted and IsValid( Ent ) and Ent.Active then
 			local Spec, State = Ent.MobSpec, Ent.MobState
-			-- Electric motors idle at 0 rpm and can turn backwards: their fan load is taken at no
-			-- less than 80 rad/s.
 			local Idle = Spec and Spec.IdleW or 0
 			local Speed = math.abs(State and State.W or 0)
 			local Omega = math.max(Speed, Idle > 0 and Idle or 80)
@@ -509,14 +555,8 @@ function ENT:Think()
 		end
 	end
 
-	--[[
-		A radiator cooling only batteries (no engine turning its fan) runs an electric fan off the
-		battery while the cells are warm (acf_fueltank batteryLoop sets BatteryFanWanted).
-	]]
-	local Battery = self.FanBattery
-	if Mode == 0 and self.BatteryFanWanted then Effort = 1 end
-	if self.FanRunning == 0 and Effort > 0 and (Mode == 1 or self.BatteryFanWanted) and IsValid(Battery) and Battery.DrawEnergy then
-		local Dt = CT - (self.LastThink or CT)
+	-- No engine turning the fan: the battery loop's own electric fan, off the warmest battery.
+	if self.FanRunning == 0 and Effort > 0 and (ForBattery or Mode == 1) and IsValid(Battery) and Battery.DrawEnergy then
 		if Dt > 0 then Battery:DrawEnergy(self.ActiveTorqueDemand * Effort ^ 3 * Dt / 3.6e6, Dt) end
 		self.FanRunning = 1
 	end
@@ -628,6 +668,10 @@ function ENT:Think()
 		end
 
 		Wire_TriggerOutput( self, "Temperature", self.Heat )
+		local Temps, Heats = {}, {}
+		for I, C in ipairs(self.CircuitList or {}) do Temps[I], Heats[I] = C.T, C.Q / 1000 end
+		Wire_TriggerOutput( self, "Circuit Temperatures", Temps )
+		Wire_TriggerOutput( self, "Circuit Heat", Heats )
 		Wire_TriggerOutput( self, "FanRunning", self.FanRunning )
 		Wire_TriggerOutput( self, "Fan Effort", math.Round((self.FanEffort or 0) * 100) )
 

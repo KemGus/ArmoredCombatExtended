@@ -498,7 +498,7 @@ end
 --- Creates the runtime state, everything at ambient.
 -- @param Ambient number Air temperature [°C].
 function Thermal.NewState(Ambient)
-	return { Tb = Ambient, Tc = Ambient, To = Ambient, Qrad = 0, Vented = 0, Thermostat = 0, OilHeat = 0, OilToCoolant = 0 }
+	return { Tb = Ambient, Tc = Ambient, To = Ambient, Qrad = 0, Vented = 0, Thermostat = 0, Flow = 0, OilHeat = 0, OilToCoolant = 0 }
 end
 
 --- Share of the engine's heat input that goes to the coolant, scaled for load and speed.
@@ -602,7 +602,8 @@ end
 -- CoolantHeat = heat from engine heaters [W]: into the coolant, or into the metal of an
 -- air-cooled engine; BlockHeat, OilHeat = heater heat put straight into the metal and the oil
 -- [W] (the oil's share goes to the metal when the engine has no oil node) }.
--- Sets T.Tb, T.Tc, T.To (oil; nil for motors, the coolant for turbines), T.Thermostat,
+-- Sets T.Tb, T.Tc, T.To (oil; nil for motors, the coolant for turbines), T.Thermostat, T.Flow
+-- (coolant flow through the radiators, W/K),
 -- T.Boiling, T.Qrad (radiator heat rejection, W), T.OilHeat and T.OilToCoolant (W), and for
 -- air-cooled engines T.FinV (air speed between the fins, m/s) and T.Qfin (fin heat, W).
 function Thermal.Step(T, TS, Heat, W, H, Opts)
@@ -621,6 +622,7 @@ function Thermal.Step(T, TS, Heat, W, H, Opts)
 	local X = Thermal.Thermostat(TS, T.Tc)
 	T.Thermostat = X
 	local Flow = X * TS.PumpC * PumpFrac
+	T.Flow = Flow
 
 	-- Coolant flow divides between the built-in cooler and linked radiators by conductance.
 	local BuiltinUA = TS.BuiltinUA * PumpFrac

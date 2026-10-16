@@ -22,7 +22,7 @@ do
 		["Leaking"]     = "Is the fuel tank leaking?",
 		["Temperature"] = "Batteries only: cell temperature in °C. Charging stops at 50 °C, discharging at 60 °C.",
 		["Health"]      = "Batteries only: capacity left, in % of a new battery's.",
-		["Power"]       = "Batteries only: power the battery is giving out now, in kW (negative while it charges), averaged over about a second."
+		["Power"]       = "Batteries only: power the battery is giving out now, in kW, negative while it charges, averaged over about a second."
 	}
 
 	local Names = { "Fuel", "Capacity", "Leaking" }
@@ -524,35 +524,35 @@ end
 --[[
 	Battery cooling loop. Real packs sit on liquid cold plates whose coolant runs through a
 	radiator; a battery linked to radiators gets that loop (Battery.LoopG). A radiator shared
-	with engines or other batteries gives each an equal share, as engines share them. Returns
-	the loop's conductance and writes the coolant temperature back to radiators no engine uses.
+	with engines or other batteries is divided as ACE.RadiatorShare says; the loop's pump always
+	runs, so it counts as fully open. Returns the loop's conductance and reports the loop to
+	each radiator (ACE.RadiatorReport).
 ]]
-local LoopFanOnTemp = 30 -- °C; battery loops run their fan far cooler than an engine's thermostat
+-- Battery loops run their fan far cooler than an engine's thermostat: off below LoopFanOnTemp,
+-- full at LoopFanFullTemp and in proportion between (°C). Its power goes with the cube of that.
+local LoopFanOnTemp = 30
+local LoopFanFullTemp = 40
 
 local function batteryLoop(Tank, CellT)
 	if not Tank.RadLink then return 0 end
+	Tank.RadDemand = 1
 	local Rads = {}
 	for I = #Tank.RadLink, 1, -1 do
 		local Rad = Tank.RadLink[I]
 		if not IsValid(Rad) then
 			table.remove(Tank.RadLink, I)
 		elseif Rad.ThermalUA then
-			local Share = 1 / math.max(#Rad.Master + #(Rad.Batteries or {}), 1)
+			local Share = ACE.RadiatorShare(Rad, Tank)
 			Rads[#Rads + 1] = { UA = Rad.ThermalUA * Share, Cair = Rad.ThermalCair * Share, Rad = Rad }
-			Rad.BatteryFanWanted = Tank.Active and CellT > LoopFanOnTemp or nil
-			Rad.FanBattery = Tank
 		end
 	end
 	if #Rads == 0 then return 0 end
 	local G, Gr = ACE.Mobility.Battery.LoopG(Tank.BatterySpec, Rads)
 	local Ambient = ACE.AmbientTemp
 	local Q = G * (CellT - Ambient)
+	local Effort = Tank.Active and math.Clamp((CellT - LoopFanOnTemp) / (LoopFanFullTemp - LoopFanOnTemp), 0, 1) or 0
 	for _, R in ipairs(Rads) do
-		-- Engines sharing the radiator write their own coolant temperature; batteries only fill in.
-		if #R.Rad.Master == 0 then
-			R.Rad.Heat = Gr > 0 and Ambient + Q / Gr or Ambient
-			R.Rad.HeatRejected = Q / #Rads
-		end
+		ACE.RadiatorReport(R.Rad, Tank, "Battery", Gr > 0 and Ambient + Q / Gr or Ambient, Q / #Rads, Effort)
 	end
 	return G
 end
@@ -590,6 +590,7 @@ function ENT:Unlink( Target )
 	end
 	table.RemoveByValue( self.RadLink, Target )
 	if IsValid( Target ) and Target.Batteries then table.RemoveByValue( Target.Batteries, self ) end
+	if IsValid( Target ) and Target.Circuits then Target.Circuits[self] = nil end
 	self:UpdateOverlayText()
 	return true, "Unlink successful!"
 end

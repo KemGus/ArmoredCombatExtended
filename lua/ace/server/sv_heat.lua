@@ -606,10 +606,47 @@ do
 		Engine.ThermalHeatJ = (Engine.ThermalHeatJ or 0) + HeatJ
 	end
 
+	--[[
+		A radiator shared by several circuits (engines, battery loops) divides between them by how
+		open each circuit is (Ent.RadDemand, 0..1, from the last step: thermostat opening times
+		pump speed). Each engine has its own thermostat: a cold one stays shut and sends almost no
+		coolant through, so a hot engine beside it gets nearly the whole core, and two hot ones get
+		half each. Motors (electric pump, no thermostat) and battery loops count as fully open
+		while their pump runs. With nothing open yet the shares are equal.
+	]]
+
+	--- Share of a radiator's core that one linked circuit gets.
+	-- @param Rad ace_radiator entity.
+	-- @param Ent acf_engine or battery linked to it.
+	-- @return number Share, 0..1.
+	function ACE.RadiatorShare(Rad, Ent)
+		local Total, Count = 0, 0
+		for _, E in pairs(Rad.Master or {}) do
+			if IsValid(E) then Total, Count = Total + (E.RadDemand or 0), Count + 1 end
+		end
+		for _, B in pairs(Rad.Batteries or {}) do
+			if IsValid(B) then Total, Count = Total + (B.RadDemand or 0), Count + 1 end
+		end
+		if Total <= 0 then return 1 / math.max(Count, 1) end
+		return (Ent.RadDemand or 0) / Total
+	end
+
+	--- Reports one circuit's coolant through a radiator, for its overlay, wire outputs and fan.
+	-- @param Rad ace_radiator entity.
+	-- @param Ent The engine or battery whose circuit it is.
+	-- @param Kind string "Engine" or "Battery".
+	-- @param T number Coolant temperature [°C].
+	-- @param Q number Heat this circuit passes to the air through this radiator [W].
+	-- @param FanEffort number|nil Fan speed the circuit asks for, 0..1 (battery loops).
+	function ACE.RadiatorReport(Rad, Ent, Kind, T, Q, FanEffort)
+		Rad.Circuits = Rad.Circuits or {}
+		Rad.Circuits[Ent] = { Kind = Kind, T = T, Q = Q, FanEffort = FanEffort, Time = CurTime() }
+	end
+
 	--- Advances an engine's cooling system by the time since its last call. Call every think.
 	-- Sets Engine.Heat (coolant, °C), Engine.BlockHeat (metal, °C), Engine.OilHeat (oil, °C;
 	-- nil for motors), Engine.ThermalDerate (torque multiplier), Engine.CoolantBoiling,
-	-- Engine.OilOverheating and the engine spec's FrictionMul, updates linked radiators' Heat,
+	-- Engine.OilOverheating and the engine spec's FrictionMul, reports to linked radiators,
 	-- and applies overheat damage.
 	-- @param Engine acf_engine entity.
 	function ACE.EngineThermalThink(Engine)
@@ -631,13 +668,13 @@ do
 		local HeatW = (Engine.ThermalHeatJ or 0) / Dt
 		Engine.ThermalHeatJ = 0
 
-		-- Linked radiators: a radiator shared by several engines gives each an equal share.
+		-- Linked radiators, shared by coolant flow with whatever else they cool (ACE.RadiatorShare).
 		local Exchangers, ExtraC = Engine.ThermalExchangers or {}, 0
 		Engine.ThermalExchangers = Exchangers
 		for I = #Exchangers, 1, -1 do Exchangers[I] = nil end
 		for _, Rad in pairs(Engine.RadLink or {}) do
 			if IsValid(Rad) and Rad.ThermalUA then
-				local Share = 1 / math.max(#Rad.Master + #(Rad.Batteries or {}), 1)
+				local Share = ACE.RadiatorShare(Rad, Engine)
 				Exchangers[#Exchangers + 1] = { UA = Rad.ThermalUA * Share, Cair = Rad.ThermalCair * Share, Rad = Rad }
 				ExtraC = ExtraC + (Rad.Coolant or 0) * Thermal.CoolantCPerLitre * Share
 			end
@@ -699,11 +736,9 @@ do
 		-- Cold oil is viscous: the engine's rubbing friction follows the oil temperature.
 		TS.EngineSpec.FrictionMul = Thermal.FrictionMul(TS, T.To)
 
+		Engine.RadDemand = math.min((T.Flow or 0) / math.max(TS.PumpC, 1e-6), 1)
 		for _, X in ipairs(Exchangers) do
-			if X.Rad then
-				X.Rad.Heat = T.Tc
-				X.Rad.HeatRejected = (X.G or 0) * (T.Tc - Ambient)
-			end
+			if X.Rad then ACE.RadiatorReport(X.Rad, Engine, "Engine", T.Tc, (X.G or 0) * (T.Tc - Ambient)) end
 		end
 
 		-- Overheating: past its damage temperature the engine wears itself out (scuffed liners,
