@@ -53,6 +53,7 @@ if CLIENT then
 	TOOL.Information = {
 		{ name = "left", stage = 0 },
 		{ name = "right", stage = 0 },
+		{ name = "reload", stage = 0 },
 
 		{ name = "stage1.link", stage = 1, icon = "gui/rmb.png" },
 		{ name = "stage1.unlink", stage = 1, icon = "gui/rmb.png", icon2 = "gui/info" },
@@ -287,7 +288,20 @@ function TOOL:Holster()
 	self:DeselectAll()
 end
 
-function TOOL:Reload()
+-- Reload on an engine or gearbox copies its settings into the menu (ACE.CopyToMenu); anywhere
+-- else it clears the link selection.
+function TOOL:Reload( trace )
+	local ent = trace.Entity
+	if self:GetStage() == 0 and IsValid( ent ) and ( ent:GetClass() == "acf_engine" or ent:GetClass() == "acf_gearbox" ) then
+		if SERVER then
+			local ply = self:GetOwner()
+			local success, msg = ACE.CopyToMenu( ply, ent )
+			ACE.SendNotify( ply, success, msg )
+		end
+
+		return true
+	end
+
 	self:SetStage(0)
 	self:DeselectAll()
 

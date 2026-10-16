@@ -377,4 +377,20 @@ do -- What the drivetrain model does with an engine, and its starter setup
 		Slider( "StarterSize", "Starter size (x)", 0.5, 3, 2, SizeVar,
 			"Torque and current of the starter and its battery against the standard size. Bigger cranks faster and starts cold engines, but adds weight." )
 	end
+
+	--- Fills the engine menu with a placed engine's settings (sent by ACE.CopyToMenu) and opens
+	-- that engine in the menu.
+	-- @param Settings table Id and Starter ({ Size, Cooling }).
+	function ACE.EngineMenuPaste( Settings )
+		local Table = ACE.Weapons.Engines[Settings.Id]
+		if not Table then return end
+
+		local Starter = Settings.Starter or {}
+		GetConVar( SizeVar ):SetFloat( math.Clamp( tonumber( Starter.Size ) or 1, 0.5, 3 ) )
+		GetConVar( CoolingVar ):SetString( Starter.Cooling or "" )
+		-- The cooling choice was made for this engine, so opening it keeps the choice.
+		LastCoolingId = Table.id
+
+		ACE.MenuShowItem( Table )
+	end
 end

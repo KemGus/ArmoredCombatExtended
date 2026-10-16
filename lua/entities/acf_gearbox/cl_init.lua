@@ -595,3 +595,78 @@ function ACE.GearboxGUICreate( Table )
 
 	acemenupanel.CustomDisplay:PerformLayout()
 end
+
+--- Fills the gearbox menu with a placed gearbox's settings (sent by ACE.CopyToMenu) and opens
+-- that gearbox in the menu. The tool's data convars are set too, so the next click spawns or
+-- updates with these settings even if the menu page was never opened.
+-- @param Settings table From the gearbox's ENT:GetMenuSettings.
+function ACE.GearboxMenuPaste( Settings )
+	local Table = ACE.Weapons.Gearboxes[Settings.Id]
+	if not Table then return end
+
+	local Size = ACE.GearboxSize
+	local Family = Size.Families[Table.family] or {}
+	local Gears = Settings.Gears or Table.gears or 0
+	local Data = Settings.Data or {}
+
+	SizeVar:SetFloat( Size.ClampScale( Settings.Scale or 1 ) )
+	if not Family.Fixed then GearsVar:SetInt( Size.ClampGears( Family, Gears ) ) end
+
+	for I = 1, 9 do
+		if Data[I] ~= nil then GetConVar( "acemenu_data" .. I ):SetString( tostring( Data[I] ) ) end
+	end
+	GetConVar( "acemenu_data10" ):SetString( tostring( Settings.Final or 0.5 ) )
+	GetConVar( "acemenu_data11" ):SetString( tostring( Size.ClampScale( Settings.Scale or 1 ) ) )
+	GetConVar( "acemenu_data12" ):SetString( tostring( Gears ) )
+	GetConVar( "acemenu_data13" ):SetString( Settings.Dual and "1" or "0" )
+	GetConVar( "acemenu_data14" ):SetString( tostring( Settings.Range or 0 ) )
+	GetConVar( "acemenu_data15" ):SetString( tostring( Settings.Split or 0 ) )
+
+	local Setup = Settings.Setup or {}
+	GetConVar( "acemenu_gb_diff" ):SetString( Setup.Diff or "open" )
+	GetConVar( "acemenu_gb_lsdpreload" ):SetFloat( tonumber( Setup.LSDPreload ) or 0 )
+	GetConVar( "acemenu_gb_lsdramp" ):SetFloat( tonumber( Setup.LSDRamp ) or 0.3 )
+	GetConVar( "acemenu_gb_assisted" ):SetInt( Setup.Assisted and 1 or 0 )
+	GetConVar( "acemenu_gb_dct" ):SetInt( Setup.DCT and 1 or 0 )
+	GetConVar( "acemenu_gb_clutch" ):SetFloat( tonumber( Setup.Clutch ) or 0 )
+
+	-- The menu page builds itself from these stores (Store, CreateSizePanel).
+	if IsValid( acemenupanel ) then
+		acemenupanel.GearboxData = acemenupanel.GearboxData or {}
+		local Key = Table.family or Table.id
+		local S = acemenupanel.GearboxData[Key] or { Gears = {}, Shift = {}, Final = 0.5, Reverse = -0.1 }
+		acemenupanel.GearboxData[Key] = S
+
+		S.Final = tonumber( Settings.Final ) or S.Final
+		if Table.cvt then
+			S.Reverse = tonumber( Data[2] ) or S.Reverse
+			S.MinRPM, S.MaxRPM = Settings.MinRPM, Settings.MaxRPM
+		else
+			local Count = Table.auto and math.min( Gears, 7 ) or 9
+			for I = 1, Count do
+				local V = tonumber( Data[I] )
+				if V then S.Gears[I] = V end
+			end
+			if Table.auto then
+				S.Reverse = tonumber( Data[8] ) or S.Reverse
+				for I, V in ipairs( Settings.Shift or {} ) do
+					S.Shift[I] = math.Round( V / InchPerSecKmh, 1 )
+				end
+			end
+		end
+
+		acemenupanel.GearboxDual = acemenupanel.GearboxDual or {}
+		acemenupanel.GearboxDual[Table.family] = Settings.Dual and true or false
+
+		if Family.CanCompound then
+			acemenupanel.GearboxCompound = acemenupanel.GearboxCompound or { Range = Size.RangeDefault, Split = Size.SplitDefault }
+			local C = acemenupanel.GearboxCompound
+			C.RangeOn = Settings.Range ~= nil
+			C.SplitOn = Settings.Split ~= nil
+			C.Range = Settings.Range or C.Range
+			C.Split = Settings.Split or C.Split
+		end
+	end
+
+	ACE.MenuShowItem( Table )
+end

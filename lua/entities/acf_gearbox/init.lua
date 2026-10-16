@@ -73,95 +73,8 @@ do
 
 	end
 
-	function ACE.MakeGearbox(Owner, Pos, Angle, Id, Data1, Data2, Data3, Data4, Data5, Data6, Data7, Data8, Data9, Data10, Data11, Data12, Data13, Data14, Data15)
-
-		if not Owner:CheckLimit("_ace_misc") then return false end
-
-		local Gearbox	= ents.Create("acf_gearbox")
-
-		if not IsValid( Gearbox ) then return false end
-
-		if not ACE.CheckGearbox( Id ) then
-			Id = "1Gear-T-S" --deal with it
-			Data1	= 0.1 --gear1
-			Data10  = 0.5 --gear2
-		end
-
-		local GearboxData = GearboxTable[Id]
-		local Spec = ACE.GearboxSize.Resolve( GearboxData, Data11, Data12, Data13, Data14, Data15 )
-
-		Gearbox:SetAngles(Angle)
-		Gearbox:SetPos(Pos)
-		Gearbox:Spawn()
-
-		Gearbox:CPPISetOwner(Owner)
-		Gearbox.Id		= Id
-		Gearbox.Model	= GearboxData.model
-		Gearbox.Mass		= Spec.Mass
-		Gearbox.SwitchTime  = Spec.Switch
-		Gearbox.MaxTorque	= Spec.MaxTorque
-		Gearbox.Gears	= Spec.Gears
-		Gearbox.Dual		= Spec.Dual
-		Gearbox.InputJ	= Spec.InputJ
-		-- Kept for duplication (Data11-13); legacy ids keep nil so they paste as before.
-		Gearbox.GearboxScale = GearboxData.scalable and Spec.Scale or nil
-		Gearbox.GearCount	= GearboxData.scalable and Spec.Gears or nil
-		Gearbox.DualSetup	= GearboxData.scalable and ( Spec.Dual and 1 or 0 ) or nil
-		Gearbox.MainGears	= Spec.Gears
-		Gearbox.RangeRatio	= Spec.Range
-		Gearbox.SplitRatio	= Spec.Split
-		Gearbox.CVT		= GearboxData.cvt			or false
-		Gearbox.DoubleDiff  = GearboxData.doublediff	or false
-		Gearbox.Auto		= GearboxData.auto			or false
-		Gearbox.Parentable  = GearboxData.parentable	or false
-		Gearbox.ACEPoints		= GearboxData.acepoints or 0.9
-		Gearbox.Category	= GearboxData.category
-
-		if Gearbox.CVT then
-			Gearbox.TargetMinRPM = Data3
-			Gearbox.TargetMaxRPM = math.max(Data4,Data3 + 100)
-			Gearbox.CVTRatio = nil
-		end
-
-		Gearbox.GearTable = table.Copy(GearboxData.geartable)
-			Gearbox.GearTable.Final = Data10
-			Gearbox.GearTable[1] = Data1
-			Gearbox.GearTable[2] = Data2
-			Gearbox.GearTable[3] = Data3
-			Gearbox.GearTable[4] = Data4
-			Gearbox.GearTable[5] = Data5
-			Gearbox.GearTable[6] = Data6
-			Gearbox.GearTable[7] = Data7
-			Gearbox.GearTable[8] = Data8
-			Gearbox.GearTable[9] = Data9
-			Gearbox.GearTable[0] = GearboxData.geartable[0]
-		Gearbox:ExpandGears()
-
-			Gearbox.Gear0 = Data10
-			Gearbox.Gear1 = Data1
-			Gearbox.Gear2 = Data2
-			Gearbox.Gear3 = Data3
-			Gearbox.Gear4 = Data4
-			Gearbox.Gear5 = Data5
-			Gearbox.Gear6 = Data6
-			Gearbox.Gear7 = Data7
-			Gearbox.Gear8 = Data8
-			Gearbox.Gear9 = Data9
-
-		Gearbox.GearRatio = (Gearbox.GearTable[0] or 0) * Gearbox.GearTable.Final
-
-		if Gearbox.Auto then
-			Gearbox.ShiftPoints = {}
-			for part in string.gmatch(Data9, "[^,]+") do Gearbox.ShiftPoints[#Gearbox.ShiftPoints + 1] = tonumber(part) end
-			Gearbox.ShiftPoints[0] = -1
-			Gearbox.Reverse = Gearbox.Gears + 1
-			Gearbox.GearTable[Gearbox.Reverse] = Data8
-			Gearbox.Drive = 1
-			Gearbox.ShiftScale = 1
-		end
-
-		Gearbox:SetModel( Gearbox.Model )
-
+	-- Wire inputs and outputs of a gearbox, from its type and clutch layout.
+	local function GearboxPorts( Gearbox )
 		local Inputs = {Gearbox.Auto and "Gear (" .. GearboxWireDescs["Drive"] .. ")" or "Gear (" .. GearboxWireDescs["Gear"] .. ")","Gear Up (" .. GearboxWireDescs["GearUp"] .. ")","Gear Down (" .. GearboxWireDescs["GearDown"] .. ")"}
 		if Gearbox.CVT then
 			table.insert(Inputs,"CVT Ratio (" .. GearboxWireDescs["CVTRatio"] .. ")")
@@ -170,7 +83,6 @@ do
 		elseif Gearbox.Auto then
 			table.insert(Inputs, "Hold Gear (" .. GearboxWireDescs["HoldGear"] .. ")")
 			table.insert(Inputs, "Shift Speed Scale (" .. GearboxWireDescs["ShiftScale"] .. ")")
-			Gearbox.Hold = false
 		end
 
 		table.insert(Inputs, "Assisted (1 = automatic clutch and rev matching, if the server allows it)")
@@ -201,8 +113,91 @@ do
 			end
 		end
 
-		Gearbox.Inputs = Wire_CreateInputs( Gearbox, Inputs )
-		Gearbox.Outputs = WireLib.CreateSpecialOutputs( Gearbox, Outputs, OutputTypes )
+		return Inputs, Outputs, OutputTypes
+	end
+
+	--[[
+		Sets a gearbox up from its definition and the builder's menu values (Data, the menu's
+		data1-data15): stats, gears, wire ports, link points and mass. With Rebuild it also sets
+		the model and builds the physics object, scaled for scalable gearboxes. Spawning and
+		updating a placed gearbox (ENT:Update) both go through here. Wire ports are adjusted, not
+		recreated, so wires on ports that stay are kept.
+	]]
+	local function ApplyGearbox( Gearbox, Id, Data, Rebuild )
+		local GearboxData = GearboxTable[Id]
+		local Spec = ACE.GearboxSize.Resolve( GearboxData, Data[11], Data[12], Data[13], Data[14], Data[15] )
+
+		Gearbox.Id		= Id
+		Gearbox.Model	= GearboxData.model
+		Gearbox.Mass		= Spec.Mass
+		Gearbox.SwitchTime  = Spec.Switch
+		Gearbox.MaxTorque	= Spec.MaxTorque
+		Gearbox.Gears	= Spec.Gears
+		Gearbox.Dual		= Spec.Dual
+		Gearbox.InputJ	= Spec.InputJ
+		-- Kept for duplication (Data11-13); legacy ids keep nil so they paste as before.
+		Gearbox.GearboxScale = GearboxData.scalable and Spec.Scale or nil
+		Gearbox.GearCount	= GearboxData.scalable and Spec.Gears or nil
+		Gearbox.DualSetup	= GearboxData.scalable and ( Spec.Dual and 1 or 0 ) or nil
+		Gearbox.MainGears	= Spec.Gears
+		Gearbox.RangeRatio	= Spec.Range
+		Gearbox.SplitRatio	= Spec.Split
+		Gearbox.CVT		= GearboxData.cvt			or false
+		Gearbox.DoubleDiff  = GearboxData.doublediff	or false
+		Gearbox.Auto		= GearboxData.auto			or false
+		Gearbox.Parentable  = GearboxData.parentable	or false
+		Gearbox.ACEPoints		= GearboxData.acepoints or 0.9
+		Gearbox.Category	= GearboxData.category
+
+		if Gearbox.CVT then
+			Gearbox.TargetMinRPM = Data[3]
+			Gearbox.TargetMaxRPM = math.max(Data[4],Data[3] + 100)
+			Gearbox.CVTRatio = nil
+		end
+
+		Gearbox.GearTable = table.Copy(GearboxData.geartable)
+			Gearbox.GearTable.Final = Data[10]
+			Gearbox.GearTable[1] = Data[1]
+			Gearbox.GearTable[2] = Data[2]
+			Gearbox.GearTable[3] = Data[3]
+			Gearbox.GearTable[4] = Data[4]
+			Gearbox.GearTable[5] = Data[5]
+			Gearbox.GearTable[6] = Data[6]
+			Gearbox.GearTable[7] = Data[7]
+			Gearbox.GearTable[8] = Data[8]
+			Gearbox.GearTable[9] = Data[9]
+			Gearbox.GearTable[0] = GearboxData.geartable[0]
+		Gearbox:ExpandGears()
+
+			Gearbox.Gear0 = Data[10]
+			Gearbox.Gear1 = Data[1]
+			Gearbox.Gear2 = Data[2]
+			Gearbox.Gear3 = Data[3]
+			Gearbox.Gear4 = Data[4]
+			Gearbox.Gear5 = Data[5]
+			Gearbox.Gear6 = Data[6]
+			Gearbox.Gear7 = Data[7]
+			Gearbox.Gear8 = Data[8]
+			Gearbox.Gear9 = Data[9]
+
+		Gearbox.GearRatio = (Gearbox.GearTable[0] or 0) * Gearbox.GearTable.Final
+
+		if Gearbox.Auto then
+			Gearbox.ShiftPoints = {}
+			for part in string.gmatch(Data[9], "[^,]+") do Gearbox.ShiftPoints[#Gearbox.ShiftPoints + 1] = tonumber(part) end
+			Gearbox.ShiftPoints[0] = -1
+			Gearbox.Reverse = Gearbox.Gears + 1
+			Gearbox.GearTable[Gearbox.Reverse] = Data[8]
+			Gearbox.Drive = 1
+			Gearbox.ShiftScale = 1
+			Gearbox.Hold = false
+		end
+
+		if Rebuild then Gearbox:SetModel( Gearbox.Model ) end
+
+		local Inputs, Outputs, OutputTypes = GearboxPorts( Gearbox )
+		Gearbox.Inputs = WireLib.AdjustInputs( Gearbox, Inputs )
+		Gearbox.Outputs = WireLib.AdjustSpecialOutputs( Gearbox, Outputs, OutputTypes )
 		Wire_TriggerOutput(Gearbox, "Entity", Gearbox)
 
 		if Gearbox.CVT then
@@ -213,39 +208,39 @@ do
 		Gearbox.LClutch = Gearbox.MaxTorque
 		Gearbox.RClutch = Gearbox.MaxTorque
 
-		Gearbox:PhysicsInit( SOLID_VPHYSICS )
-		Gearbox:SetMoveType( MOVETYPE_VPHYSICS )
-		Gearbox:SetSolid( SOLID_VPHYSICS )
+		if Rebuild then
+			Gearbox:PhysicsInit( SOLID_VPHYSICS )
+			Gearbox:SetMoveType( MOVETYPE_VPHYSICS )
+			Gearbox:SetSolid( SOLID_VPHYSICS )
+
+			-- A box that was scaled and goes back to size 1 is set to scale 1, so clients
+			-- stop drawing it scaled.
+			if Spec.Scaled or Gearbox.IsScalable then
+				local Phys = Gearbox:GetPhysicsObject()
+				if IsValid( Phys ) then
+					local Scale = GearboxData.scalable and Spec.Scale or 1
+					Gearbox.ScaleData = {
+						Mesh = Phys:GetMeshConvexes(),
+						Scale = Vector( Scale, Scale, Scale ),
+						Size = 1,
+					}
+					Gearbox.IsScalable = true
+					Gearbox:ACE_SetScale( Gearbox.ScaleData )
+				end
+			end
+		end
 
 		-- Link points come from the model's attachments; a scaled box scales them with it.
 		local AttScale = Spec.Scaled and Spec.Scale or 1
-		Gearbox.In = Gearbox:WorldToLocal(Gearbox:GetAttachment(Gearbox:LookupAttachment( "input" )).Pos) * AttScale
-		Gearbox.OutL = Gearbox:WorldToLocal(Gearbox:GetAttachment(Gearbox:LookupAttachment( "driveshaftL" )).Pos) * AttScale
-		Gearbox.OutR = Gearbox:WorldToLocal(Gearbox:GetAttachment(Gearbox:LookupAttachment( "driveshaftR" )).Pos) * AttScale
-
-		if Spec.Scaled then
-			local Phys = Gearbox:GetPhysicsObject()
-			if IsValid( Phys ) then
-				Gearbox.ScaleData = {
-					Mesh = Phys:GetMeshConvexes(),
-					Scale = Vector( Spec.Scale, Spec.Scale, Spec.Scale ),
-					Size = 1,
-				}
-				Gearbox.IsScalable = true
-				Gearbox:ACE_SetScale( Gearbox.ScaleData )
-			end
-		end
+		Gearbox.In = ACE.LocalAttachment( Gearbox, "input" ) * AttScale
+		Gearbox.OutL = ACE.LocalAttachment( Gearbox, "driveshaftL" ) * AttScale
+		Gearbox.OutR = ACE.LocalAttachment( Gearbox, "driveshaftR" ) * AttScale
 
 		local phys = Gearbox:GetPhysicsObject()
 		if IsValid( phys ) then
 			phys:SetMass( Gearbox.Mass )
 			Gearbox.ModelInertia = 0.99 * phys:GetInertia() / phys:GetMass() -- giving a little wiggle room
 		end
-
-		Owner:AddCount("_ace_misc", Gearbox)
-		Owner:AddCleanup( "acemenu", Gearbox )
-
-		Gearbox:ChangeGear(1)
 
 		if Gearbox.Dual or Gearbox.DoubleDiff then
 			Gearbox:SetBodygroup(1, 1)
@@ -254,11 +249,103 @@ do
 		end
 
 		Gearbox:SetNWString( "WireName", ACE.GearboxSize.DisplayName( GearboxData, Spec ) )
+	end
+
+	function ACE.MakeGearbox(Owner, Pos, Angle, Id, Data1, Data2, Data3, Data4, Data5, Data6, Data7, Data8, Data9, Data10, Data11, Data12, Data13, Data14, Data15)
+
+		if not Owner:CheckLimit("_ace_misc") then return false end
+
+		local Gearbox	= ents.Create("acf_gearbox")
+
+		if not IsValid( Gearbox ) then return false end
+
+		if not ACE.CheckGearbox( Id ) then
+			Id = "1Gear-T-S" --deal with it
+			Data1	= 0.1 --gear1
+			Data10  = 0.5 --gear2
+		end
+
+		Gearbox:SetAngles(Angle)
+		Gearbox:SetPos(Pos)
+		Gearbox:Spawn()
+
+		Gearbox:CPPISetOwner(Owner)
+
+		ApplyGearbox( Gearbox, Id, { Data1, Data2, Data3, Data4, Data5, Data6, Data7, Data8, Data9, Data10, Data11, Data12, Data13, Data14, Data15 }, true )
+
+		Owner:AddCount("_ace_misc", Gearbox)
+		Owner:AddCleanup( "acemenu", Gearbox )
+
+		Gearbox:ChangeGear(1)
+
 		Gearbox:UpdateOverlayText()
 
 		ACE.Activate( Gearbox, 0 )
 
 		return Gearbox
+	end
+
+	--- Updates a placed gearbox in place to what the menu tool has selected. Any gearbox can
+	-- become any other: a new model or size rebuilds its physics, keeping its constraints
+	-- (ACE.SaveEntity), and its drivetrain links are redrawn to the new link points.
+	-- @param ArgsTable table The menu's values (ACFCvars order) after the player, trace position
+	-- and angle: [4] is the gearbox id, [5]-[19] data1-data15.
+	-- @return boolean Success.
+	-- @return string Message for the player.
+	function ENT:Update( ArgsTable )
+		local Id = ArgsTable[4]
+		if not ACE.CheckGearbox( Id ) then
+			return false, "Unknown gearbox!"
+		end
+
+		local GearboxData = GearboxTable[Id]
+		local Data = {}
+		for I = 1, 15 do Data[I] = ArgsTable[I + 4] end
+
+		-- Physics scale: a scalable box's size, 1 for the fixed-size legacy boxes.
+		local Spec = ACE.GearboxSize.Resolve( GearboxData, Data[11], Data[12], Data[13], Data[14], Data[15] )
+		local NewScale = GearboxData.scalable and Spec.Scale or 1
+		local Rebuild = GearboxData.model ~= self.Model or math.abs( NewScale - ( self.GearboxScale or 1 ) ) > 1e-3
+
+		if Rebuild then ACE.SaveEntity( self ) end
+		ApplyGearbox( self, Id, Data, Rebuild )
+
+		local Lost = 0
+		if Rebuild then
+			local _, Failed = ACE.RestoreEntity( self )
+			Lost = Failed
+			if self.IsScalable then ACE.TrackScalable( self ) end
+			-- The armour model caches the old hull's area.
+			if self.ACE then self.ACE.Area = nil end
+		end
+
+		local Broken = self:RefreshLinks()
+
+		-- Updating the gearbox fits a new clutch.
+		self.ClutchLife, self.ClutchBurnt, self.ClutchTemp = nil, nil, nil
+		self.MainClutchTemp, self.LClutchTemp, self.RClutchTemp = nil, nil, nil
+		-- The drivetrain model is rebuilt for the new box.
+		self.Mob, self.MobConverter, self.MobConverterFor = nil, nil, nil
+
+		--self:ChangeGear(1) -- fails on updating because func exits on detecting same gear
+		self.Gear = 1
+		self.GearRatio = (self.GearTable[self.Gear] or 0) * self.GearTable.Final
+		self.ChangeFinished = CurTime() + self.SwitchTime
+		self.InGear = false
+
+		self:UpdateOverlayText()
+
+		ACE.Activate( self, 1 )
+		if ACE.PointsInputChanged then ACE.PointsInputChanged( self, "gearbox-updated" ) end
+
+		local Msg = "Gearbox updated successfully!"
+		if Broken > 0 then
+			Msg = Msg .. " " .. Broken .. " link(s) were at too steep an angle and were unlinked."
+		end
+		if Lost > 0 then
+			Msg = Msg .. " " .. Lost .. " constraint(s) could not be restored."
+		end
+		return true, Msg
 	end
 	--- Applies a gearbox's drivetrain setup and stores it so it survives duplication.
 	-- @param Setup Table: Diff ("open", "locked" or "lsd"), LSDPreload (N*m), LSDRamp (0-1,
@@ -294,160 +381,6 @@ do
 
 end
 
-function ENT:Update( ArgsTable )
-	-- That table is the player data, as sorted in the ACFCvars above, with player who shot,
-	-- and pos and angle of the tool trace inserted at the start
-
-	local Id = ArgsTable[4] -- Argtable[4] is the engine ID
-	local GearboxData = GearboxTable[Id]
-
-	if GearboxData.model ~= self.Model then
-		return false, "The new gearbox must have the same model!"
-	end
-
-	-- Size, gear count and clutch layout set the mass, collision mesh and wire inputs; changing
-	-- them means a new gearbox.
-	if GearboxData.scalable or self.GearboxScale then
-		local Spec = ACE.GearboxSize.Resolve( GearboxData, ArgsTable[15], ArgsTable[16], ArgsTable[17], ArgsTable[18], ArgsTable[19] )
-		if self.Id ~= Id or math.abs( Spec.Scale - ( self.GearboxScale or 1 ) ) > 1e-3 or Spec.Gears ~= ( self.MainGears or self.Gears ) or Spec.Dual ~= self.Dual
-			or ( Spec.Range ~= nil ) ~= ( self.RangeRatio ~= nil ) or ( Spec.Split ~= nil ) ~= ( self.SplitRatio ~= nil ) then
-			return false, "Size, gear count, range, splitter and dual clutch can't be changed on a placed gearbox - spawn a new one."
-		end
-		self.RangeRatio, self.SplitRatio = Spec.Range, Spec.Split
-	end
-
-	-- Updating the gearbox fits a new clutch.
-	self.ClutchLife, self.ClutchBurnt, self.ClutchTemp = nil, nil, nil
-	self.MainClutchTemp, self.LClutchTemp, self.RClutchTemp = nil, nil, nil
-
-	if self.Id ~= Id then
-
-		local Spec = ACE.GearboxSize.Resolve( GearboxData )
-		self.Id		= Id
-		self.Mass	= Spec.Mass
-		self.SwitchTime = Spec.Switch
-		self.MaxTorque  = Spec.MaxTorque
-		self.InputJ	= Spec.InputJ
-		self.Gears	= Spec.Gears
-		self.Dual	= Spec.Dual
-		self.CVT		= GearboxData.cvt			or false
-		self.DoubleDiff = GearboxData.doublediff	or false
-		self.Auto	= GearboxData.auto			or false
-		self.Parentable = GearboxData.parentable	or false
-		self.Category	= GearboxData.category
-
-		local Inputs = {"Gear","Gear Up","Gear Down"}
-		if self.CVT then
-			table.insert(Inputs,"CVT Ratio")
-		elseif self.DoubleDiff then
-			table.insert(Inputs, "Steer Rate")
-		elseif self.Auto then
-			table.insert(Inputs, "Hold Gear")
-			table.insert(Inputs, "Shift Speed Scale")
-			self.Hold = false
-		end
-
-		table.insert(Inputs, "Assisted")
-		table.insert(Inputs, "Diff Lock")
-
-		if self.Dual then
-			table.insert(Inputs, "Left Clutch")
-			table.insert(Inputs, "Right Clutch")
-			table.insert(Inputs, "Left Brake")
-			table.insert(Inputs, "Right Brake")
-		else
-			table.insert(Inputs, "Clutch")
-			table.insert(Inputs, "Brake")
-		end
-
-		local Outputs = { "Ratio", "Entity", "Current Gear", "Input RPM", "Clutch Slip", "Clutch Temp", "Output Torque", "Over Torque" }
-		local OutputTypes = { "NORMAL", "ENTITY", "NORMAL", "NORMAL", "NORMAL", "NORMAL", "NORMAL", "NORMAL" }
-		if self.CVT then
-			table.insert(Outputs,"Min Target RPM")
-			table.insert(Outputs,"Max Target RPM")
-			table.insert(OutputTypes,"NORMAL")
-			table.insert(OutputTypes,"NORMAL")
-		end
-		if self.Dual then
-			for _, Name in ipairs(DualOutputs) do
-				table.insert(Outputs, Name)
-				table.insert(OutputTypes, "NORMAL")
-			end
-		end
-
-		local phys = self:GetPhysicsObject()
-		if IsValid( phys ) then
-			phys:SetMass( self.Mass )
-		end
-
-		self.Inputs = Wire_CreateInputs( self, Inputs )
-		self.Outputs = WireLib.CreateSpecialOutputs( self, Outputs, OutputTypes )
-		Wire_TriggerOutput( self, "Entity", self )
-	end
-
-	if self.CVT then
-		self.TargetMinRPM = ArgsTable[7]
-		self.TargetMaxRPM = math.max(ArgsTable[8],ArgsTable[7] + 100)
-		self.CVTRatio = nil
-		Wire_TriggerOutput(self, "Min Target RPM", self.TargetMinRPM)
-		Wire_TriggerOutput(self, "Max Target RPM", self.TargetMaxRPM)
-	end
-
-	self.GearTable.Final = ArgsTable[14]
-	self.GearTable[1] = ArgsTable[5]
-	self.GearTable[2] = ArgsTable[6]
-	self.GearTable[3] = ArgsTable[7]
-	self.GearTable[4] = ArgsTable[8]
-	self.GearTable[5] = ArgsTable[9]
-	self.GearTable[6] = ArgsTable[10]
-	self.GearTable[7] = ArgsTable[11]
-	self.GearTable[8] = ArgsTable[12]
-	self.GearTable[9] = ArgsTable[13]
-	self.GearTable[0] = GearboxData.geartable[0]
-	self:ExpandGears()
-
-	self.Gear0 = ArgsTable[14]
-	self.Gear1 = ArgsTable[5]
-	self.Gear2 = ArgsTable[6]
-	self.Gear3 = ArgsTable[7]
-	self.Gear4 = ArgsTable[8]
-	self.Gear5 = ArgsTable[9]
-	self.Gear6 = ArgsTable[10]
-	self.Gear7 = ArgsTable[11]
-	self.Gear8 = ArgsTable[12]
-	self.Gear9 = ArgsTable[13]
-
-	self.GearRatio = (self.GearTable[0] or 0) * self.GearTable.Final
-
-	if self.Auto then
-		self.ShiftPoints = {}
-		for part in string.gmatch(ArgsTable[13], "[^,]+") do self.ShiftPoints[#self.ShiftPoints + 1] = tonumber(part) end
-		self.ShiftPoints[0] = -1
-		self.Reverse = self.Gears + 1
-		self.GearTable[self.Reverse] = ArgsTable[12]
-		self.Drive = 1
-		self.ShiftScale = 1
-	end
-
-	--self:ChangeGear(1) -- fails on updating because func exits on detecting same gear
-	self.Gear = 1
-	self.GearRatio = (self.GearTable[self.Gear] or 0) * self.GearTable.Final
-	self.ChangeFinished = CurTime() + self.SwitchTime
-	self.InGear = false
-
-	if self.Dual or self.DoubleDiff then
-		self:SetBodygroup(1, 1)
-	else
-		self:SetBodygroup(1, 0)
-	end
-
-	self:SetNWString( "WireName", ACE.GearboxSize.DisplayName( GearboxData, ACE.GearboxSize.Resolve( GearboxData, self.GearboxScale, self.MainGears or self.Gears, self.Dual, self.RangeRatio, self.SplitRatio ) ) )
-	self:UpdateOverlayText()
-
-	ACE.Activate( self, 1 )
-
-	return true, "Gearbox updated successfully!"
-end
 
 function ENT:UpdateOverlayText()
 
@@ -1439,6 +1372,125 @@ function ENT:Unlink( Target )
 
 	return false, "That entity is not linked to this gearbox!"
 
+end
+
+--- Recomputes one of this gearbox's output links after either end's link points moved (a
+-- gearbox updated in place): side, output point, length, the driven part's inertia and the rope.
+-- @param Link table An entry of self.WheelLink.
+-- @return boolean False when the link is now at too steep an angle (the caller unlinks it).
+function ENT:RefreshWheelLink( Link )
+	local Target = Link.Ent
+	if not IsValid( Target ) then return true end
+
+	local InPos = Target.IsGeartrain and Target.In or Vector( 0, 0, 0 )
+	local InPosWorld = Target:LocalToWorld( InPos )
+	local Side = self:WorldToLocal( InPosWorld ).y < 0 and 0 or 1
+	local OutPos = Side == 0 and self.OutL or self.OutR
+
+	Link.Side = Side
+	Link.Output = OutPos
+	Link.RopeLen = ( self:LocalToWorld( OutPos ) - InPosWorld ):Length()
+
+	local Phys = Target:GetPhysicsObject()
+	if IsValid( Phys ) then
+		Link.Axis = Phys:WorldToLocalVector( self:GetRight() )
+		Link.Inertia = ( Link.Axis * Phys:GetInertia() ):Length()
+	end
+
+	ACE.RedrawLinkRope( Link, self, OutPos, Target, InPos )
+
+	return self:Checkdriveshaft( Target )
+end
+
+--- Recomputes every drivetrain link into and out of this gearbox after it was updated in place:
+-- its own outputs, the engines driving it and the gearbox driving it. Links now at too steep an
+-- angle are unlinked, as the periodic check (ENT:CheckRopes) would.
+-- @return number Links unlinked.
+function ENT:RefreshLinks()
+	local Broken = {}
+
+	for _, Link in pairs( self.WheelLink ) do
+		if not self:RefreshWheelLink( Link ) then Broken[#Broken + 1] = { self, Link.Ent } end
+	end
+
+	for _, Engine in pairs( self.Master ) do
+		if IsValid( Engine ) and Engine.RefreshGearLink and not Engine:RefreshGearLink( self ) then
+			Broken[#Broken + 1] = { Engine, self }
+		end
+	end
+
+	local Parent = self.ParentBox
+	if IsValid( Parent ) then
+		for _, Link in pairs( Parent.WheelLink ) do
+			if Link.Ent == self and not Parent:RefreshWheelLink( Link ) then
+				Broken[#Broken + 1] = { Parent, self }
+			end
+		end
+	end
+
+	for _, Pair in ipairs( Broken ) do
+		Pair[1]:Unlink( Pair[2] )
+	end
+
+	return #Broken
+end
+
+-- Menu id of the scalable gearbox a legacy (fixed-size) gearbox maps to.
+local LegacyMenuIds = {
+	manual = "Manual", auto = "Auto", cvt = "CVT", transfer = "Transfer", diff = "Diff",
+}
+
+--- This gearbox's settings as the ACE menu takes them (ACE.CopyToMenu). A legacy fixed-size
+-- gearbox gives the scalable gearbox of its family, layout and size.
+-- @return table Id, Scale, Gears, Dual, Range, Split, Data (data1-data9), Final, Reverse,
+-- MinRPM, MaxRPM, Shift (upshift speeds, in/s) and Setup (the drivetrain setup).
+function ENT:GetMenuSettings()
+	local Def = GearboxTable[self.Id]
+	if not Def then return end
+
+	local Id, Scale = self.Id, self.GearboxScale or 1
+	if not Def.scalable then
+		local Family, LegacyScale = ACE.GearboxSize.LegacyOf( Def )
+		Scale = LegacyScale
+		if Family == "clutch" then
+			Id = "Clutch-S"
+		elseif Family == "doublediff" then
+			Id = "DoubleDiff-T"
+		else
+			local Model = Def.model or ""
+			local Suffix = string.find( Model, "linear" ) and "L" or string.find( Model, "transaxial" ) and "T" or "ST"
+			Id = LegacyMenuIds[Family] .. "-" .. Suffix
+			if not GearboxTable[Id] then Id = LegacyMenuIds[Family] .. "-T" end
+		end
+	end
+
+	-- Gear1-Gear9 hold data1-data9 as spawned: ratios, and for automatics the reverse (8) and
+	-- upshift speeds (9), for CVTs the reverse (2) and target RPM (3, 4).
+	local Data = {}
+	for I = 1, 9 do Data[I] = self["Gear" .. I] end
+
+	local Setup = self.EntityMods and self.EntityMods.ACE_GearboxSetup
+	Setup = Setup and table.Copy( Setup ) or {
+		Diff = self.DiffLockSetup and "locked" or ( ( self.LSDPreload or 0 ) > 0 or ( self.LSDRamp or 0 ) > 0 ) and "lsd" or "open",
+		LSDPreload = self.LSDPreload, LSDRamp = self.LSDRamp,
+		Assisted = self.AssistedSetup, DCT = self.DCT, Clutch = self.ClutchSetup,
+	}
+
+	return {
+		Id = Id,
+		Scale = Scale,
+		Gears = self.MainGears or self.Gears,
+		Dual = self.Dual or false,
+		Range = self.RangeRatio,
+		Split = self.SplitRatio,
+		Data = Data,
+		Final = tonumber( self.Gear0 ),
+		Reverse = self.Auto and tonumber( self.Gear8 ) or self.CVT and tonumber( self.Gear2 ) or nil,
+		MinRPM = self.TargetMinRPM,
+		MaxRPM = self.TargetMaxRPM,
+		Shift = self.Auto and self.ShiftPoints and table.Copy( self.ShiftPoints ) or nil,
+		Setup = Setup,
+	}
 end
 
 function ENT:PreEntityCopy()

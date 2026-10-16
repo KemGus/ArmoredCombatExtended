@@ -113,25 +113,15 @@ do
 		["AVDS-1790-1500"]                        = "27.0-V12"
 	}
 
-	function ACE.MakeEngine(Owner, Pos, Angle, Id)
-
-		if not Owner:CheckLimit("_ace_misc") then return false end
-
-		local Engine = ents.Create( "acf_engine" )
-		if not IsValid( Engine ) then return false end
-
-		if not ACE.CheckEngine( Id ) then
-			Id = BackComp[Id] or "5.7-V8"
-		end
-
+	--[[
+		Sets an engine up from its definition: stats, torque curve, fuel use, wire inputs, output
+		point and mass. With Rebuild it also sets the model and builds the physics object.
+		Spawning and updating a placed engine (ENT:Update) both go through here.
+	]]
+	local function ApplyEngine( Engine, Id, Rebuild )
 		local Lookup = EngineTable[Id]
 
-		Engine:SetAngles(Angle)
-		Engine:SetPos(Pos)
-		Engine:Spawn()
-		Engine:CPPISetOwner(Owner)
 		Engine.Id = Id
-
 		Engine.Model            = Lookup.model
 		Engine.Weight           = Lookup.weight
 		Engine.BaseTorque		= Lookup.torque
@@ -153,15 +143,12 @@ do
 		Engine.EfficiencyMod	= Engine.Efficiency
 		Engine.TorqueCurve	= ACE.GetEngineTorqueCurve(Lookup)
 		Engine.ModTorqueCurve      = table.Copy(Engine.TorqueCurve)
-		Engine.RequiresDriver   = false
 		Engine.SoundPath        = Lookup.sound
 		Engine.DefaultSound     = Engine.SoundPath
 		Engine.SoundPitch       = Lookup.pitch or 100
 		--Engine.SpecialHealth    = true
 		Engine.SpecialDamage    = true
-		Engine.TorqueMult       = 1
 		Engine.FuelTank         = 0
-		Engine.Heat             = ACE.AmbientTemp
 		Engine.ThermalSurfaceArea = Lookup.CoolingArea or 0.1
 
 		local EngineHorsepower = Engine.peakkw / 0.7457 --Converts KW to HP, 74.57 / 100
@@ -170,10 +157,9 @@ do
 
 		Engine.MaxDB = 70 + 60 * (EngineHorsepower / 2400) --Base volume of 70DB. Plus 60 * The ratio of the engine hp to 2400.
 
-		if EngineHorsepower > ACE.LargeEngineThreshold and ACE.LargeEnginesRequireDrivers ~= 0 then --If the engine has more than 100 hp it requires a driver.
-			Engine.RequiresDriver = true
-			Engine.CanUseSeatDriver = true
-		end
+		--If the engine has more than 100 hp it requires a driver. A linked driver seat takes the place of a seated driver.
+		Engine.RequiresDriver = EngineHorsepower > ACE.LargeEngineThreshold and ACE.LargeEnginesRequireDrivers ~= 0
+		Engine.CanUseSeatDriver = Engine.RequiresDriver and not Engine.HasDriver
 
 		--calculate base fuel usage
 		if Engine.EngineType == "Electric" then
@@ -184,16 +170,15 @@ do
 			Engine.FuelUse = ACE.FuelRate * ACE.Efficiency[Engine.EngineType] * Engine.peakkw / (60 * 60)
 		end
 
-		Engine.FlyRPM = 0
-		Engine:SetModel( Engine.Model )
-		Engine.Sound = nil
-		Engine.RPM = {}
+		if Rebuild then
+			Engine:SetModel( Engine.Model )
 
-		Engine:PhysicsInit( SOLID_VPHYSICS )
-		Engine:SetMoveType( MOVETYPE_VPHYSICS )
-		Engine:SetSolid( SOLID_VPHYSICS )
+			Engine:PhysicsInit( SOLID_VPHYSICS )
+			Engine:SetMoveType( MOVETYPE_VPHYSICS )
+			Engine:SetSolid( SOLID_VPHYSICS )
+		end
 
-		Engine.Out = Engine:WorldToLocal(Engine:GetAttachment(Engine:LookupAttachment( "driveshaft" )).Pos)
+		Engine.Out = ACE.LocalAttachment( Engine, "driveshaft" )
 
 		local phys = Engine:GetPhysicsObject()
 		if IsValid( phys ) then
@@ -201,12 +186,37 @@ do
 			Engine.ModelInertia = 0.99 * phys:GetInertia() / phys:GetMass() -- giving a little wiggle room
 		end
 
-		if Engine.FuelType == "Electric" then
-			WireLib.AdjustSpecialInputs( Engine, ACE.EngineInputs(true) )
-		end
+		-- Electric motors add Reverse; adjusting keeps the wires on the other inputs.
+		WireLib.AdjustSpecialInputs( Engine, ACE.EngineInputs( Engine.FuelType == "Electric" ) )
 		Engine:UpdateBuiltinCooler( Lookup )
 
 		Engine:SetNWString( "WireName", Lookup.name )
+	end
+
+	function ACE.MakeEngine(Owner, Pos, Angle, Id)
+
+		if not Owner:CheckLimit("_ace_misc") then return false end
+
+		local Engine = ents.Create( "acf_engine" )
+		if not IsValid( Engine ) then return false end
+
+		if not ACE.CheckEngine( Id ) then
+			Id = BackComp[Id] or "5.7-V8"
+		end
+
+		Engine:SetAngles(Angle)
+		Engine:SetPos(Pos)
+		Engine:Spawn()
+		Engine:CPPISetOwner(Owner)
+
+		Engine.TorqueMult       = 1
+		Engine.Heat             = ACE.AmbientTemp
+		Engine.FlyRPM = 0
+		Engine.Sound = nil
+		Engine.RPM = {}
+
+		ApplyEngine( Engine, Id, true )
+
 		Engine:UpdateOverlayText()
 
 		Owner:AddCount("_ace_misc", Engine)
@@ -219,88 +229,69 @@ do
 	list.Set( "ACFCvars", "acf_engine", {"id"} )
 	duplicator.RegisterEntityClass("acf_engine", ACE.MakeEngine, "Pos", "Angle", "Id")
 
-end
-
-function ENT:Update( ArgsTable )
-	-- That table is the player data, as sorted in the ACFCvars above, with player who shot,
-	-- and pos and angle of the tool trace inserted at the start
-
-	if self.Active then
-		return false, "Turn off the engine before updating it!"
-	end
-
-	local Id = ArgsTable[4] -- Argtable[4] is the engine ID
-	local Lookup = EngineTable[Id]
-
-	if Lookup.model ~= self.Model then
-		return false, "The new engine must have the same model!"
-	end
-
-	local Feedback = ""
-	if Lookup.fuel ~= self.FuelType then
-		Feedback = " Fuel type changed, fuel tanks unlinked."
-		for Key in pairs(self.FuelLink) do
-			table.remove(self.FuelLink,Key)
-			self:UpdateOverlayText()
-			--need to remove from tank master?
+	--- Updates a placed engine in place to the engine the menu tool has selected. Any engine can
+	-- become any other: a new model rebuilds its physics, keeping its constraints
+	-- (ACE.SaveEntity), its gearbox links are redrawn to the new output, and its fuel tanks,
+	-- batteries and heaters are linked again under the new engine's rules.
+	-- @param ArgsTable table The menu's values (ACFCvars order) after the player, trace position
+	-- and angle: [4] is the engine id.
+	-- @return boolean Success.
+	-- @return string Message for the player.
+	function ENT:Update( ArgsTable )
+		if self.Active then
+			return false, "Turn off the engine before updating it!"
 		end
+
+		local Id = ArgsTable[4]
+		if not ACE.CheckEngine( Id ) then
+			return false, "Unknown engine!"
+		end
+
+		local NewEngine = Id ~= self.Id
+		local Rebuild = EngineTable[Id].model ~= self.Model
+
+		if Rebuild then ACE.SaveEntity( self ) end
+		ApplyEngine( self, Id, Rebuild )
+
+		local Lost = 0
+		if Rebuild then
+			local _, Failed = ACE.RestoreEntity( self )
+			Lost = Failed
+			-- The armour model caches the old hull's area.
+			if self.ACE then self.ACE.Area = nil end
+		end
+
+		local Broken = self:RefreshLinks()
+		local Dropped = self:RelinkSupplies()
+
+		-- The drivetrain and cooling models are rebuilt for the new engine, which starts cold.
+		self.MobSpec, self.ThermalSpec = nil, nil
+		if NewEngine then
+			self.MobState, self.ThermalState = nil, nil
+			self.Heat = ACE.AmbientTemp
+		end
+
+		-- The starter's extra mass goes back on top of the new engine's (ENT:SetStarterSetup).
+		self.StarterExtraKg = 0
+		self:SetStarterSetup( self.StarterSetup )
+		self:UpdateOverlayText()
+
+		ACE.Activate( self, 1 )
+		if ACE.PointsInputChanged then ACE.PointsInputChanged( self, "engine-updated" ) end
+
+		local Msg = "Engine updated successfully!"
+		if Broken > 0 then
+			Msg = Msg .. " " .. Broken .. " gearbox link(s) were at too steep an angle and were unlinked."
+		end
+		if #Dropped > 0 then
+			Msg = Msg .. " Unlinked: " .. table.concat( Dropped, ", " ) .. "."
+		end
+		if Lost > 0 then
+			Msg = Msg .. " " .. Lost .. " constraint(s) could not be restored."
+		end
+		return true, Msg
 	end
 
-	self.Id                = Id
-	self.Weight            = Lookup.weight
-	self.BaseTorque		   = Lookup.torque
-	self.PeakTorque        = Lookup.torque
-	self.peakkw            = Lookup.peakpower
-	self.PeakKwRPM         = Lookup.peakpowerrpm
-	self.PeakTqRPM         = math.max(Lookup.peaktqrpm, Lookup.idlerpm)
-	self.IdleRPM           = Lookup.idlerpm
-	self.PeakMinRPM        = Lookup.peakminrpm
-	self.PeakMaxRPM        = Lookup.peakmaxrpm
-	self.LimitRPM          = Lookup.limitrpm
-	self.Inertia           = Lookup.flywheelmass * 3.1416 ^ 2
-	self.iselec            = Lookup.iselec -- is the engine electric?
-	self.FlywheelOverride  = Lookup.flywheeloverride -- modifies rpm drag on iselec==true
-	self.IsTrans           = Lookup.istrans
-	self.FuelType          = Lookup.fuel
-	self.EngineType        = Lookup.enginetype
-	self.SoundPath         = Lookup.sound
-	self.DefaultSound      = self.SoundPath
-	self.SoundPitch        = Lookup.pitch or 100
-	self.SpecialHealth     = false
-	self.SpecialDamage     = true
-	self.TorqueMult        = self.TorqueMult or 1
-	self.FuelTank          = 0
-	self.TorqueScale		= ACE.TorqueScale[self.EngineType]
-
-	--calculate base fuel usage
-	if self.EngineType == "Electric" then
-		self.FuelUse = ACE.ElecRate / (ACE.Efficiency[self.EngineType] * 60 * 60) --elecs use current power output, not max
-	else
-		self.FuelUse = ACE.FuelRate * ACE.Efficiency[self.EngineType] * self.peakkw / (60 * 60)
-	end
-
-	self:SetModel( self.Model )
-	self:SetSolid( SOLID_VPHYSICS )
-	self.Out = self:WorldToLocal(self:GetAttachment(self:LookupAttachment( "driveshaft" )).Pos)
-
-	local phys = self:GetPhysicsObject()
-	if IsValid( phys ) then
-		phys:SetMass( self.Weight )
-	end
-	self:UpdateBuiltinCooler( Lookup )
-
-	self:SetNWString( "WireName", Lookup.name )
-	-- The starter's extra mass goes back on top of the new engine's (ENT:SetStarterSetup), and
-	-- the drivetrain model is rebuilt for the new engine.
-	self.StarterExtraKg = 0
-	self.MobSpec = nil
-	self:SetStarterSetup( self.StarterSetup )
-	self:UpdateOverlayText()
-
-	ACE.Activate( self, 1 )
-	if ACE.PointsInputChanged then ACE.PointsInputChanged( self, "engine-updated" ) end
-
-	return true, "Engine updated successfully!" .. Feedback
 end
 
 --[[
@@ -1523,6 +1514,7 @@ do
 				end
 
 				table.remove( self.GearLink,Key )
+				table.RemoveByValue( Target.Master, self )
 
 				return true, "Unlink successful!"
 			end
@@ -1715,6 +1707,83 @@ function ENT:UnlinkHeater( Target )
 	table.RemoveByValue( Target.Master, self )
 	Target.HeatW, Target.HeatBlockW, Target.HeatOilW = 0, 0, 0
 	return true, "Unlink successful!"
+end
+
+--- Recomputes this engine's link to a gearbox after either end's link points moved (an engine
+-- or gearbox updated in place): length and rope.
+-- @param Box Entity A linked acf_gearbox.
+-- @return boolean False when the link is now at too steep an angle (the caller unlinks it).
+function ENT:RefreshGearLink( Box )
+	for _, Link in pairs( self.GearLink ) do
+		if Link.Ent == Box and IsValid( Box ) then
+			Link.RopeLen = ( self:LocalToWorld( self.Out ) - Box:LocalToWorld( Box.In ) ):Length()
+			ACE.RedrawLinkRope( Link, self, self.Out, Box, Box.In )
+			return self:Checkdriveshaft( Box )
+		end
+	end
+	return true
+end
+
+--- Recomputes this engine's gearbox links after it was updated in place. Links now at too
+-- steep an angle are unlinked, as the periodic check (ENT:CheckRopes) would.
+-- @return number Links unlinked.
+function ENT:RefreshLinks()
+	local Broken = {}
+	for _, Link in pairs( self.GearLink ) do
+		if IsValid( Link.Ent ) and not self:RefreshGearLink( Link.Ent ) then
+			Broken[#Broken + 1] = Link.Ent
+		end
+	end
+	for _, Box in ipairs( Broken ) do
+		self:Unlink( Box )
+	end
+	return #Broken
+end
+
+--- Links this engine's fuel tanks, batteries and heaters again under its current rules, after it
+-- was updated to another engine: a battery feeds a motor or a piston engine's starter, a tank of
+-- the wrong fuel or a heater on a motor is dropped.
+-- @return table Names of what could not be linked again.
+function ENT:RelinkSupplies()
+	local Supplies, Heaters = {}, {}
+	for _, Tank in pairs( self.FuelLink ) do Supplies[#Supplies + 1] = Tank end
+	for _, Bat in pairs( self.BatteryLink ) do Supplies[#Supplies + 1] = Bat end
+	for _, Heater in pairs( self.HeaterLink ) do Heaters[#Heaters + 1] = Heater end
+
+	for _, Tank in ipairs( Supplies ) do
+		if IsValid( Tank ) then
+			table.RemoveByValue( self.FuelLink, Tank )
+			table.RemoveByValue( self.BatteryLink, Tank )
+			if Tank.Master then table.RemoveByValue( Tank.Master, self ) end
+		end
+	end
+	for _, Heater in ipairs( Heaters ) do
+		if IsValid( Heater ) then self:UnlinkHeater( Heater ) end
+	end
+
+	local Dropped = {}
+	for _, Tank in ipairs( Supplies ) do
+		if IsValid( Tank ) and not self:LinkFuel( Tank ) then
+			Dropped[#Dropped + 1] = Tank.FuelType == "Electric" and "a battery" or "a " .. string.lower( Tank.FuelType or "fuel" ) .. " tank"
+		end
+	end
+	for _, Heater in ipairs( Heaters ) do
+		if IsValid( Heater ) and not self:LinkHeater( Heater ) then
+			Dropped[#Dropped + 1] = "a heater"
+		end
+	end
+	self.NextFeedScan = 0
+
+	return Dropped
+end
+
+--- This engine's settings as the ACE menu takes them (ACE.CopyToMenu).
+-- @return table Id and Starter (the starter and cooling setup).
+function ENT:GetMenuSettings()
+	return {
+		Id = self.Id,
+		Starter = table.Copy( self.StarterSetup or {} ),
+	}
 end
 
 --- Draws power for an engine's accessories (coolant heaters) from its starter battery: the first
