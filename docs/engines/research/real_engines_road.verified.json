@@ -1,0 +1,1218 @@
+[
+  {
+    "id": "honda_k20c1_civic_type_r_2017",
+    "name": "Honda K20C1 2.0L i-VTEC turbo (2017 Civic Type R)",
+    "class": "car",
+    "fuel": "petrol",
+    "aspiration": "turbo",
+    "layout": "I",
+    "cylinders": 4,
+    "bore_mm": 86,
+    "stroke_mm": 85.9,
+    "displacement_cc": 1996,
+    "power_kw": 228.2,
+    "power_rpm": 6500,
+    "torque_nm": 400,
+    "torque_rpm": 2500,
+    "redline_rpm": 7000,
+    "dry_mass_kg": null,
+    "mass_includes": null,
+    "length_mm": null,
+    "width_mm": null,
+    "height_mm": null,
+    "year": 2017,
+    "sources": [
+      {
+        "field": "cylinders",
+        "url": "https://hondanews.com/en-US/releases/honda-civic-type-r-powertrain",
+        "quote": "L-4 Turbocharged"
+      },
+      {
+        "field": "bore_mm",
+        "url": "https://hondanews.com/en-US/releases/honda-civic-type-r-powertrain",
+        "quote": "Bore and Stroke (mm) ... 86 x 85.9"
+      },
+      {
+        "field": "stroke_mm",
+        "url": "https://hondanews.com/en-US/releases/honda-civic-type-r-powertrain",
+        "quote": "Bore and Stroke (mm) ... 86 x 85.9"
+      },
+      {
+        "field": "displacement_cc",
+        "url": "https://hondanews.com/en-US/releases/honda-civic-type-r-powertrain",
+        "quote": "Displacement (cc) ... 1996cc"
+      },
+      {
+        "field": "power_kw",
+        "url": "https://hondanews.com/en-US/releases/honda-civic-type-r-powertrain",
+        "quote": "306 horsepower at 6,500 rpm (SAE net)"
+      },
+      {
+        "field": "power_rpm",
+        "url": "https://hondanews.com/en-US/releases/honda-civic-type-r-powertrain",
+        "quote": "306 horsepower at 6,500 rpm (SAE net)"
+      },
+      {
+        "field": "torque_nm",
+        "url": "https://hondanews.com/en-US/releases/honda-civic-type-r-powertrain",
+        "quote": "295 lb.-ft. torque at 2,500-4500 rpm (SAE net)"
+      },
+      {
+        "field": "torque_rpm",
+        "url": "https://hondanews.com/en-US/releases/honda-civic-type-r-powertrain",
+        "quote": "295 lb.-ft. torque at 2,500-4500 rpm (SAE net)"
+      },
+      {
+        "field": "redline_rpm",
+        "url": "https://hondanews.com/en-US/releases/honda-civic-type-r-powertrain",
+        "quote": "Engine redline [dash char garbled in fetch] 7,000 rpm,"
+      },
+      {
+        "field": "year",
+        "url": "https://hondanews.com/en-US/releases/honda-civic-type-r-powertrain",
+        "quote": "The 2017 Civic Type R is features the most powerful engine ever offered in a Honda production vehicle in America."
+      }
+    ],
+    "converted_fields": [
+      "power_kw",
+      "torque_nm"
+    ],
+    "notes": null,
+    "torque_rpm_max": 4500,
+    "verify": {
+      "status": "confirmed",
+      "bad_fields": [],
+      "note": "hondanews page quotes all checked: L-4 Turbocharged; 86 x 85.9; 1996cc; 306 hp @ 6,500 (228.2 kW = 306 x 0.7457); 295 lb.-ft @ 2,500-4500 (400 Nm = 295 x 1.3558); redline 7,000 rpm; 'most powerful engine ever offered in a Honda production vehicle in America'."
+    }
+  },
+  {
+    "id": "honda_k20c2_civic_2020",
+    "name": "Honda 2.0L i-VTEC NA (2020 Civic Sedan LX/Sport)",
+    "class": "car",
+    "fuel": "petrol",
+    "aspiration": "NA",
+    "layout": "I",
+    "cylinders": 4,
+    "bore_mm": 86.0,
+    "stroke_mm": 85.9,
+    "displacement_cc": 1996,
+    "power_kw": 117.8,
+    "power_rpm": 6500,
+    "torque_nm": 187,
+    "torque_rpm": 4200,
+    "redline_rpm": 6700,
+    "dry_mass_kg": null,
+    "mass_includes": null,
+    "length_mm": null,
+    "width_mm": null,
+    "height_mm": null,
+    "year": 2020,
+    "sources": [
+      {
+        "field": "cylinders",
+        "url": "https://hondanews.com/en-US/honda-automobiles/releases/release-b6eb002730fe252c70adedf8e5000d96-2020-civic-sedan-specifications-features",
+        "quote": "In-Line 4-Cylinder"
+      },
+      {
+        "field": "displacement_cc",
+        "url": "https://hondanews.com/en-US/honda-automobiles/releases/release-b6eb002730fe252c70adedf8e5000d96-2020-civic-sedan-specifications-features",
+        "quote": "Displacement 1996 cc"
+      },
+      {
+        "field": "power_kw",
+        "url": "https://hondanews.com/en-US/honda-automobiles/releases/release-b6eb002730fe252c70adedf8e5000d96-2020-civic-sedan-specifications-features",
+        "quote": "Horsepower (SAE net) 158 @ 6500 rpm"
+      },
+      {
+        "field": "power_rpm",
+        "url": "https://hondanews.com/en-US/honda-automobiles/releases/release-b6eb002730fe252c70adedf8e5000d96-2020-civic-sedan-specifications-features",
+        "quote": "Horsepower (SAE net) 158 @ 6500 rpm"
+      },
+      {
+        "field": "torque_nm",
+        "url": "https://hondanews.com/en-US/honda-automobiles/releases/release-b6eb002730fe252c70adedf8e5000d96-2020-civic-sedan-specifications-features",
+        "quote": "Torque (SAE net) 138 lb-ft @ 4200 rpm"
+      },
+      {
+        "field": "torque_rpm",
+        "url": "https://hondanews.com/en-US/honda-automobiles/releases/release-b6eb002730fe252c70adedf8e5000d96-2020-civic-sedan-specifications-features",
+        "quote": "Torque (SAE net) 138 lb-ft @ 4200 rpm"
+      },
+      {
+        "field": "redline_rpm",
+        "url": "https://hondanews.com/en-US/honda-automobiles/releases/release-b6eb002730fe252c70adedf8e5000d96-2020-civic-sedan-specifications-features",
+        "quote": "Redline 6700 rpm"
+      },
+      {
+        "field": "bore_mm",
+        "url": "https://hondanews.com/en-US/honda-automobiles/releases/release-b6eb002730fe252c70adedf8e5000d96-2020-civic-sedan-specifications-features",
+        "quote": "Bore and Stroke 86.0 mm / 85.9 mm"
+      },
+      {
+        "field": "stroke_mm",
+        "url": "https://hondanews.com/en-US/honda-automobiles/releases/release-b6eb002730fe252c70adedf8e5000d96-2020-civic-sedan-specifications-features",
+        "quote": "Bore and Stroke 86.0 mm / 85.9 mm"
+      },
+      {
+        "field": "year",
+        "url": "https://hondanews.com/en-US/honda-automobiles/releases/release-b6eb002730fe252c70adedf8e5000d96-2020-civic-sedan-specifications-features",
+        "quote": "2020 Civic Sedan Specifications & Features"
+      }
+    ],
+    "converted_fields": [
+      "power_kw",
+      "torque_nm"
+    ],
+    "notes": "First two columns of the 5-column table (LX/Sport, 2.0L NA).",
+    "verify": {
+      "status": "partial",
+      "bad_fields": [
+        "year"
+      ],
+      "note": "Page quotes confirmed: In-Line 4-Cylinder; 1996 cc; 158 @ 6500 (117.8 kW); 138 lb-ft @ 4200 (187 Nm); redline 6700; bore/stroke 86.0/85.9. Page title '2020 Civic Sedan Specifications & Features' not seen in the fetched text. 2.0L label is inferred from 1996 cc (page does not say 2.0L)."
+    }
+  },
+  {
+    "id": "honda_j35_pilot_2024",
+    "name": "Honda 3.5L V6 (2024 Pilot)",
+    "class": "car",
+    "fuel": "petrol",
+    "aspiration": "NA",
+    "layout": "V",
+    "cylinders": 6,
+    "bore_mm": 89,
+    "stroke_mm": 93,
+    "displacement_cc": 3471,
+    "power_kw": 212.5,
+    "power_rpm": 6100,
+    "torque_nm": 355,
+    "torque_rpm": 5000,
+    "redline_rpm": 6500,
+    "dry_mass_kg": null,
+    "mass_includes": null,
+    "length_mm": null,
+    "width_mm": null,
+    "height_mm": null,
+    "year": 2024,
+    "sources": [
+      {
+        "field": "cylinders",
+        "url": "https://hondanews.com/en-US/honda-automobiles/releases/release-5003aaa39c009393f5d06d620f07211a-2024-honda-pilot-specifications-features",
+        "quote": "Engine Type V6"
+      },
+      {
+        "field": "displacement_cc",
+        "url": "https://hondanews.com/en-US/honda-automobiles/releases/release-5003aaa39c009393f5d06d620f07211a-2024-honda-pilot-specifications-features",
+        "quote": "Displacement (cc) 3,471"
+      },
+      {
+        "field": "power_kw",
+        "url": "https://hondanews.com/en-US/honda-automobiles/releases/release-5003aaa39c009393f5d06d620f07211a-2024-honda-pilot-specifications-features",
+        "quote": "Horsepower (SAE net @ rpm) 285 @ 6,100"
+      },
+      {
+        "field": "power_rpm",
+        "url": "https://hondanews.com/en-US/honda-automobiles/releases/release-5003aaa39c009393f5d06d620f07211a-2024-honda-pilot-specifications-features",
+        "quote": "Horsepower (SAE net @ rpm) 285 @ 6,100"
+      },
+      {
+        "field": "torque_nm",
+        "url": "https://hondanews.com/en-US/honda-automobiles/releases/release-5003aaa39c009393f5d06d620f07211a-2024-honda-pilot-specifications-features",
+        "quote": "Torque (lb.-ft. @ rpm) 262 @ 5,000"
+      },
+      {
+        "field": "torque_rpm",
+        "url": "https://hondanews.com/en-US/honda-automobiles/releases/release-5003aaa39c009393f5d06d620f07211a-2024-honda-pilot-specifications-features",
+        "quote": "Torque (lb.-ft. @ rpm) 262 @ 5,000"
+      },
+      {
+        "field": "redline_rpm",
+        "url": "https://hondanews.com/en-US/honda-automobiles/releases/release-5003aaa39c009393f5d06d620f07211a-2024-honda-pilot-specifications-features",
+        "quote": "Redline (rpm) 6,500"
+      },
+      {
+        "field": "bore_mm",
+        "url": "https://hondanews.com/en-US/honda-automobiles/releases/release-5003aaa39c009393f5d06d620f07211a-2024-honda-pilot-specifications-features",
+        "quote": "Bore and Stroke (mm) 89 x 93"
+      },
+      {
+        "field": "stroke_mm",
+        "url": "https://hondanews.com/en-US/honda-automobiles/releases/release-5003aaa39c009393f5d06d620f07211a-2024-honda-pilot-specifications-features",
+        "quote": "Bore and Stroke (mm) 89 x 93"
+      },
+      {
+        "field": "year",
+        "url": "https://hondanews.com/en-US/honda-automobiles/releases/release-5003aaa39c009393f5d06d620f07211a-2024-honda-pilot-specifications-features",
+        "quote": "2024 Honda Pilot Specifications & Features"
+      }
+    ],
+    "converted_fields": [
+      "power_kw",
+      "torque_nm"
+    ],
+    "notes": null,
+    "verify": {
+      "status": "partial",
+      "bad_fields": [
+        "year"
+      ],
+      "note": "Page quotes confirmed: V6; 3,471 cc; 285 @ 6,100 (212.5 kW = 285 x 0.7457); 262 lb-ft @ 5,000 (355 Nm); redline 6,500; bore/stroke 89 x 93. Page title '2024 Honda Pilot Specifications & Features' not seen in the fetched text."
+    }
+  },
+  {
+    "id": "bmw_b58b30_x3_m40i",
+    "name": "BMW B58B30M0 3.0L inline-6 turbo petrol (X3 M40i)",
+    "class": "car",
+    "fuel": "petrol",
+    "aspiration": "turbo",
+    "layout": "I",
+    "cylinders": 6,
+    "bore_mm": 82,
+    "stroke_mm": 94.6,
+    "displacement_cc": 2998,
+    "power_kw": 265,
+    "power_rpm": 5500,
+    "torque_nm": 500,
+    "torque_rpm": 1520,
+    "redline_rpm": null,
+    "dry_mass_kg": null,
+    "mass_includes": null,
+    "length_mm": null,
+    "width_mm": null,
+    "height_mm": null,
+    "year": null,
+    "sources": [
+      {
+        "field": "cylinders",
+        "url": "https://www.press.bmwgroup.com/united-kingdom/article/attachment/T0272066EN_GB/397550",
+        "quote": "Cylinders -- 4 6"
+      },
+      {
+        "field": "stroke_mm",
+        "url": "https://www.press.bmwgroup.com/united-kingdom/article/attachment/T0272066EN_GB/397550",
+        "quote": "Stroke mm 94.6 94.6"
+      },
+      {
+        "field": "bore_mm",
+        "url": "https://www.press.bmwgroup.com/united-kingdom/article/attachment/T0272066EN_GB/397550",
+        "quote": "Bore mm 82 82"
+      },
+      {
+        "field": "displacement_cc",
+        "url": "https://www.press.bmwgroup.com/united-kingdom/article/attachment/T0272066EN_GB/397550",
+        "quote": "Displacement cm3 1998 2998"
+      },
+      {
+        "field": "power_kw",
+        "url": "https://www.press.bmwgroup.com/united-kingdom/article/attachment/T0272066EN_GB/397550",
+        "quote": "Rated engine power [kW] kW 135 265"
+      },
+      {
+        "field": "power_rpm",
+        "url": "https://www.press.bmwgroup.com/united-kingdom/article/attachment/T0272066EN_GB/397550",
+        "quote": "at rpm 1/min 5000-6500 5500-6500"
+      },
+      {
+        "field": "torque_nm",
+        "url": "https://www.press.bmwgroup.com/united-kingdom/article/attachment/T0272066EN_GB/397550",
+        "quote": "Engine torque Nm 290 500"
+      },
+      {
+        "field": "torque_rpm",
+        "url": "https://www.press.bmwgroup.com/united-kingdom/article/attachment/T0272066EN_GB/397550",
+        "quote": "at rpm 1/min 1350-4250 1520-4800"
+      }
+    ],
+    "converted_fields": [],
+    "notes": "Second column (X3 M40i, B58B30M0) of the 'X3 xDrive20i | X3 M40i' block. Power plateau 5500-6500 rpm, torque plateau 1520-4800 rpm. Year not on sheet.",
+    "power_rpm_max": 6500,
+    "torque_rpm_max": 4800,
+    "verify": {
+      "status": "rejected",
+      "bad_fields": [
+        "power_kw",
+        "power_rpm",
+        "torque_nm",
+        "torque_rpm",
+        "displacement_cc",
+        "cylinders",
+        "bore_mm",
+        "stroke_mm"
+      ],
+      "note": "Source PDF (BMW press sheet T0272066EN_GB/397550) is readable by pdftotext, but the two-column-per-model table is scrambled in extraction, so the figures cannot be tied to the X3 M40i column. Values seen in text include 2998, 265, 500, 94.6 but column assignment is unconfirmed. Rejected until re-checked against the PDF page."
+    }
+  },
+  {
+    "id": "bmw_b47d20_x3_20d",
+    "name": "BMW B47D20O0 2.0L inline-4 turbodiesel (X3 xDrive20d)",
+    "class": "car",
+    "fuel": "diesel",
+    "aspiration": "turbo",
+    "layout": "I",
+    "cylinders": 4,
+    "bore_mm": 84,
+    "stroke_mm": 90,
+    "displacement_cc": 1995,
+    "power_kw": 140,
+    "power_rpm": 4000,
+    "torque_nm": 400,
+    "torque_rpm": 1750,
+    "redline_rpm": null,
+    "dry_mass_kg": null,
+    "mass_includes": null,
+    "length_mm": null,
+    "width_mm": null,
+    "height_mm": null,
+    "year": null,
+    "sources": [
+      {
+        "field": "cylinders",
+        "url": "https://www.press.bmwgroup.com/united-kingdom/article/attachment/T0272066EN_GB/397550",
+        "quote": "Cylinders -- 4 6"
+      },
+      {
+        "field": "stroke_mm",
+        "url": "https://www.press.bmwgroup.com/united-kingdom/article/attachment/T0272066EN_GB/397550",
+        "quote": "Stroke mm 90 90"
+      },
+      {
+        "field": "bore_mm",
+        "url": "https://www.press.bmwgroup.com/united-kingdom/article/attachment/T0272066EN_GB/397550",
+        "quote": "Bore mm 84 84"
+      },
+      {
+        "field": "displacement_cc",
+        "url": "https://www.press.bmwgroup.com/united-kingdom/article/attachment/T0272066EN_GB/397550",
+        "quote": "Displacement cm3 1995 2993"
+      },
+      {
+        "field": "power_kw",
+        "url": "https://www.press.bmwgroup.com/united-kingdom/article/attachment/T0272066EN_GB/397550",
+        "quote": "Rated engine power [kW] kW 140 195"
+      },
+      {
+        "field": "power_rpm",
+        "url": "https://www.press.bmwgroup.com/united-kingdom/article/attachment/T0272066EN_GB/397550",
+        "quote": "at rpm 1/min 4000-4000 4000-4000"
+      },
+      {
+        "field": "torque_nm",
+        "url": "https://www.press.bmwgroup.com/united-kingdom/article/attachment/T0272066EN_GB/397550",
+        "quote": "Engine torque Nm 400 620"
+      },
+      {
+        "field": "torque_rpm",
+        "url": "https://www.press.bmwgroup.com/united-kingdom/article/attachment/T0272066EN_GB/397550",
+        "quote": "at rpm 1/min 1750-2500 2000-2500"
+      }
+    ],
+    "converted_fields": [],
+    "notes": "First column of 'X3 xDrive20d | X3 xDrive30d' block. Torque plateau 1750-2500 rpm.",
+    "torque_rpm_max": 2500,
+    "verify": {
+      "status": "rejected",
+      "bad_fields": [
+        "power_kw",
+        "power_rpm",
+        "torque_nm",
+        "torque_rpm",
+        "displacement_cc",
+        "cylinders",
+        "bore_mm",
+        "stroke_mm"
+      ],
+      "note": "Same BMW PDF (T0272066EN_GB/397550): extraction scrambles the four-column table, so the X3 xDrive20d column (B47D20O0) cannot be tied to 1995 cc / 140 kW / 400 Nm / 1750-2500 rpm. Rejected until re-checked."
+    }
+  },
+  {
+    "id": "bmw_b57d30_x3_30d",
+    "name": "BMW B57D30O0 3.0L inline-6 turbodiesel (X3 xDrive30d)",
+    "class": "car",
+    "fuel": "diesel",
+    "aspiration": "turbo",
+    "layout": "I",
+    "cylinders": 6,
+    "bore_mm": 84,
+    "stroke_mm": 90,
+    "displacement_cc": 2993,
+    "power_kw": 195,
+    "power_rpm": 4000,
+    "torque_nm": 620,
+    "torque_rpm": 2000,
+    "redline_rpm": null,
+    "dry_mass_kg": null,
+    "mass_includes": null,
+    "length_mm": null,
+    "width_mm": null,
+    "height_mm": null,
+    "year": null,
+    "sources": [
+      {
+        "field": "cylinders",
+        "url": "https://www.press.bmwgroup.com/united-kingdom/article/attachment/T0272066EN_GB/397550",
+        "quote": "Cylinders -- 4 6"
+      },
+      {
+        "field": "stroke_mm",
+        "url": "https://www.press.bmwgroup.com/united-kingdom/article/attachment/T0272066EN_GB/397550",
+        "quote": "Stroke mm 90 90"
+      },
+      {
+        "field": "bore_mm",
+        "url": "https://www.press.bmwgroup.com/united-kingdom/article/attachment/T0272066EN_GB/397550",
+        "quote": "Bore mm 84 84"
+      },
+      {
+        "field": "displacement_cc",
+        "url": "https://www.press.bmwgroup.com/united-kingdom/article/attachment/T0272066EN_GB/397550",
+        "quote": "Displacement cm3 1995 2993"
+      },
+      {
+        "field": "power_kw",
+        "url": "https://www.press.bmwgroup.com/united-kingdom/article/attachment/T0272066EN_GB/397550",
+        "quote": "Rated engine power [kW] kW 140 195"
+      },
+      {
+        "field": "power_rpm",
+        "url": "https://www.press.bmwgroup.com/united-kingdom/article/attachment/T0272066EN_GB/397550",
+        "quote": "at rpm 1/min 4000-4000 4000-4000"
+      },
+      {
+        "field": "torque_nm",
+        "url": "https://www.press.bmwgroup.com/united-kingdom/article/attachment/T0272066EN_GB/397550",
+        "quote": "Engine torque Nm 400 620"
+      },
+      {
+        "field": "torque_rpm",
+        "url": "https://www.press.bmwgroup.com/united-kingdom/article/attachment/T0272066EN_GB/397550",
+        "quote": "at rpm 1/min 1750-2500 2000-2500"
+      }
+    ],
+    "converted_fields": [],
+    "notes": "Second column of the xDrive20d|xDrive30d block. Torque plateau 2000-2500 rpm.",
+    "torque_rpm_max": 2500,
+    "verify": {
+      "status": "rejected",
+      "bad_fields": [
+        "power_kw",
+        "power_rpm",
+        "torque_nm",
+        "torque_rpm",
+        "displacement_cc",
+        "cylinders",
+        "bore_mm",
+        "stroke_mm"
+      ],
+      "note": "Same BMW PDF (T0272066EN_GB/397550): the xDrive30d column (B57D30O0) cannot be tied to 2993 cc / 195 kW / 620 Nm / 2000-2500 rpm after extraction. Rejected until re-checked."
+    }
+  },
+  {
+    "id": "porsche_992_2_carrera_flat6",
+    "name": "Porsche 3.0L twin-turbo flat-6 (911 Carrera 992.2)",
+    "class": "car",
+    "fuel": "petrol",
+    "aspiration": "turbo",
+    "layout": "B",
+    "cylinders": 6,
+    "bore_mm": 91.0,
+    "stroke_mm": 76.4,
+    "displacement_cc": null,
+    "power_kw": 289.3,
+    "power_rpm": 6500,
+    "torque_nm": 449,
+    "torque_rpm": 2000,
+    "redline_rpm": 7500,
+    "dry_mass_kg": null,
+    "mass_includes": null,
+    "length_mm": null,
+    "width_mm": null,
+    "height_mm": null,
+    "year": null,
+    "sources": [
+      {
+        "field": "cylinders",
+        "url": "https://newsroom.porsche.com/dam/jcr%3A86fc9a9b-ece1-4cca-9930-39a78e89baf3/992.2%20911%20Carrera%20and%20Carrera%20Cabriolet%20Technical%20Specifications.pdf",
+        "quote": "Cylinders 6 6"
+      },
+      {
+        "field": "bore_mm",
+        "url": "https://newsroom.porsche.com/dam/jcr%3A86fc9a9b-ece1-4cca-9930-39a78e89baf3/992.2%20911%20Carrera%20and%20Carrera%20Cabriolet%20Technical%20Specifications.pdf",
+        "quote": "Bore/Stroke (mm/mm) 91.0 mm / 76.4 mm"
+      },
+      {
+        "field": "stroke_mm",
+        "url": "https://newsroom.porsche.com/dam/jcr%3A86fc9a9b-ece1-4cca-9930-39a78e89baf3/992.2%20911%20Carrera%20and%20Carrera%20Cabriolet%20Technical%20Specifications.pdf",
+        "quote": "Bore/Stroke (mm/mm) 91.0 mm / 76.4 mm"
+      },
+      {
+        "field": "power_kw",
+        "url": "https://newsroom.porsche.com/dam/jcr%3A86fc9a9b-ece1-4cca-9930-39a78e89baf3/992.2%20911%20Carrera%20and%20Carrera%20Cabriolet%20Technical%20Specifications.pdf",
+        "quote": "Maximum power output @ engine speed 388 hp @ 6500"
+      },
+      {
+        "field": "power_rpm",
+        "url": "https://newsroom.porsche.com/dam/jcr%3A86fc9a9b-ece1-4cca-9930-39a78e89baf3/992.2%20911%20Carrera%20and%20Carrera%20Cabriolet%20Technical%20Specifications.pdf",
+        "quote": "Maximum power output @ engine speed 388 hp @ 6500"
+      },
+      {
+        "field": "torque_nm",
+        "url": "https://newsroom.porsche.com/dam/jcr%3A86fc9a9b-ece1-4cca-9930-39a78e89baf3/992.2%20911%20Carrera%20and%20Carrera%20Cabriolet%20Technical%20Specifications.pdf",
+        "quote": "Maximum torque @ engine speed 331 lb.-ft. @ 2000-5000"
+      },
+      {
+        "field": "torque_rpm",
+        "url": "https://newsroom.porsche.com/dam/jcr%3A86fc9a9b-ece1-4cca-9930-39a78e89baf3/992.2%20911%20Carrera%20and%20Carrera%20Cabriolet%20Technical%20Specifications.pdf",
+        "quote": "Maximum torque @ engine speed 331 lb.-ft. @ 2000-5000"
+      },
+      {
+        "field": "redline_rpm",
+        "url": "https://newsroom.porsche.com/dam/jcr%3A86fc9a9b-ece1-4cca-9930-39a78e89baf3/992.2%20911%20Carrera%20and%20Carrera%20Cabriolet%20Technical%20Specifications.pdf",
+        "quote": "Maximum engine speed 7500"
+      }
+    ],
+    "converted_fields": [
+      "power_kw",
+      "torque_nm"
+    ],
+    "notes": "Source gives displacement only as 'Displacement (Liters) 3.0 l', so displacement_cc left null. Vehicle length/width/height in the sheet are car dimensions, not engine. Year not stated (992.2 generation).",
+    "torque_rpm_max": 5000,
+    "verify": {
+      "status": "confirmed",
+      "bad_fields": [],
+      "note": "Porsche 992.2 Technical Specifications PDF (readable): Cylinders 6; Bore/Stroke 91.0 mm / 76.4 mm; 388 hp @ 6500 (289.3 kW = 388 x 0.7457); 331 lb.-ft @ 2000-5000 (449 Nm); Maximum engine speed 7500; Displacement (Liters) 3.0 l. displacement_cc left null as the notes say."
+    }
+  },
+  {
+    "id": "porsche_cayenne_diesel_v6_2013",
+    "name": "VW-group 3.0L V6 turbodiesel (2013 Porsche Cayenne Diesel)",
+    "class": "car",
+    "fuel": "diesel",
+    "aspiration": "turbo",
+    "layout": "V",
+    "cylinders": 6,
+    "bore_mm": 83.0,
+    "stroke_mm": 91.4,
+    "displacement_cc": 2967,
+    "power_kw": 179.0,
+    "power_rpm": 3500,
+    "torque_nm": 550,
+    "torque_rpm": 1750,
+    "redline_rpm": 4600,
+    "dry_mass_kg": null,
+    "mass_includes": null,
+    "length_mm": null,
+    "width_mm": null,
+    "height_mm": null,
+    "year": 2013,
+    "sources": [
+      {
+        "field": "bore_mm",
+        "url": "https://newsroom.porsche.com/dam/jcr:bcf241cc-0675-4de7-95c0-633f957935ed/2013_Cayenne_V6_and_Cayenne_Diesel_Technical_Specifications.pdf",
+        "quote": "Bore 89.0 mm 83.0 mm"
+      },
+      {
+        "field": "stroke_mm",
+        "url": "https://newsroom.porsche.com/dam/jcr:bcf241cc-0675-4de7-95c0-633f957935ed/2013_Cayenne_V6_and_Cayenne_Diesel_Technical_Specifications.pdf",
+        "quote": "Stroke 96.4 mm 91.4 mm"
+      },
+      {
+        "field": "displacement_cc",
+        "url": "https://newsroom.porsche.com/dam/jcr:bcf241cc-0675-4de7-95c0-633f957935ed/2013_Cayenne_V6_and_Cayenne_Diesel_Technical_Specifications.pdf",
+        "quote": "Displacement 3,598 cm3 2,967 cm3"
+      },
+      {
+        "field": "power_kw",
+        "url": "https://newsroom.porsche.com/dam/jcr:bcf241cc-0675-4de7-95c0-633f957935ed/2013_Cayenne_V6_and_Cayenne_Diesel_Technical_Specifications.pdf",
+        "quote": "Maximum Horsepower 300 @ 6300 rpm 240 hp @ 3500-4000 rpm"
+      },
+      {
+        "field": "power_rpm",
+        "url": "https://newsroom.porsche.com/dam/jcr:bcf241cc-0675-4de7-95c0-633f957935ed/2013_Cayenne_V6_and_Cayenne_Diesel_Technical_Specifications.pdf",
+        "quote": "Maximum Horsepower 300 @ 6300 rpm 240 hp @ 3500-4000 rpm"
+      },
+      {
+        "field": "torque_nm",
+        "url": "https://newsroom.porsche.com/dam/jcr:bcf241cc-0675-4de7-95c0-633f957935ed/2013_Cayenne_V6_and_Cayenne_Diesel_Technical_Specifications.pdf",
+        "quote": "Maximum Torque 295 lb-ft @ 3000 rpm 406 lb.-ft. at 1750-2500 rpm"
+      },
+      {
+        "field": "torque_rpm",
+        "url": "https://newsroom.porsche.com/dam/jcr:bcf241cc-0675-4de7-95c0-633f957935ed/2013_Cayenne_V6_and_Cayenne_Diesel_Technical_Specifications.pdf",
+        "quote": "Maximum Torque 295 lb-ft @ 3000 rpm 406 lb.-ft. at 1750-2500 rpm"
+      },
+      {
+        "field": "redline_rpm",
+        "url": "https://newsroom.porsche.com/dam/jcr:bcf241cc-0675-4de7-95c0-633f957935ed/2013_Cayenne_V6_and_Cayenne_Diesel_Technical_Specifications.pdf",
+        "quote": "Engine redline 6700 rpm 4600 rpm"
+      },
+      {
+        "field": "year",
+        "url": "https://newsroom.porsche.com/dam/jcr:bcf241cc-0675-4de7-95c0-633f957935ed/2013_Cayenne_V6_and_Cayenne_Diesel_Technical_Specifications.pdf",
+        "quote": "2013_Cayenne_V6_and_Cayenne_Diesel_Technical_Specifications.pdf (filename)"
+      }
+    ],
+    "converted_fields": [
+      "power_kw",
+      "torque_nm"
+    ],
+    "notes": "Cylinder count 6 and V layout are from the document title 'Cayenne V6 | Cayenne Diesel' (no explicit cylinder row was in the extracted lines), so no cylinders source entry. Diesel is the second column.",
+    "power_rpm_max": 4000,
+    "torque_rpm_max": 2500,
+    "verify": {
+      "status": "partial",
+      "bad_fields": [
+        "year"
+      ],
+      "note": "Porsche 2013 Cayenne V6 / Diesel PDF, diesel column confirmed: Bore 83.0 mm; Stroke 91.4 mm; Displacement 2,967 cm3; 240 hp @ 3500-4000 rpm (179.0 kW); 406 lb.-ft at 1750-2500 rpm (550 Nm); Engine redline 4600 rpm. Year is only the filename '2013_...' (weak). 'VW-group' label is not stated in the PDF."
+    }
+  },
+  {
+    "id": "honda_crf450r_2024",
+    "name": "Honda CRF450R single-cylinder (2024)",
+    "class": "motorcycle",
+    "fuel": "petrol",
+    "aspiration": "NA",
+    "layout": "I",
+    "cylinders": 1,
+    "bore_mm": 96.0,
+    "stroke_mm": 62.1,
+    "displacement_cc": 449.8,
+    "power_kw": null,
+    "power_rpm": null,
+    "torque_nm": null,
+    "torque_rpm": null,
+    "redline_rpm": null,
+    "dry_mass_kg": null,
+    "mass_includes": null,
+    "length_mm": null,
+    "width_mm": null,
+    "height_mm": null,
+    "year": 2024,
+    "sources": [
+      {
+        "field": "cylinders",
+        "url": "https://hondanews.com/en-US/powersports/releases/2024-honda-crf450r-specifications",
+        "quote": "449.8cc liquid-cooled 10 degree single-cylinder four-stroke"
+      },
+      {
+        "field": "bore_mm",
+        "url": "https://hondanews.com/en-US/powersports/releases/2024-honda-crf450r-specifications",
+        "quote": "Bore x Stroke 96.0mm x 62.1mm"
+      },
+      {
+        "field": "stroke_mm",
+        "url": "https://hondanews.com/en-US/powersports/releases/2024-honda-crf450r-specifications",
+        "quote": "Bore x Stroke 96.0mm x 62.1mm"
+      },
+      {
+        "field": "displacement_cc",
+        "url": "https://hondanews.com/en-US/powersports/releases/2024-honda-crf450r-specifications",
+        "quote": "449.8cc liquid-cooled 10 degree single-cylinder four-stroke"
+      },
+      {
+        "field": "year",
+        "url": "https://hondanews.com/en-US/powersports/releases/2024-honda-crf450r-specifications",
+        "quote": "2024 Honda CRF450R SPECIFICATIONS"
+      }
+    ],
+    "converted_fields": [],
+    "notes": "Honda page lists no power, torque or rpm. Curb weight 245 lbs / L 85.9 in etc. are whole-bike figures, not engine.",
+    "verify": {
+      "status": "partial",
+      "bad_fields": [
+        "year"
+      ],
+      "note": "Honda CRF450R page confirmed: '449.8cc liquid-cooled 10º single-cylinder four-stroke'; Bore x Stroke 96.0mm x 62.1mm. Page lists no power, torque or rpm, consistent with nulls. Title '2024 Honda CRF450R SPECIFICATIONS' not seen in the fetched text."
+    }
+  },
+  {
+    "id": "yamaha_yzf_r1_2020",
+    "name": "Yamaha YZF-R1 crossplane inline-4 (2020, Europe)",
+    "class": "motorcycle",
+    "fuel": "petrol",
+    "aspiration": "NA",
+    "layout": "I",
+    "cylinders": 4,
+    "bore_mm": 79.0,
+    "stroke_mm": 50.9,
+    "displacement_cc": 998,
+    "power_kw": 147.1,
+    "power_rpm": 13500,
+    "torque_nm": 113.3,
+    "torque_rpm": 11500,
+    "redline_rpm": null,
+    "dry_mass_kg": null,
+    "mass_includes": null,
+    "length_mm": null,
+    "width_mm": null,
+    "height_mm": null,
+    "year": 2019,
+    "sources": [
+      {
+        "field": "cylinders",
+        "url": "https://global.yamaha-motor.com/news/2019/0717/yzf-r1.html",
+        "quote": "liquid-cooled, 4-stroke, 4-valve, in-line 4-cylinder 998cm3 engines"
+      },
+      {
+        "field": "displacement_cc",
+        "url": "https://global.yamaha-motor.com/news/2019/0717/yzf-r1.html",
+        "quote": "liquid-cooled, 4-stroke, 4-valve, in-line 4-cylinder 998cm3 engines"
+      },
+      {
+        "field": "bore_mm",
+        "url": "https://global.yamaha-motor.com/news/2019/0717/yzf-r1.html",
+        "quote": "Bore x Stroke 79.0mm x 50.9mm"
+      },
+      {
+        "field": "stroke_mm",
+        "url": "https://global.yamaha-motor.com/news/2019/0717/yzf-r1.html",
+        "quote": "Bore x Stroke 79.0mm x 50.9mm"
+      },
+      {
+        "field": "power_kw",
+        "url": "https://global.yamaha-motor.com/news/2019/0717/yzf-r1.html",
+        "quote": "147.1kW (200.0PS) / 13,500r/min"
+      },
+      {
+        "field": "power_rpm",
+        "url": "https://global.yamaha-motor.com/news/2019/0717/yzf-r1.html",
+        "quote": "147.1kW (200.0PS) / 13,500r/min"
+      },
+      {
+        "field": "torque_nm",
+        "url": "https://global.yamaha-motor.com/news/2019/0717/yzf-r1.html",
+        "quote": "113.3N-m (11.6kgf-m) / 11,500r/min"
+      },
+      {
+        "field": "torque_rpm",
+        "url": "https://global.yamaha-motor.com/news/2019/0717/yzf-r1.html",
+        "quote": "113.3N-m (11.6kgf-m) / 11,500r/min"
+      },
+      {
+        "field": "year",
+        "url": "https://global.yamaha-motor.com/news/2019/0717/yzf-r1.html",
+        "quote": "IWATA, July 17, 2019 - Yamaha Motor Co., Ltd. ... will be released from September 2019 for Europe"
+      }
+    ],
+    "converted_fields": [],
+    "notes": "Redline not published in the release. Year = announcement year of the 2020 model.",
+    "verify": {
+      "status": "confirmed",
+      "bad_fields": [],
+      "note": "Yamaha 2019/0717 release confirmed: 'liquid-cooled, 4-stroke, 4-valve, in-line 4-cylinder 998cm3 engines'; Bore x Stroke 79.0mm x 50.9mm; 147.1kW (200.0PS) / 13,500r/min; 113.3N-m / 11,500r/min; 'will be released from September 2019 for Europe'. Year 2019 is the announcement year as the notes say."
+    }
+  },
+  {
+    "id": "mazda_13b_msp_renesis_rx8_2011",
+    "name": "Mazda 13B-MSP RENESIS 2-rotor Wankel (2011 RX-8, manual)",
+    "class": "car",
+    "fuel": "petrol",
+    "aspiration": "NA",
+    "layout": "rotary",
+    "cylinders": 2,
+    "bore_mm": null,
+    "stroke_mm": null,
+    "displacement_cc": 1308,
+    "power_kw": 173.0,
+    "power_rpm": 8500,
+    "torque_nm": 216,
+    "torque_rpm": 5500,
+    "redline_rpm": 9000,
+    "dry_mass_kg": null,
+    "mass_includes": null,
+    "length_mm": null,
+    "width_mm": null,
+    "height_mm": null,
+    "year": 2011,
+    "sources": [
+      {
+        "field": "cylinders",
+        "url": "https://news.mazdausa.com/download/2011-RX-8-Specifications.pdf",
+        "quote": "1.3L 2-rotor rotary (cylinders field = rotor count)"
+      },
+      {
+        "field": "displacement_cc",
+        "url": "https://news.mazdausa.com/download/2011-RX-8-Specifications.pdf",
+        "quote": "79.8 / 1,308"
+      },
+      {
+        "field": "power_kw",
+        "url": "https://news.mazdausa.com/download/2011-RX-8-Specifications.pdf",
+        "quote": "Horsepower, SAE net 212 hp @ 7500 rpm 232 hp @ 8500 rpm"
+      },
+      {
+        "field": "power_rpm",
+        "url": "https://news.mazdausa.com/download/2011-RX-8-Specifications.pdf",
+        "quote": "Horsepower, SAE net 212 hp @ 7500 rpm 232 hp @ 8500 rpm"
+      },
+      {
+        "field": "torque_nm",
+        "url": "https://news.mazdausa.com/download/2011-RX-8-Specifications.pdf",
+        "quote": "Torque, SAE net 159 lb-ft @ 5500 rpm 159 lb-ft @ 5500 rpm"
+      },
+      {
+        "field": "torque_rpm",
+        "url": "https://news.mazdausa.com/download/2011-RX-8-Specifications.pdf",
+        "quote": "Torque, SAE net 159 lb-ft @ 5500 rpm 159 lb-ft @ 5500 rpm"
+      },
+      {
+        "field": "redline_rpm",
+        "url": "https://news.mazdausa.com/download/2011-RX-8-Specifications.pdf",
+        "quote": "Redline 7500 rpm 9000 rpm"
+      },
+      {
+        "field": "year",
+        "url": "https://news.mazdausa.com/download/2011-RX-8-Specifications.pdf",
+        "quote": "2011 MAZDA RX-8 SPECIFICATIONS"
+      }
+    ],
+    "converted_fields": [
+      "power_kw",
+      "torque_nm"
+    ],
+    "notes": "Manual (232 hp, 9000 rpm redline) column; automatic is 212 hp @7500, 7500 rpm redline. Displacement is the 2-rotor total. Same sheet: 'Eccentricity (e) x Radius (R) x Width (b) 4.13 x 0.59 x 3.15 / 105 x 15 x 80' (in / mm); bore/stroke do not apply.",
+    "rotor_e_R_b_mm": [
+      15,
+      105,
+      80
+    ],
+    "verify": {
+      "status": "partial",
+      "bad_fields": [
+        "cylinders"
+      ],
+      "note": "Mazda 2011 RX-8 spec deck PDF confirmed: 1.3L Rotary; 232 hp @ 8500 (MT, 173 kW); 159 lb-ft @ 5500 (216 Nm); redline 9000 (MT); Displacement 79.8 / 1,308. The quoted string '1.3L 2-rotor rotary' is not in the PDF text (it says '1.3L Rotary engine'); the 2-rotor count is a description, not a sheet line."
+    }
+  },
+  {
+    "id": "mini_b38_cooper_3door_2020",
+    "name": "BMW/MINI B38 1.5L inline-3 turbo (2020 MINI Cooper 3-door)",
+    "class": "car",
+    "fuel": "petrol",
+    "aspiration": "turbo",
+    "layout": "I",
+    "cylinders": 3,
+    "bore_mm": 82.0,
+    "stroke_mm": 94.6,
+    "displacement_cc": 1499,
+    "power_kw": 100,
+    "power_rpm": 4500,
+    "torque_nm": 220,
+    "torque_rpm": 1480,
+    "redline_rpm": null,
+    "dry_mass_kg": null,
+    "mass_includes": null,
+    "length_mm": null,
+    "width_mm": null,
+    "height_mm": null,
+    "year": 2020,
+    "sources": [
+      {
+        "field": "cylinders",
+        "url": "https://www.press.bmwgroup.com/global/article/attachment/T0306478EN/447519",
+        "quote": "Type/no. of cylinders/valves in-line / 3 / 4"
+      },
+      {
+        "field": "displacement_cc",
+        "url": "https://www.press.bmwgroup.com/global/article/attachment/T0306478EN/447519",
+        "quote": "Capacity cc 1499 1499"
+      },
+      {
+        "field": "bore_mm",
+        "url": "https://www.press.bmwgroup.com/global/article/attachment/T0306478EN/447519",
+        "quote": "Bore/stroke mm 82.0 / 94.6 82.0 / 94.6"
+      },
+      {
+        "field": "stroke_mm",
+        "url": "https://www.press.bmwgroup.com/global/article/attachment/T0306478EN/447519",
+        "quote": "Bore/stroke mm 82.0 / 94.6 82.0 / 94.6"
+      },
+      {
+        "field": "power_kw",
+        "url": "https://www.press.bmwgroup.com/global/article/attachment/T0306478EN/447519",
+        "quote": "Output kW/bhp 100 / 136 100 / 136"
+      },
+      {
+        "field": "power_rpm",
+        "url": "https://www.press.bmwgroup.com/global/article/attachment/T0306478EN/447519",
+        "quote": "at engine speed rpm 4500 - 6500 4500 - 6500"
+      },
+      {
+        "field": "torque_nm",
+        "url": "https://www.press.bmwgroup.com/global/article/attachment/T0306478EN/447519",
+        "quote": "Torque Nm 220 220"
+      },
+      {
+        "field": "torque_rpm",
+        "url": "https://www.press.bmwgroup.com/global/article/attachment/T0306478EN/447519",
+        "quote": "at engine speed rpm 1480 - 4100 1480 - 4100"
+      },
+      {
+        "field": "year",
+        "url": "https://www.press.bmwgroup.com/global/article/attachment/T0306478EN/447519",
+        "quote": "MINI Media- information MINI 3 door 03/2020"
+      }
+    ],
+    "converted_fields": [],
+    "notes": "Cooper 3 door / Cooper 3 door Automatic columns. Redline not published.",
+    "power_rpm_max": 6500,
+    "torque_rpm_max": 4100,
+    "verify": {
+      "status": "rejected",
+      "bad_fields": [
+        "power_kw",
+        "power_rpm",
+        "torque_nm",
+        "torque_rpm"
+      ],
+      "note": "MINI 03/2020 media-information PDF readable, but the extracted table is headed 'MINI ONE FIRST 3 DOOR' and the cited 'Output kW/bhp 100 / 136' and 'Torque Nm 220' strings are not found in it. Visible per-litre values (36.7, 50.0 kW/l) do not match 100 kW. Cooper column not confirmed; displacement 1499 and bore/stroke 82.0/94.6 are present. Rejected for power and torque."
+    }
+  },
+  {
+    "id": "toyota_g16e_gts_gr_yaris_2024",
+    "name": "Toyota G16E-GTS 1.6L inline-3 turbo (2024 GR Yaris)",
+    "class": "car",
+    "fuel": "petrol",
+    "aspiration": "turbo",
+    "layout": "I",
+    "cylinders": 3,
+    "bore_mm": 87.5,
+    "stroke_mm": 89.7,
+    "displacement_cc": 1618,
+    "power_kw": 206,
+    "power_rpm": 6500,
+    "torque_nm": 390,
+    "torque_rpm": 3250,
+    "redline_rpm": null,
+    "dry_mass_kg": null,
+    "mass_includes": null,
+    "length_mm": null,
+    "width_mm": null,
+    "height_mm": null,
+    "year": 2024,
+    "sources": [
+      {
+        "field": "cylinders",
+        "url": "https://media.toyota.co.uk/wp-content/uploads/sites/5/pdf/240704-GR-Yaris-Tech-Specs.pdf",
+        "quote": "Type 3 cylinders in-line"
+      },
+      {
+        "field": "displacement_cc",
+        "url": "https://media.toyota.co.uk/wp-content/uploads/sites/5/pdf/240704-GR-Yaris-Tech-Specs.pdf",
+        "quote": "Displacement (cc) 1,618"
+      },
+      {
+        "field": "bore_mm",
+        "url": "https://media.toyota.co.uk/wp-content/uploads/sites/5/pdf/240704-GR-Yaris-Tech-Specs.pdf",
+        "quote": "Bore x stroke (mm) 87.5 x 89.7"
+      },
+      {
+        "field": "stroke_mm",
+        "url": "https://media.toyota.co.uk/wp-content/uploads/sites/5/pdf/240704-GR-Yaris-Tech-Specs.pdf",
+        "quote": "Bore x stroke (mm) 87.5 x 89.7"
+      },
+      {
+        "field": "power_kw",
+        "url": "https://media.toyota.co.uk/wp-content/uploads/sites/5/pdf/240704-GR-Yaris-Tech-Specs.pdf",
+        "quote": "Max. power (bhp/DIN hp/kW @ rpm) 276/280/206 @ 6,500"
+      },
+      {
+        "field": "power_rpm",
+        "url": "https://media.toyota.co.uk/wp-content/uploads/sites/5/pdf/240704-GR-Yaris-Tech-Specs.pdf",
+        "quote": "Max. power (bhp/DIN hp/kW @ rpm) 276/280/206 @ 6,500"
+      },
+      {
+        "field": "torque_nm",
+        "url": "https://media.toyota.co.uk/wp-content/uploads/sites/5/pdf/240704-GR-Yaris-Tech-Specs.pdf",
+        "quote": "Max. torque (Nm @ rpm) 390 @ 3,250 - 4,600"
+      },
+      {
+        "field": "torque_rpm",
+        "url": "https://media.toyota.co.uk/wp-content/uploads/sites/5/pdf/240704-GR-Yaris-Tech-Specs.pdf",
+        "quote": "Max. torque (Nm @ rpm) 390 @ 3,250 - 4,600"
+      },
+      {
+        "field": "year",
+        "url": "https://media.toyota.co.uk/wp-content/uploads/sites/5/pdf/240704-GR-Yaris-Tech-Specs.pdf",
+        "quote": "240704-GR-Yaris-Tech-Specs.pdf (filename, 2024-07-04)"
+      }
+    ],
+    "converted_fields": [],
+    "notes": "Redline not published.",
+    "torque_rpm_max": 4600,
+    "verify": {
+      "status": "partial",
+      "bad_fields": [
+        "power_kw",
+        "power_rpm",
+        "torque_nm",
+        "torque_rpm"
+      ],
+      "note": "GR Yaris tech-spec PDF: values match (3 cylinders in-line; 1,618 cc; 87.5 x 89.7 mm; 276/280/206 @ 6,500 i.e. 206 kW; 390 @ 3,250-4,600 Nm). The cited quote lines are not verbatim: extraction splits the power triple from its label and places it beside the torque label. Metadata date 2024-07-04 supports year. Fix the quote text; values not changed."
+    }
+  },
+  {
+    "id": "bmw_s65b40_m3_2008",
+    "name": "BMW S65B40 4.0L V8 NA (2008 M3)",
+    "class": "car",
+    "fuel": "petrol",
+    "aspiration": "NA",
+    "layout": "V",
+    "cylinders": 8,
+    "bore_mm": 92,
+    "stroke_mm": 75.2,
+    "displacement_cc": 3999,
+    "power_kw": 308.7,
+    "power_rpm": 8300,
+    "torque_nm": 400,
+    "torque_rpm": 3900,
+    "redline_rpm": null,
+    "dry_mass_kg": null,
+    "mass_includes": null,
+    "length_mm": null,
+    "width_mm": null,
+    "height_mm": null,
+    "year": 2008,
+    "sources": [
+      {
+        "field": "cylinders",
+        "url": "https://www.press.bmwgroup.com/usa/article/attachment/T0017998EN_US/35560",
+        "quote": "Engine Type / Cylinder / Valves per Cylinder - 90 deg V / 8 / 4"
+      },
+      {
+        "field": "displacement_cc",
+        "url": "https://www.press.bmwgroup.com/usa/article/attachment/T0017998EN_US/35560",
+        "quote": "Displacement cm3 / inch3 3999 / 244"
+      },
+      {
+        "field": "stroke_mm",
+        "url": "https://www.press.bmwgroup.com/usa/article/attachment/T0017998EN_US/35560",
+        "quote": "Stroke mm / inch 75.2 / 2.96"
+      },
+      {
+        "field": "bore_mm",
+        "url": "https://www.press.bmwgroup.com/usa/article/attachment/T0017998EN_US/35560",
+        "quote": "Bore mm / inch 92 / 3.62"
+      },
+      {
+        "field": "power_kw",
+        "url": "https://www.press.bmwgroup.com/usa/article/attachment/T0017998EN_US/35560",
+        "quote": "Power SAE hp / rpm 414 / 8300"
+      },
+      {
+        "field": "power_rpm",
+        "url": "https://www.press.bmwgroup.com/usa/article/attachment/T0017998EN_US/35560",
+        "quote": "Power SAE hp / rpm 414 / 8300"
+      },
+      {
+        "field": "torque_nm",
+        "url": "https://www.press.bmwgroup.com/usa/article/attachment/T0017998EN_US/35560",
+        "quote": "Torque ft lbs / rpm 295 / 3900"
+      },
+      {
+        "field": "torque_rpm",
+        "url": "https://www.press.bmwgroup.com/usa/article/attachment/T0017998EN_US/35560",
+        "quote": "Torque ft lbs / rpm 295 / 3900"
+      },
+      {
+        "field": "year",
+        "url": "https://www.press.bmwgroup.com/usa/article/attachment/T0017998EN_US/35560",
+        "quote": "2008 M3 Sedan Technical Data (link title)"
+      }
+    ],
+    "converted_fields": [
+      "power_kw",
+      "torque_nm"
+    ],
+    "notes": "Redline not on sheet. Sheet curb weight 1690 kg is whole car.",
+    "verify": {
+      "status": "partial",
+      "bad_fields": [
+        "cylinders"
+      ],
+      "note": "BMW US press sheet 2008 M3 Sedan confirmed: Displacement 3999 / 244; Stroke 75.2 / 2.96; Bore 92 / 3.62; Power 414 / 8300 (308.7 kW = 414 x 0.7457); Torque 295 / 3900 (400 Nm); title '2008 BMW M3 Sedan. Technical Data.' 'Engine Type / Cylinder / Valves per Cylinder' label present but the value '90 deg V / 8 / 4' is not in the extracted text, so cylinders is unconfirmed."
+    }
+  },
+  {
+    "id": "gm_lsa_cts_v_2012",
+    "name": "GM LSA 6.2L supercharged V8 (2012 Cadillac CTS-V)",
+    "class": "car",
+    "fuel": "petrol",
+    "aspiration": "supercharged",
+    "layout": "V",
+    "cylinders": 8,
+    "bore_mm": 103.25,
+    "stroke_mm": 92,
+    "displacement_cc": 6162,
+    "power_kw": 415,
+    "power_rpm": 6100,
+    "torque_nm": 747,
+    "torque_rpm": 3800,
+    "redline_rpm": 6200,
+    "dry_mass_kg": null,
+    "mass_includes": null,
+    "length_mm": null,
+    "width_mm": null,
+    "height_mm": null,
+    "year": 2012,
+    "sources": [
+      {
+        "field": "cylinders",
+        "url": "https://www.cadillacvnet.com/tech-center/cts-v/2012/2012_cadillac_cts-v_sedan_specifications.html",
+        "quote": "6.2L Supercharged V-8"
+      },
+      {
+        "field": "displacement_cc",
+        "url": "https://www.cadillacvnet.com/tech-center/cts-v/2012/2012_cadillac_cts-v_sedan_specifications.html",
+        "quote": "Displacement (cu in / cc): 376 / 6162"
+      },
+      {
+        "field": "bore_mm",
+        "url": "https://www.cadillacvnet.com/tech-center/cts-v/2012/2012_cadillac_cts-v_sedan_specifications.html",
+        "quote": "Bore & stroke (in / mm): 4.06 x 3.62 / 103.25 x 92"
+      },
+      {
+        "field": "stroke_mm",
+        "url": "https://www.cadillacvnet.com/tech-center/cts-v/2012/2012_cadillac_cts-v_sedan_specifications.html",
+        "quote": "Bore & stroke (in / mm): 4.06 x 3.62 / 103.25 x 92"
+      },
+      {
+        "field": "power_kw",
+        "url": "https://www.cadillacvnet.com/tech-center/cts-v/2012/2012_cadillac_cts-v_sedan_specifications.html",
+        "quote": "Horsepower (hp / kW @ rpm): 556 / 415 @ 6100*"
+      },
+      {
+        "field": "power_rpm",
+        "url": "https://www.cadillacvnet.com/tech-center/cts-v/2012/2012_cadillac_cts-v_sedan_specifications.html",
+        "quote": "Horsepower (hp / kW @ rpm): 556 / 415 @ 6100*"
+      },
+      {
+        "field": "torque_nm",
+        "url": "https://www.cadillacvnet.com/tech-center/cts-v/2012/2012_cadillac_cts-v_sedan_specifications.html",
+        "quote": "Torque (lb-ft / Nm @ rpm): 551 / 747 @ 3800*"
+      },
+      {
+        "field": "torque_rpm",
+        "url": "https://www.cadillacvnet.com/tech-center/cts-v/2012/2012_cadillac_cts-v_sedan_specifications.html",
+        "quote": "Torque (lb-ft / Nm @ rpm): 551 / 747 @ 3800*"
+      },
+      {
+        "field": "redline_rpm",
+        "url": "https://www.cadillacvnet.com/tech-center/cts-v/2012/2012_cadillac_cts-v_sedan_specifications.html",
+        "quote": "Maximum engine speed (rpm): 6200"
+      },
+      {
+        "field": "year",
+        "url": "https://www.cadillacvnet.com/tech-center/cts-v/2012/2012_cadillac_cts-v_sedan_specifications.html",
+        "quote": "2012 cadillac cts v sedan specifications (URL)"
+      }
+    ],
+    "converted_fields": [],
+    "notes": "NOT a primary source: cadillacvnet.com is an enthusiast repost of GM press specs. GM Powered Solutions / media.gm.com returned HTTP 403. Replace with a GM primary if reachable.",
+    "verify": {
+      "status": "confirmed",
+      "bad_fields": [],
+      "note": "Cadillac VNet page quotes all confirmed: 6.2L Supercharged V-8; 376 / 6162 cc; 4.06 x 3.62 / 103.25 x 92 mm; 556 / 415 @ 6100 (SAE certified); 551 / 747 @ 3800; max engine speed 6200. Source is an enthusiast site, not a GM primary (row notes say so); GM media.gm.com returned 403, so this is secondary confirmation only."
+    }
+  }
+]

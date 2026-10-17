@@ -1,0 +1,1048 @@
+{
+ "figures": [
+  {
+   "id": "f01",
+   "topic": "engine_benchmark",
+   "item": "Packard V-1650 Merlin unit cost",
+   "value": 25000,
+   "unit": "USD",
+   "year": 1944,
+   "kind": "wartime",
+   "url": "https://www.engineering.com/how-military-aircraft-engines-got-so-expensive/",
+   "quote": "The Packard Merlin V12 piston engine that powered the Mustang cost approximately $25,000 per unit",
+   "quote_origin": "fetched_page",
+   "verify": {
+    "status": "confirmed",
+    "note": "engineering.com quote read verbatim: 'The Packard Merlin V12 piston engine that powered the Mustang cost approximately $25,000 per unit'. 1944 context in the following clause ('a substantial sum for 1944')."
+   }
+  },
+  {
+   "id": "f02",
+   "topic": "engine_benchmark",
+   "item": "Packard V-1650 Merlin unit cost (inflation-adjusted by source)",
+   "value": 426000,
+   "unit": "USD",
+   "year": 2022,
+   "kind": "estimate_by_source",
+   "url": "https://www.engineering.com/how-military-aircraft-engines-got-so-expensive/",
+   "quote": "Using the Bureau of Labor Statistics' inflation calculator tool, this equates to $426,000 in 2022.",
+   "quote_origin": "fetched_page",
+   "verify": {
+    "status": "confirmed",
+    "note": "engineering.com: 'Using the Bureau of Labor Statistics' inflation calculator tool, this equates to $426,000 in 2022.'"
+   }
+  },
+  {
+   "id": "f03",
+   "topic": "engine_benchmark",
+   "item": "Packard V-1650 Merlin unit cost range low",
+   "value": 12548,
+   "unit": "USD",
+   "year": null,
+   "kind": "wartime",
+   "url": "https://www.engineering.com/how-military-aircraft-engines-got-so-expensive/",
+   "quote": "the cost per engine ranged from $12,548 to $17,185",
+   "quote_origin": "search_result_summary",
+   "note": "Search summary attributed this to NASM via another page; the underlying page was not opened. Range 12,548-17,185.",
+   "verify": {
+    "status": "rejected",
+    "note": "Range low $12,548 is not on the fetched article page; only the search summary contains it. Value unverified."
+   }
+  },
+  {
+   "id": "f04",
+   "topic": "engine_benchmark",
+   "item": "Packard V-1650 Merlin unit cost range high",
+   "value": 17185,
+   "unit": "USD",
+   "year": null,
+   "kind": "wartime",
+   "url": "https://www.engineering.com/how-military-aircraft-engines-got-so-expensive/",
+   "quote": "the cost per engine ranged from $12,548 to $17,185",
+   "quote_origin": "search_result_summary",
+   "note": "Same unverified range as previous item.",
+   "verify": {
+    "status": "rejected",
+    "note": "Range high $17,185 is not on the fetched article page; only the search summary contains it. Value unverified."
+   }
+  },
+  {
+   "id": "f05",
+   "topic": "engine_benchmark",
+   "item": "Allison J-33 jet engine unit cost",
+   "value": 20000,
+   "unit": "USD",
+   "year": 1949,
+   "kind": "contract",
+   "url": "https://www.engineering.com/how-military-aircraft-engines-got-so-expensive/",
+   "quote": "in 1949 it cost $20,000-less than the famously complex World War II Packard Merlin piston engine",
+   "quote_origin": "fetched_page",
+   "verify": {
+    "status": "confirmed",
+    "note": "engineering.com: 'and in 1949 it cost $20,000' (JSON quote is an extended paraphrase; figure and year match)."
+   }
+  },
+  {
+   "id": "f06",
+   "topic": "engine_benchmark",
+   "item": "GE J79 (F-104) unit cost",
+   "value": 625000,
+   "unit": "USD",
+   "year": 1960,
+   "kind": "contract",
+   "url": "https://www.engineering.com/how-military-aircraft-engines-got-so-expensive/",
+   "quote": "an early model like the Dash Three variant used in a Starfighter would cost about $625,000 in 1960.",
+   "quote_origin": "fetched_page",
+   "verify": {
+    "status": "confirmed",
+    "note": "engineering.com: 'an early model like the Dash Three variant used in a Starfighter would cost about $625,000 in 1960.'"
+   }
+  },
+  {
+   "id": "f07",
+   "topic": "engine_benchmark",
+   "item": "Pratt & Whitney F100-229 unit cost",
+   "value": 3500000,
+   "unit": "USD",
+   "year": 1991,
+   "kind": "contract",
+   "url": "https://www.engineering.com/how-military-aircraft-engines-got-so-expensive/",
+   "quote": "a good ballpark estimate of the 1991 cost of a 229-F-100 turbofan is three and half million dollars",
+   "quote_origin": "fetched_page",
+   "note": "Article's own ballpark.",
+   "verify": {
+    "status": "confirmed",
+    "note": "engineering.com: 'a good ballpark estimate of the 1991 cost of a 229-F-100 turbofan is three and half million dollars'. Article's own estimate."
+   }
+  },
+  {
+   "id": "f08",
+   "topic": "engine_benchmark",
+   "item": "F135-PW-600 unit cost",
+   "value": 21000000,
+   "unit": "USD",
+   "year": null,
+   "kind": "contract",
+   "url": "https://www.engineering.com/how-military-aircraft-engines-got-so-expensive/",
+   "quote": "is reported by defence – aerospace.com as costing 21 million dollars per engine.",
+   "quote_origin": "fetched_page",
+   "verify": {
+    "status": "confirmed",
+    "note": "engineering.com: 'is reported by defence - aerospace.com as costing 21 million dollars per engine.' Secondary citation; no year stated (year null is correct)."
+   }
+  },
+  {
+   "id": "f09",
+   "topic": "engine_benchmark",
+   "item": "Packard Merlin total production (volume reference)",
+   "value": 55523,
+   "unit": "engines",
+   "year": null,
+   "kind": "estimate_by_source",
+   "url": "https://en.wikipedia.org/wiki/Rolls-Royce_Merlin",
+   "quote": "Total Merlin production by Packard was 55,523.",
+   "quote_origin": "fetched_page",
+   "verify": {
+    "status": "confirmed",
+    "note": "en.wikipedia.org Rolls-Royce_Merlin: 'Total Merlin production by Packard was 55,523.'"
+   }
+  },
+  {
+   "id": "f10",
+   "topic": "engine_benchmark",
+   "item": "Chevrolet Performance LS3 430 hp crate (OPGI list price)",
+   "value": 12100.95,
+   "unit": "USD",
+   "year": null,
+   "kind": "retail",
+   "url": "https://www.opgi.com/engines-components/engine-assemblies/crate-engine-ls3-430hp-gmpp-chevrolet-gm-19435098-CH31332.html",
+   "quote": "$10,999.99 against a $12,100.95 list price",
+   "quote_origin": "search_result_summary",
+   "note": "Retailer page returned empty to fetch; figures from search summary. Date not shown.",
+   "verify": {
+    "status": "rejected",
+    "note": "OPGI page returned empty on fetch; no source read. Value unverified."
+   }
+  },
+  {
+   "id": "f11",
+   "topic": "engine_benchmark",
+   "item": "Chevrolet Performance LS3 430 hp crate (OPGI sale price)",
+   "value": 10999.99,
+   "unit": "USD",
+   "year": null,
+   "kind": "retail",
+   "url": "https://www.opgi.com/engines-components/engine-assemblies/crate-engine-ls3-430hp-gmpp-chevrolet-gm-19435098-CH31332.html",
+   "quote": "One OPGI listing shows $10,999.99 against a $12,100.95 list price.",
+   "quote_origin": "search_result_summary",
+   "verify": {
+    "status": "rejected",
+    "note": "OPGI page returned empty on fetch; no source read. Value unverified."
+   }
+  },
+  {
+   "id": "f12",
+   "topic": "engine_benchmark",
+   "item": "Chevrolet Performance LS376/480 crate (MSRP)",
+   "value": 13998.05,
+   "unit": "USD",
+   "year": null,
+   "kind": "retail",
+   "url": "https://sdparts.com/chevrolet-performance-19435100-ls376480-ls3-crate-engine-480hp-19540156/",
+   "quote": "SD Parts lists it at $11,128.44 against an MSRP of $13,998.05",
+   "quote_origin": "search_result_summary",
+   "note": "Out of stock per summary.",
+   "verify": {
+    "status": "rejected",
+    "note": "SD Parts page shows 'MSRP: $14,169.69' and 'Now: $11,264.90' and 'IN STOCK'. Neither $13,998.05 nor $11,128.44 appears. Note 'out of stock' is also contradicted."
+   }
+  },
+  {
+   "id": "f13",
+   "topic": "engine_benchmark",
+   "item": "Ford Performance 5.0 Coyote 480 hp crate",
+   "value": 11500,
+   "unit": "USD",
+   "year": null,
+   "kind": "oem",
+   "url": "https://www.hagerty.com/media/?p=392575",
+   "quote": "Ford Performance sells the updated 5.0 as a crate engine with a sticker price of $11,500.",
+   "quote_origin": "search_result_summary",
+   "note": "Hagerty returned 403; from search summary. Excludes alternator, PCM. Year not shown.",
+   "verify": {
+    "status": "rejected",
+    "note": "Hagerty returned HTTP 403; page not read. Value unverified."
+   }
+  },
+  {
+   "id": "f14",
+   "topic": "engine_benchmark",
+   "item": "Ford Performance Gen 3 Coyote 460 hp crate (AmericanMuscle)",
+   "value": 9847.99,
+   "unit": "USD",
+   "year": null,
+   "kind": "retail",
+   "url": "https://mgmt-www.americanmuscle.com/ford-performance-mustang-gen-3-50l-460hp-crate-enginemanual-transmission-engine-harness-m-6007-m50c.html",
+   "quote": "lists a Ford Performance 460 hp crate engine at $9,847.99 each",
+   "quote_origin": "search_result_summary",
+   "verify": {
+    "status": "rejected",
+    "note": "Host mgmt-www.americanmuscle.com did not resolve (ENOTFOUND); page not read. Value unverified."
+   }
+  },
+  {
+   "id": "f15",
+   "topic": "engine_benchmark",
+   "item": "Cummins X15 remanufactured engine (Capital Reman)",
+   "value": 20000,
+   "unit": "USD",
+   "year": null,
+   "kind": "retail",
+   "url": "https://www.capitalremanexchange.com/cummins-x15.html",
+   "quote": "Engine: $20000.00",
+   "quote_origin": "fetched_page",
+   "note": "Reman with core $2000 ('Core: $2000'); 'Remanufactured diesel engines are built with all new parts'. Not a new-engine price.",
+   "verify": {
+    "status": "confirmed",
+    "note": "capitalremanexchange.com: 'Engine: $20000.00', 'Core: $2000', and 'Remanufactured diesel engines are built with all new parts'. Confirms a reman price, not a new-engine price."
+   }
+  },
+  {
+   "id": "f16",
+   "topic": "engine_benchmark",
+   "item": "Cummins X15 reman complete engine (Diesel Sales)",
+   "value": 34995,
+   "unit": "USD",
+   "year": null,
+   "kind": "retail",
+   "url": "https://dieselsales.com/product/cummins-x15-engine/",
+   "quote": "a complete reman engine is $34,995, with a $4,500 core charge",
+   "quote_origin": "search_result_summary",
+   "verify": {
+    "status": "rejected",
+    "note": "dieselsales.com: '$34,995' absent; page shows a price of $29,995.00 and 'Core Deposit: $4,500.00'. Core charge confirmed, price not."
+   }
+  },
+  {
+   "id": "f17",
+   "topic": "engine_benchmark",
+   "item": "Cummins X15 rebuilt 2019 (TruckPaper private seller)",
+   "value": 38000,
+   "unit": "USD",
+   "year": 2019,
+   "kind": "retail",
+   "url": "https://www.truckpaper.com/listing/for-sale/230036577/2019-cummins-x15-engine",
+   "quote": "A 2019 X15 rebuilt engine from a private seller is listed at $38,000.",
+   "quote_origin": "search_result_summary",
+   "verify": {
+    "status": "rejected",
+    "note": "TruckPaper returned HTTP 403; page not read. Value unverified."
+   }
+  },
+  {
+   "id": "f18",
+   "topic": "engine_benchmark",
+   "item": "Lycoming O-360-A4A new (distributor Air Power)",
+   "value": 74489,
+   "unit": "USD",
+   "year": null,
+   "kind": "retail",
+   "url": "https://www.airpowerinc.com/enpl-rt8601",
+   "quote": "O-360-A4A (for Piper PA-28-180): $74,489.00 and $24,000.00, with a total of $98,489.00",
+   "quote_origin": "search_result_summary",
+   "note": "Fetch 403; second figure unlabeled in source (possible core/fee). Total 98,489. No Lycoming MSRP found.",
+   "verify": {
+    "status": "rejected",
+    "note": "airpowerinc.com returned HTTP 403; page not read. Value unverified."
+   }
+  },
+  {
+   "id": "f19",
+   "topic": "engine_benchmark",
+   "item": "Lycoming O-360-A4P new (distributor Air Power)",
+   "value": 84651,
+   "unit": "USD",
+   "year": null,
+   "kind": "retail",
+   "url": "https://airpowerinc.com/enpl-rt9529",
+   "quote": "O-360-A4P (for PA-18): $84,651.00 and $30,000.00, with a total of $114,651.00",
+   "quote_origin": "search_result_summary",
+   "note": "Second figure unlabeled.",
+   "verify": {
+    "status": "rejected",
+    "note": "airpowerinc.com returned HTTP 403; page not read. Value unverified."
+   }
+  },
+  {
+   "id": "f20",
+   "topic": "engine_benchmark",
+   "item": "Honeywell AGT1500 overhaul cost (not new)",
+   "value": 500000,
+   "unit": "USD",
+   "year": 2016,
+   "kind": "contract",
+   "url": "https://www.australiandefence.com.au/news/tae-cuts-abrams-engine-overhaul-times",
+   "quote": "cost up to $500,000 per unit",
+   "quote_origin": "search_result_summary",
+   "note": "Overhaul at US depot, upper bound, article year about 2016. Not a new-build price.",
+   "verify": {
+    "status": "confirmed",
+    "note": "australiandefence.com.au article dated 2 October 2016: 'cost up to $500,000 per unit.' Upper bound, overhaul, not new build (as noted)."
+   }
+  },
+  {
+   "id": "f21",
+   "topic": "engine_benchmark",
+   "item": "AGT1500 FMS package 60 engines estimated value (package, per-engine NOT stated)",
+   "value": 750000000,
+   "unit": "USD",
+   "year": 2026,
+   "kind": "contract",
+   "url": "https://www.globalmilitary.net/news/saudi-arabia-cleared-10004-jdam-kits-60-abrams-engines-5-75-billion/",
+   "quote": "60 AGT-1500 engines at an estimated $750 million",
+   "quote_origin": "search_result_summary",
+   "note": "Source does not state per-engine price; $12.5M/engine is arithmetic and package may bundle support. Unreliable outlier; excluded from ranges.",
+   "verify": {
+    "status": "rejected",
+    "note": "globalmilitary.net returned HTTP 403; page not read. Figure already excluded from ranges."
+   }
+  },
+  {
+   "id": "f22",
+   "topic": "part_price",
+   "item": "Turbocharging I4 18 bar direct manufacturing cost (EPA/NHTSA TSD via NRC)",
+   "value": 365,
+   "unit": "USD",
+   "year": 2010,
+   "kind": "estimate_by_source",
+   "url": "https://www.nationalacademies.org/read/21744/chapter/32",
+   "quote": "the $365 turbocharging cost from TSD Table 3-31",
+   "quote_origin": "search_result_summary",
+   "note": "NRC 2015 reproducing EPA/NHTSA TSD; 2010 dollars, 2017 MY. Net of $77 downsizing credit = $288.",
+   "verify": {
+    "status": "confirmed",
+    "note": "NRC chapter 32: '$365 (TSD, Table 3-31)' present for turbocharging. The 2010-dollar year was not separately checked."
+   }
+  },
+  {
+   "id": "f23",
+   "topic": "part_price",
+   "item": "Turbocharging 24 bar 50% downsized direct manufacturing cost (TSD via NRC)",
+   "value": 547,
+   "unit": "USD",
+   "year": 2010,
+   "kind": "estimate_by_source",
+   "url": "https://www.nationalacademies.org/read/21744/chapter/32",
+   "quote": "turbocharging for 24 bar $547 (TSD, Table 3-31)",
+   "quote_origin": "search_result_summary",
+   "verify": {
+    "status": "confirmed",
+    "note": "NRC chapter 32: '$547 (TSD, Table 3-31)' for TRBDS2 (24 bar BMEP, 50 percent downsizing)."
+   }
+  },
+  {
+   "id": "f24",
+   "topic": "part_price",
+   "item": "Holset HX40W heavy diesel turbo (eBay, Cummins 6CT)",
+   "value": 390,
+   "unit": "USD",
+   "year": null,
+   "kind": "retail",
+   "url": "https://www.ebay.com/str/csspeedauto",
+   "quote": "Turbo HX40W Turbocharger for Holset Cummins HMRO 6C 3598070 4089393 3598500 $390.00",
+   "quote_origin": "search_result_summary",
+   "note": "Reseller asking price, possibly aftermarket.",
+   "verify": {
+    "status": "rejected",
+    "note": "eBay store page: neither 'HX40W' nor '$390.00' appears. Value unverified."
+   }
+  },
+  {
+   "id": "f25",
+   "topic": "part_price",
+   "item": "Holset HE351 turbo (5.9 Cummins, eBay)",
+   "value": 465,
+   "unit": "USD",
+   "year": null,
+   "kind": "retail",
+   "url": "https://www.ebay.com/p/2079276413",
+   "quote": "5.9 Cummins Holset Turbo HE351 at $465.00",
+   "quote_origin": "search_result_summary",
+   "verify": {
+    "status": "partial",
+    "note": "eBay page contains '5.9 Cummins Holset Turbo HE351 ... $465.00' only as a related listing, not the cited product. Supports the value for that listing only."
+   }
+  },
+  {
+   "id": "f26",
+   "topic": "part_price",
+   "item": "Holset HE351VE turbo (Dodge 6.7L)",
+   "value": 799,
+   "unit": "USD",
+   "year": null,
+   "kind": "retail",
+   "url": "https://www.ebay.com/p/2079276413",
+   "quote": "HE351VE (Dodge 6.7L): Listed at $799.00",
+   "quote_origin": "search_result_summary",
+   "verify": {
+    "status": "rejected",
+    "note": "eBay page: '$799.00' and 'HE351VE' absent; page references a 5.9L Dodge engine, not 6.7L."
+   }
+  },
+  {
+   "id": "f27",
+   "topic": "part_price",
+   "item": "Starter 24V (municipal bid, low vendor)",
+   "value": 138.95,
+   "unit": "USD",
+   "year": 2015,
+   "kind": "contract",
+   "url": "https://www.columbusga.gov/finance/purchasing/docs/tabulations/rfb15-0022tab.pdf",
+   "quote": "Starter 24V at a range of $138.95 to $245.00 across vendors",
+   "quote_origin": "search_result_summary",
+   "note": "Fetch failed; summary only. Range 138.95-245.00.",
+   "verify": {
+    "status": "rejected",
+    "note": "columbusga.gov rfb15 PDF returned HTTP 404; not read. Value unverified."
+   }
+  },
+  {
+   "id": "f28",
+   "topic": "part_price",
+   "item": "Starter 24V (municipal bid, high vendor)",
+   "value": 245,
+   "unit": "USD",
+   "year": 2015,
+   "kind": "contract",
+   "url": "https://www.columbusga.gov/finance/purchasing/docs/tabulations/rfb15-0022tab.pdf",
+   "quote": "Starter 24V at a range of $138.95 to $245.00 across vendors",
+   "quote_origin": "search_result_summary",
+   "verify": {
+    "status": "rejected",
+    "note": "columbusga.gov rfb15 PDF returned HTTP 404; not read. Value unverified."
+   }
+  },
+  {
+   "id": "f29",
+   "topic": "part_price",
+   "item": "Ford truck alternator (municipal bid)",
+   "value": 85,
+   "unit": "USD",
+   "year": 2009,
+   "kind": "contract",
+   "url": "https://www.columbusga.gov/finance/Purchasing/docs/Tabulations/rfb10-0003tab.pdf",
+   "quote": "a Ford truck alternator at $85 and a 24V starter at $158.50",
+   "quote_origin": "search_result_summary",
+   "note": "Fetch 404; summary only.",
+   "verify": {
+    "status": "rejected",
+    "note": "columbusga.gov rfb10 PDF returned HTTP 404; not read. Value unverified."
+   }
+  },
+  {
+   "id": "f30",
+   "topic": "part_price",
+   "item": "Starter 24V (municipal bid 2009)",
+   "value": 158.5,
+   "unit": "USD",
+   "year": 2009,
+   "kind": "contract",
+   "url": "https://www.columbusga.gov/finance/Purchasing/docs/Tabulations/rfb10-0003tab.pdf",
+   "quote": "a Ford truck alternator at $85 and a 24V starter at $158.50",
+   "quote_origin": "search_result_summary",
+   "verify": {
+    "status": "rejected",
+    "note": "columbusga.gov rfb10 PDF returned HTTP 404; not read. Value unverified."
+   }
+  },
+  {
+   "id": "f31",
+   "topic": "part_price",
+   "item": "Engine control unit, Mitsubishi Lancer Evo (parts catalog)",
+   "value": 875.15,
+   "unit": "USD",
+   "year": null,
+   "kind": "retail",
+   "url": "https://www.amayama.com/ru/catalogs/mitsubishi/lancer-evolution/10-sedan-right-2007-1151/engine-fuel-system-and-tools-1/electrical-control-1109",
+   "quote": "an engine control unit at $875.15 USD",
+   "quote_origin": "search_result_summary",
+   "verify": {
+    "status": "rejected",
+    "note": "amayama.com returned HTTP 403; page not read. Value unverified."
+   }
+  },
+  {
+   "id": "f32",
+   "topic": "part_price",
+   "item": "Tesla Model 3 motor teardown cost",
+   "value": 754,
+   "unit": "USD",
+   "year": 2018,
+   "kind": "estimate_by_source",
+   "url": "https://cleantechnica.com/2018/10/23/second-tesla-model-3-teardown-highlights-strengths-opportunities-for-tesla",
+   "quote": "Tesla's motor for the Model 3 costs an estimated $754, which is significantly cheaper than the motors used in the Chevrolet Bolt ($836) and BMW i3 ($841)",
+   "quote_origin": "search_result_summary",
+   "note": "Fetch redirected, not re-fetched. kW rating not read, so no $/kW.",
+   "verify": {
+    "status": "confirmed",
+    "note": "cleantechnica.com (after 301 redirect): 'Munro's analysis estimated that Tesla's motor for the Model 3 costs an estimated $754'. Bolt $836 and BMW i3 $841 also present. No kW rating, so no $/kW."
+   }
+  },
+  {
+   "id": "f33",
+   "topic": "part_price",
+   "item": "Tesla Model 3 inverter teardown cost (Munro)",
+   "value": 810,
+   "unit": "USD",
+   "year": 2018,
+   "kind": "estimate_by_source",
+   "url": "https://insideevs.com/features/443775/tesla-motors-invertors-compared-competition-sandy-munro/",
+   "quote": "Munro estimated the 2018 Model 3 inverter at around $810, whereas the inverter used in the 2020 Model Y cost only about $522",
+   "quote_origin": "search_result_summary",
+   "note": "Secondary coverage; another write-up gives $1100 for 2018.",
+   "verify": {
+    "status": "rejected",
+    "note": "insideevs.com returned HTTP 502; page not read. Value unverified."
+   }
+  },
+  {
+   "id": "f34",
+   "topic": "part_price",
+   "item": "Electric traction motor cost, DOE status",
+   "value": 11.7,
+   "unit": "USD/kW",
+   "year": 2014,
+   "kind": "estimate_by_source",
+   "url": "https://www.energy.gov/sites/prod/files/2014/09/f18/fy_2014_vto_amr_apeem_overview-final_version.pdf",
+   "quote": "Current specific cost: $11.7/kW 2020 R&D target: $4.7/kW",
+   "quote_origin": "fetched_page",
+   "note": "Extracted from PDF text locally, IPM motor cost breakdown slide.",
+   "verify": {
+    "status": "confirmed",
+    "note": "DOE FY2014 APEEM slides (local PDF text): 'Cost Breakdown for an IPM Motor ... Current specific cost: $11.7/kW' and '2020 R&D target: $4.7/kW'."
+   }
+  },
+  {
+   "id": "f35",
+   "topic": "part_price",
+   "item": "Traction inverter cost, DOE status",
+   "value": 13.7,
+   "unit": "USD/kW",
+   "year": 2014,
+   "kind": "estimate_by_source",
+   "url": "https://www.energy.gov/sites/prod/files/2014/09/f18/fy_2014_vto_amr_apeem_overview-final_version.pdf",
+   "quote": "Current specific cost: $13.7/kW 2020 R&D target: $3.3/kW",
+   "quote_origin": "fetched_page",
+   "note": "Extracted from PDF text locally, inverter cost breakdown slide.",
+   "verify": {
+    "status": "confirmed",
+    "note": "DOE FY2014 APEEM slides (local PDF text): 'Cost Breakdown for an Inverter ... Current specific cost: $13.7/kW', '2020 R&D target: $3.3/kW'."
+   }
+  },
+  {
+   "id": "f36",
+   "topic": "part_price",
+   "item": "Electric traction motor, USDRIVE 2025 target",
+   "value": 3.3,
+   "unit": "USD/kW",
+   "year": 2025,
+   "kind": "estimate_by_source",
+   "url": "https://www.energy.gov/sites/default/files/2020/06/f75/elt250_brown_2020_p_4.27.20_6.52pm_LT_0.pdf",
+   "quote": "Cost ($/kW) 4.7 3.3 30% cost reduction",
+   "quote_origin": "fetched_page",
+   "note": "Columns 2020, 2025. A target, not a price.",
+   "verify": {
+    "status": "partial",
+    "note": "DOE 2020 AMR slide (local PDF text): table headers 'Year 2020 2025 Change' and 'Cost ($/kW)', with '4.7 3.3 30% cost reduction'. In the extracted text the 4.7/3.3 values sit on the 'Power Density (kW/l)' row, so the cost-row values are not unambiguous. Target, not a price."
+   }
+  },
+  {
+   "id": "f37",
+   "topic": "part_price",
+   "item": "Delphi power electronics at 100k units/yr (DOE slide)",
+   "value": 5,
+   "unit": "USD/kW",
+   "year": 2014,
+   "kind": "estimate_by_source",
+   "url": "https://www.energy.gov/sites/prod/files/2014/09/f18/fy_2014_vto_amr_apeem_overview-final_version.pdf",
+   "quote": "Cost $5/kW $5/kW",
+   "quote_origin": "fetched_page",
+   "note": "Source footnote: 'assuming volume of 100,000 units/year, cost/kW would be lower for upper end of 55-120 kW power range and higher for lower end'. Slide also shows 2014 electric drive system R&D target $15/kW.",
+   "verify": {
+    "status": "confirmed",
+    "note": "DOE FY2014 APEEM slide (local PDF text): 'Cost $5/kW' with footnote 'assuming volume of 100,000 units/year, cost/kW would be lower for upper end of 55-120 kW power range'."
+   }
+  },
+  {
+   "id": "f38",
+   "topic": "material",
+   "item": "Titanium sponge price",
+   "value": 13,
+   "unit": "USD/kg",
+   "year": 2024,
+   "kind": "raw",
+   "url": "https://pubs.usgs.gov/periodicals/mcs2025/mcs2025-titanium.pdf",
+   "quote": "Price, dollars per kilogram4 10.60 11.10 11.10 12.40 13",
+   "quote_origin": "fetched_page",
+   "note": "Columns 2020-2024 (2024 estimated).",
+   "verify": {
+    "status": "rejected",
+    "note": "The quoted row 'Price, dollars per kilogram' reads 'W' (withheld) for every year. The values 10.60 / 11.10 / 11.10 / 12.40 / 13 belong to the row 'Stocks, industry, yearend'. The $13/kg price is not supported."
+   }
+  },
+  {
+   "id": "f39",
+   "topic": "material",
+   "item": "Copper US producer cathode annual average",
+   "value": 431.8,
+   "unit": "US cents/lb",
+   "year": 2024,
+   "kind": "raw",
+   "url": "https://pubs.usgs.gov/periodicals/mcs2026/mcs2026-copper.pdf",
+   "quote": "U.S. producer, cathode (COMEX + premium) 432.3 410.8 395.3 431.8 490",
+   "quote_origin": "fetched_page",
+   "note": "MCS2026 columns 2021-2025e. 9.52 USD/kg. LME cash 2024: 414.7 c/lb = 9.14 USD/kg.",
+   "verify": {
+    "status": "partial",
+    "note": "USGS MCS2026 (local PDF text): 'London Metal Exchange, grade A, cash' row reads 432.3 410.8 395.3 431.8 490 (cents per pound). 431.8 is usable as LME cash, not 'U.S. producer cathode', whose row reads 1,970 1,810 1,680 1,860 2,200. Year column mapping inferred from the note, header not extracted."
+   }
+  },
+  {
+   "id": "f40",
+   "topic": "material",
+   "item": "Primary aluminum ingot US spot, March 2025",
+   "value": 1.59,
+   "unit": "USD/lb",
+   "year": 2025,
+   "kind": "raw",
+   "url": "https://apps.usgs.gov/minerals-information-archives/aluminum/mis-202503-alumi.pdf",
+   "quote": "The March 2025 average U.S. spot market price of primary aluminum ingot was $1.59 per pound",
+   "quote_origin": "fetched_page",
+   "note": "3.51 USD/kg. USGS Nov 2024 $1.39/lb (3.06 USD/kg) came from a search summary, not opened.",
+   "verify": {
+    "status": "confirmed",
+    "note": "USGS MIS March 2025 (local PDF text): 'The March 2025 average U.S. spot market price of primary aluminum ingot was $1.59 per pound'."
+   }
+  },
+  {
+   "id": "f41",
+   "topic": "material",
+   "item": "US hot-rolled coil steel",
+   "value": 800,
+   "unit": "USD/short ton",
+   "year": 2024,
+   "kind": "raw",
+   "url": "https://gmk.center/en/news/prices-for-hot-rolled-steel-fell-to-800-per-short-ton-in-the-us/",
+   "quote": "with the price of hot rolled coil (HRC) dropping to $800 per short tonne in early March.",
+   "quote_origin": "fetched_page",
+   "note": "0.88 USD/kg. Other 2024 weekly quotes $680 (June) to $750 (Nov) per short ton from search summary of other gmk.center pages, not opened.",
+   "verify": {
+    "status": "confirmed",
+    "note": "gmk.center (dated 07 March 2024): 'with the price of hot rolled coil (HRC) dropping to $800 per short tonne in early March.'"
+   }
+  },
+  {
+   "id": "f42",
+   "topic": "material",
+   "item": "Heavy cast iron scrap (recycler blog)",
+   "value": 0.07,
+   "unit": "USD/lb",
+   "year": null,
+   "kind": "raw",
+   "url": "https://www.okonrecycling.com/industrial-scrap-metal-recycling/steel-and-aluminum/1-lb-of-iron-worth/",
+   "quote": "heavy cast iron ranges from $0.06 to $0.08 per pound",
+   "quote_origin": "search_result_summary",
+   "note": "Undated blog, weak source. 0.13-0.18 USD/kg.",
+   "verify": {
+    "status": "confirmed",
+    "note": "okonrecycling.com: 'heavy cast iron ranges from $0.06 to $0.08 per pound.' Undated blog, weak source (year null is correct)."
+   }
+  },
+  {
+   "id": "f43",
+   "topic": "labour",
+   "item": "Mean hourly wage, engine assemblers, Motor Vehicle Parts Mfg",
+   "value": 26.52,
+   "unit": "USD/h",
+   "year": 2023,
+   "kind": "estimate_by_source",
+   "url": "https://www.bls.gov/oes/2023/May/oes512031.htm",
+   "quote": "Motor Vehicle Parts Manufacturing | 24,900 | 4.47 | $ 26.52 | $ 55,150",
+   "quote_origin": "fetched_page",
+   "note": "Direct wage, no overhead/benefits.",
+   "verify": {
+    "status": "confirmed",
+    "note": "BLS OEWS May 2023 table: 'Motor Vehicle Parts Manufacturing | 24,900 | 4.47 | $ 26.52 | $ 55,150'."
+   }
+  },
+  {
+   "id": "f44",
+   "topic": "labour",
+   "item": "Mean hourly wage, engine assemblers, Engine/Turbine/Power Transmission Mfg",
+   "value": 23.16,
+   "unit": "USD/h",
+   "year": 2023,
+   "kind": "estimate_by_source",
+   "url": "https://www.bls.gov/oes/2023/May/oes512031.htm",
+   "quote": "Engine, Turbine, and Power Transmission Equipment Manufacturing | 8,670 | 9.38 | $ 23.16 | $ 48,170",
+   "quote_origin": "fetched_page",
+   "verify": {
+    "status": "confirmed",
+    "note": "BLS OEWS May 2023 table: 'Engine, Turbine, and Power Transmission Equipment Manufacturing | 8,670 | 9.38 | $ 23.16 | $ 48,170'."
+   }
+  },
+  {
+   "id": "f45",
+   "topic": "labour",
+   "item": "Mean hourly wage, engine assemblers, all industries",
+   "value": 25.71,
+   "unit": "USD/h",
+   "year": 2023,
+   "kind": "estimate_by_source",
+   "url": "https://www.bls.gov/oes/2023/May/oes512031.htm",
+   "quote": "National mean hourly wage: $ 25.71",
+   "quote_origin": "fetched_page",
+   "verify": {
+    "status": "partial",
+    "note": "No line labelled 'National mean hourly wage' on the BLS page. The national estimates table shows a mean hourly wage of $25.71 for the occupation. Value present, quote wording not."
+   }
+  },
+  {
+   "id": "f46",
+   "topic": "labour_hours",
+   "item": "Hours per engine, GM V8 benchmark (Harbour)",
+   "value": 4.21,
+   "unit": "h/engine",
+   "year": null,
+   "kind": "estimate_by_source",
+   "url": "https://www.just-auto.com/news/usa-nissans-smyrna-assembly-plant-is-most-productive-in-annual-survey",
+   "quote": "GM remained the benchmark in V8 productivity with a 4.21 HPE",
+   "quote_origin": "fetched_page",
+   "note": "Article year not shown by fetch (Harbour report, mid-2000s).",
+   "verify": {
+    "status": "confirmed",
+    "note": "just-auto.com: 'GM remained the benchmark in V8 productivity with a 4.21 HPE.' Article year not stated, so the 'mid-2000s' note is unverified."
+   }
+  },
+  {
+   "id": "f47",
+   "topic": "labour_hours",
+   "item": "Hours per engine, Toyota 4-cyl (Harbour)",
+   "value": 2.36,
+   "unit": "h/engine",
+   "year": null,
+   "kind": "estimate_by_source",
+   "url": "https://www.just-auto.com/news/usa-nissans-smyrna-assembly-plant-is-most-productive-in-annual-survey",
+   "quote": "Toyota led the four-cylinder segment with a HPE of 2.36",
+   "quote_origin": "fetched_page",
+   "verify": {
+    "status": "confirmed",
+    "note": "just-auto.com: 'Toyota led the four-cylinder segment with a HPE of 2.36'."
+   }
+  },
+  {
+   "id": "f48",
+   "topic": "labour_hours",
+   "item": "Hours per engine, Honda 6-cyl (Harbour)",
+   "value": 3.64,
+   "unit": "h/engine",
+   "year": null,
+   "kind": "estimate_by_source",
+   "url": "https://www.just-auto.com/news/usa-nissans-smyrna-assembly-plant-is-most-productive-in-annual-survey",
+   "quote": "Honda remained first in six-cylinder productivity with a 3.64 HPE",
+   "quote_origin": "fetched_page",
+   "verify": {
+    "status": "confirmed",
+    "note": "just-auto.com: 'Honda remained first in six-cylinder productivity with a 3.64 HPE.'"
+   }
+  },
+  {
+   "id": "f49",
+   "topic": "labour_hours",
+   "item": "Hours per engine, Chrysler average (Harbour)",
+   "value": 5,
+   "unit": "h/engine",
+   "year": null,
+   "kind": "estimate_by_source",
+   "url": "https://www.just-auto.com/news/usa-nissans-smyrna-assembly-plant-is-most-productive-in-annual-survey",
+   "quote": "Chrysler took its hours per engine (HPE) measure below 5 hours for the first time ever.",
+   "quote_origin": "fetched_page",
+   "note": "Upper bound (<5).",
+   "verify": {
+    "status": "confirmed",
+    "note": "just-auto.com: 'Chrysler took its hours per engine (HPE) measure below 5 hours for the first time ever.' Value 5 is an upper bound, as noted."
+   }
+  },
+  {
+   "id": "f50",
+   "topic": "volume",
+   "item": "Learning rate: EPA factor per doubling of volume",
+   "value": 0.2,
+   "unit": "fraction cost reduction per doubling",
+   "year": null,
+   "kind": "estimate_by_source",
+   "url": "https://www.nhtsa.gov/sites/nhtsa.gov/files/deis_appx_c.pdf",
+   "quote": "EPA has used a learning curve factor of 20 percent for each doubling of production volume in past rulemakings",
+   "quote_origin": "search_result_summary",
+   "note": "NHTSA DEIS Appx C fetch 403; summary only.",
+   "verify": {
+    "status": "rejected",
+    "note": "NHTSA DEIS Appendix C returned HTTP 403; not read. Value unverified."
+   }
+  },
+  {
+   "id": "f51",
+   "topic": "volume",
+   "item": "Learning rate: automobile assembly labor",
+   "value": 0.16,
+   "unit": "fraction cost reduction per doubling",
+   "year": null,
+   "kind": "estimate_by_source",
+   "url": "https://www.nhtsa.gov/sites/nhtsa.gov/files/deis_appx_c.pdf",
+   "quote": "automobile assembly (assembly labor) at 16%",
+   "quote_origin": "search_result_summary",
+   "verify": {
+    "status": "rejected",
+    "note": "NHTSA DEIS Appendix C returned HTTP 403; not read. Value unverified."
+   }
+  },
+  {
+   "id": "f52",
+   "topic": "volume",
+   "item": "Learning rate: battery-electric LDV total costs",
+   "value": 0.1,
+   "unit": "fraction cost reduction per doubling",
+   "year": null,
+   "kind": "estimate_by_source",
+   "url": "https://www.nhtsa.gov/sites/nhtsa.gov/files/deis_appx_c.pdf",
+   "quote": "battery-electric LDV total costs at 10,000 units at 10%",
+   "quote_origin": "search_result_summary",
+   "verify": {
+    "status": "rejected",
+    "note": "NHTSA DEIS Appendix C returned HTTP 403; not read. Value unverified."
+   }
+  },
+  {
+   "id": "f53",
+   "topic": "volume",
+   "item": "Brayton vs Stirling cost ranking flips with volume (qualitative)",
+   "value": null,
+   "unit": "n/a",
+   "year": 1980,
+   "kind": "estimate_by_source",
+   "url": "https://ntrs.nasa.gov/citations/19800016288",
+   "quote": "As annual production quantities increase, the Stirling becomes a lower cost engine than the Brayton.",
+   "quote_origin": "fetched_page",
+   "note": "No ratio given; study range 1,000-400,000 units/yr per summary.",
+   "verify": {
+    "status": "confirmed",
+    "note": "NASA NTRS 19800016288: 'As annual production quantities increase, the Stirling becomes a lower cost engine than the Brayton.' Study range 1,000-400,000 units/yr. Year 1980 not separately checked."
+   }
+  }
+ ],
+ "ranges": [
+  {
+   "constant": "material_steel_usd_per_kg",
+   "range": [
+    0.75,
+    0.99
+   ],
+   "basis": "HRC 680-900 USD/short ton / 907.185 kg",
+   "sources": [
+    "f41"
+   ],
+   "note": "Only f-listed 800 read; 680 and 900 come from search summaries. Forgings/alloy steel not sourced.",
+   "verify": {
+    "status": "partial",
+    "note": "Only the 800 USD/short ton midpoint is confirmed (f41, 0.88 USD/kg). The 680 and 900 endpoints (0.75 and 0.99) come from search summaries that were not read, so the endpoints are unsupported."
+   }
+  },
+  {
+   "constant": "material_cast_iron_usd_per_kg",
+   "range": [
+    0.13,
+    0.18
+   ],
+   "basis": "scrap price",
+   "sources": [
+    "f42"
+   ],
+   "note": "Scrap, not finished casting; low confidence.",
+   "verify": {
+    "status": "confirmed",
+    "note": "Both endpoints follow from f42 (0.06 and 0.08 USD/lb = 0.13 and 0.18 USD/kg). Scrap price from an undated blog; low confidence, as noted."
+   }
+  },
+  {
+   "constant": "material_aluminium_usd_per_kg",
+   "range": [
+    3.06,
+    3.51
+   ],
+   "basis": "USGS US spot 1.39-1.59 USD/lb",
+   "sources": [
+    "f40"
+   ],
+   "note": "Ingot, not alloy castings.",
+   "verify": {
+    "status": "partial",
+    "note": "High end 3.51 follows from confirmed f40 (1.59 USD/lb). Low end 3.06 follows from f40's note (1.39 USD/lb, Nov 2024), which was a search summary and not read, so it is unsupported."
+   }
+  },
+  {
+   "constant": "material_copper_usd_per_kg",
+   "range": [
+    9.14,
+    9.52
+   ],
+   "basis": "2024 LME / US producer",
+   "sources": [
+    "f39"
+   ],
+   "verify": {
+    "status": "unsupported",
+    "note": "High end 9.52 follows from 431.8 c/lb, the LME cash value in f39 (partial; labelled wrongly as US producer). Low end 9.14 follows from 414.7 c/lb, which the fetched text shows only in the 'Stocks ... yearend' block, not as a price. Low end rejected."
+   }
+  },
+  {
+   "constant": "material_titanium_usd_per_kg",
+   "range": [
+    11.1,
+    13.0
+   ],
+   "basis": "sponge, 2021-2024",
+   "sources": [
+    "f38"
+   ],
+   "note": "Sponge, not mill product.",
+   "verify": {
+    "status": "unsupported",
+    "note": "Relies entirely on f38, which is rejected: the quoted 10.60-13 values are a stocks row; the price row is withheld. No confirmed price supports 11.1-13.0."
+   }
+  },
+  {
+   "constant": "material_nickel_usd_per_kg",
+   "range": null,
+   "basis": "no source read",
+   "sources": [],
+   "verify": {
+    "status": "null",
+    "note": "No source read; left null."
+   }
+  },
+  {
+   "constant": "labour_usd_per_hour",
+   "range": [
+    23.16,
+    26.52
+   ],
+   "basis": "BLS direct wage May 2023",
+   "sources": [
+    "f43",
+    "f44",
+    "f45"
+   ],
+   "note": "Wage only; loaded cost not sourced.",
+   "verify": {
+    "status": "confirmed",
+    "note": "Endpoints 23.16 (f44) and 26.52 (f43) are confirmed in the BLS May 2023 table. f45 is partial but not an endpoint."
+   }
+  },
+  {
+   "constant": "labour_hours_per_engine_mass_production_car",
+   "range": [
+    2.36,
+    5.0
+   ],
+   "basis": "Harbour HPE",
+   "sources": [
+    "f46",
+    "f47",
+    "f48",
+    "f49"
+   ],
+   "verify": {
+    "status": "confirmed",
+    "note": "Endpoints 2.36 (f47) and 5.0 (f49, upper bound) are confirmed in the just-auto article. Harbour article year is unverified."
+   }
+  },
+  {
+   "constant": "labour_hours_per_engine_heavy_diesel_military_aero",
+   "range": null,
+   "basis": "no source read",
+   "sources": [],
+   "verify": {
+    "status": "null",
+    "note": "No source read; left null."
+   }
+  },
+  {
+   "constant": "volume_learning_reduction_per_doubling",
+   "range": [
+    0.1,
+    0.2
+   ],
+   "basis": "NHTSA/EPA learning rates",
+   "sources": [
+    "f50",
+    "f51",
+    "f52"
+   ],
+   "note": "Unit-cost retention per doubling 0.80-0.90. Derived arithmetic (not sourced): 10 doublings (~1000x) gives 0.8^10=0.107 to 0.9^10=0.349 of first-unit cost.",
+   "verify": {
+    "status": "unsupported",
+    "note": "Relies entirely on f50, f51 and f52, all rejected (NHTSA DEIS returned HTTP 403). No confirmed source supports 0.10-0.20."
+   }
+  },
+  {
+   "constant": "volume_multiplier_low_vs_mass",
+   "range": null,
+   "basis": "no direct source of low-volume engine cost ratio found; only learning-rate arithmetic above",
+   "sources": [],
+   "verify": {
+    "status": "null",
+    "note": "No direct source; left null."
+   }
+  }
+ ]
+}

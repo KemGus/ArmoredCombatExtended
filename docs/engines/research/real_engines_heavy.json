@@ -1,0 +1,904 @@
+[
+ {
+  "id": "continental_avds_1790_2a",
+  "name": "Continental AVDS-1790-2A",
+  "class": "tank",
+  "fuel": "diesel",
+  "aspiration": "turbo",
+  "layout": "V",
+  "cylinders": 12,
+  "bore_mm": 146.05,
+  "stroke_mm": 146.05,
+  "displacement_cc": 29361,
+  "power_kw": 560,
+  "power_rpm": 2400,
+  "torque_nm": 2370,
+  "torque_rpm": 1900,
+  "redline_rpm": null,
+  "dry_mass_kg": 2100,
+  "mass_includes": "dry (AVDS-1790-2A)",
+  "length_mm": null,
+  "width_mm": null,
+  "height_mm": null,
+  "year": null,
+  "sources": [
+   {
+    "field": "cylinders",
+    "url": "https://en.wikipedia.org/wiki/Continental_AV1790",
+    "quote": "90 degree four-stroke V12"
+   },
+   {
+    "field": "bore_mm",
+    "url": "https://en.wikipedia.org/wiki/Continental_AV1790",
+    "quote": "5.75 in (146.05 mm)"
+   },
+   {
+    "field": "stroke_mm",
+    "url": "https://en.wikipedia.org/wiki/Continental_AV1790",
+    "quote": "5.75 in (146.05 mm)"
+   },
+   {
+    "field": "displacement_cc",
+    "url": "https://en.wikipedia.org/wiki/Continental_AV1790",
+    "quote": "1791.7 cu in (29 361 cc)"
+   },
+   {
+    "field": "power_kw/power_rpm",
+    "url": "https://en.wikipedia.org/wiki/Continental_AV1790",
+    "quote": "750 hp (560 kW) at 2,400 rpm (gross)"
+   },
+   {
+    "field": "torque_nm/torque_rpm",
+    "url": "https://en.wikipedia.org/wiki/Continental_AV1790",
+    "quote": "1,750 lb-ft (2,370 N-m) at 1,900 rpm (gross)"
+   },
+   {
+    "field": "dry_mass_kg",
+    "url": "https://en.wikipedia.org/wiki/Continental_AV1790",
+    "quote": "4,700 lb (2,100 kg)"
+   }
+  ],
+  "notes": "Power/torque are GROSS ratings (net: 643 hp (479 kW) at 2,400 rpm; 1,575 lb-ft (2,135 N-m) at 1,750 rpm). Wikipedia only; primary Continental/TM not opened."
+ },
+ {
+  "id": "mtu_mb873_ka501",
+  "name": "MTU MB 873 Ka-501",
+  "class": "tank",
+  "fuel": "diesel",
+  "aspiration": "turbo",
+  "layout": "V",
+  "cylinders": 12,
+  "bore_mm": null,
+  "stroke_mm": null,
+  "displacement_cc": 47700,
+  "power_kw": 1103,
+  "power_rpm": null,
+  "torque_nm": 4999,
+  "torque_rpm": 2000,
+  "redline_rpm": null,
+  "dry_mass_kg": null,
+  "mass_includes": null,
+  "length_mm": null,
+  "width_mm": null,
+  "height_mm": null,
+  "year": 1979,
+  "sources": [
+   {
+    "field": "cylinders",
+    "url": "https://grosswald.org/mtu-mb-873-ka-501-the-propulsion-powering-the-dominance-of-the-leopard-2-mbt",
+    "quote": "a 12-cylinder, twin-turbocharged diesel engine"
+   },
+   {
+    "field": "displacement_cc",
+    "url": "https://grosswald.org/mtu-mb-873-ka-501-the-propulsion-powering-the-dominance-of-the-leopard-2-mbt",
+    "quote": "47.7-liter displacement"
+   },
+   {
+    "field": "power_kw",
+    "url": "https://grosswald.org/mtu-mb-873-ka-501-the-propulsion-powering-the-dominance-of-the-leopard-2-mbt",
+    "quote": "delivers 1,500 PS (1,103 kW)"
+   },
+   {
+    "field": "torque_nm/torque_rpm",
+    "url": "https://grosswald.org/mtu-mb-873-ka-501-the-propulsion-powering-the-dominance-of-the-leopard-2-mbt",
+    "quote": "a torque output of 4,999 Nm at 2,000 RPM"
+   },
+   {
+    "field": "year",
+    "url": "https://en.wikipedia.org/wiki/List_of_MTU_Friedrichshafen_military_engines",
+    "quote": "Entered service in 1979. (Leopard 2 row, MB 873 Ka-501)"
+   }
+  ],
+  "notes": "LOW-QUALITY: torque comes from a blog (grosswald.org), uncorroborated. Bore/stroke, weight, dimensions, power rpm not found. Layout V is from general knowledge, not a source quote."
+ },
+ {
+  "id": "v92s2",
+  "name": "V-92S2 (as built in India)",
+  "class": "tank",
+  "fuel": "multifuel",
+  "aspiration": "turbo",
+  "layout": "V",
+  "cylinders": 12,
+  "bore_mm": 150,
+  "stroke_mm": 180,
+  "displacement_cc": null,
+  "power_kw": 735,
+  "power_rpm": 2000,
+  "torque_nm": 3923,
+  "torque_rpm": 1300,
+  "redline_rpm": null,
+  "dry_mass_kg": 1050,
+  "mass_includes": "unspecified ('Weight' on data sheet)",
+  "length_mm": 1466,
+  "width_mm": 896,
+  "height_mm": 902,
+  "year": null,
+  "sources": [
+   {
+    "field": "cylinders",
+    "url": "https://www.ddpmod.gov.in/hi/node/8051",
+    "quote": "Multifuel 12 Cylinder \"V\" Type 60°Direct Injection Four Stroke, Water Cooled, Turbocharged Diesel Engine"
+   },
+   {
+    "field": "bore_mm/stroke_mm",
+    "url": "https://www.ddpmod.gov.in/hi/node/8051",
+    "quote": "Bore/Stroke: 150/180 mm"
+   },
+   {
+    "field": "power_kw/power_rpm",
+    "url": "https://www.ddpmod.gov.in/hi/node/8051",
+    "quote": "Rating: 735 KW 1000 hp @2000 RPM"
+   },
+   {
+    "field": "torque_nm/torque_rpm",
+    "url": "https://www.ddpmod.gov.in/hi/node/8051",
+    "quote": "Max Torque: 400 kgfm @1300-1400 RPM"
+   },
+   {
+    "field": "dry_mass_kg",
+    "url": "https://www.ddpmod.gov.in/hi/node/8051",
+    "quote": "Weight: 1050 KG"
+   },
+   {
+    "field": "length/width/height",
+    "url": "https://www.ddpmod.gov.in/hi/node/8051",
+    "quote": "Engine Dimension: Length: 1466 mm / Width:896 mm / Height : 902 mm"
+   }
+  ],
+  "notes": "Indian DDP MoD data sheet. Torque given as 400 kgfm (=3923 N-m, my conversion x9.80665), range 1300-1400 rpm, lower end stored. Displacement not stated (150x180x12 would be ~38.2 L, not stored)."
+ },
+ {
+  "id": "rolls_royce_meteor_m120",
+  "name": "Rolls-Royce Meteor M120",
+  "class": "tank",
+  "fuel": "petrol",
+  "aspiration": "NA",
+  "layout": "V",
+  "cylinders": 12,
+  "bore_mm": 137,
+  "stroke_mm": 152,
+  "displacement_cc": 27022,
+  "power_kw": 600,
+  "power_rpm": null,
+  "torque_nm": 1970,
+  "torque_rpm": null,
+  "redline_rpm": null,
+  "dry_mass_kg": 835.1,
+  "mass_includes": "dry",
+  "length_mm": null,
+  "width_mm": null,
+  "height_mm": null,
+  "year": 1941,
+  "sources": [
+   {
+    "field": "cylinders",
+    "url": "https://en.wikipedia.org/wiki/Rolls-Royce_Meteor",
+    "quote": "V12"
+   },
+   {
+    "field": "bore_mm",
+    "url": "https://en.wikipedia.org/wiki/Rolls-Royce_Meteor",
+    "quote": "5.4 in (137 mm)"
+   },
+   {
+    "field": "stroke_mm",
+    "url": "https://en.wikipedia.org/wiki/Rolls-Royce_Meteor",
+    "quote": "6 in (152 mm)"
+   },
+   {
+    "field": "displacement_cc",
+    "url": "https://en.wikipedia.org/wiki/Rolls-Royce_Meteor",
+    "quote": "27.022 litres (1648.96 ci)"
+   },
+   {
+    "field": "power_kw",
+    "url": "https://en.wikipedia.org/wiki/Rolls-Royce_Meteor",
+    "quote": "550–810 bhp (410–600 kW); Rolls-Royce Meteor M120 810 hp"
+   },
+   {
+    "field": "torque_nm",
+    "url": "https://en.wikipedia.org/wiki/Rolls-Royce_Meteor",
+    "quote": "1,450 lb⋅ft (1,970 N⋅m)"
+   },
+   {
+    "field": "dry_mass_kg",
+    "url": "https://en.wikipedia.org/wiki/Rolls-Royce_Meteor",
+    "quote": "1,841 lb (835.1 kg)"
+   },
+   {
+    "field": "year",
+    "url": "https://en.wikipedia.org/wiki/Rolls-Royce_Meteor",
+    "quote": "1941–1964 (Production)"
+   }
+  ],
+  "notes": "Power is top of the stated family range (M120 810 hp). No rpm for power/torque in source. Wikipedia only."
+ },
+ {
+  "id": "maybach_hl230_p30",
+  "name": "Maybach HL 230 P30",
+  "class": "tank",
+  "fuel": "petrol",
+  "aspiration": "NA",
+  "layout": "V",
+  "cylinders": 12,
+  "bore_mm": 130,
+  "stroke_mm": 145,
+  "displacement_cc": 23095,
+  "power_kw": 510,
+  "power_rpm": 3000,
+  "torque_nm": 1850,
+  "torque_rpm": 2100,
+  "redline_rpm": null,
+  "dry_mass_kg": 1200,
+  "mass_includes": "dry",
+  "length_mm": null,
+  "width_mm": null,
+  "height_mm": null,
+  "year": 1944,
+  "sources": [
+   {
+    "field": "cylinders",
+    "url": "https://en.wikipedia.org/wiki/Maybach_HL_230",
+    "quote": "60° 23-litre V12 petrol engine"
+   },
+   {
+    "field": "bore_mm",
+    "url": "https://en.wikipedia.org/wiki/Maybach_HL_230",
+    "quote": "130 mm (5.1 in)"
+   },
+   {
+    "field": "stroke_mm",
+    "url": "https://en.wikipedia.org/wiki/Maybach_HL_230",
+    "quote": "145 mm (5.7 in)"
+   },
+   {
+    "field": "displacement_cc",
+    "url": "https://en.wikipedia.org/wiki/Maybach_HL_230",
+    "quote": "23.1 L (23,095 cc; 1,409.3 cu in)"
+   },
+   {
+    "field": "power_kw/power_rpm",
+    "url": "https://en.wikipedia.org/wiki/Maybach_HL_230",
+    "quote": "700 PS (510 kW; 690 hp) at 3,000 rpm"
+   },
+   {
+    "field": "torque_nm/torque_rpm",
+    "url": "https://en.wikipedia.org/wiki/Maybach_HL_230",
+    "quote": "Maximum torque is 1,850 N⋅m (1,360 ft⋅lb) at 2,100 rpm."
+   },
+   {
+    "field": "dry_mass_kg",
+    "url": "https://en.wikipedia.org/wiki/Maybach_HL_230",
+    "quote": "1,200 kg (2,600 lb)"
+   },
+   {
+    "field": "year",
+    "url": "https://en.wikipedia.org/wiki/Maybach_HL_230",
+    "quote": "production began on 3 November 1944"
+   }
+  ],
+  "notes": "Dimensions 1,000 x 1,190 x 1,310 mm are in the source but axis order is unlabeled, so not stored. Year = start of production per source. Wikipedia only."
+ },
+ {
+  "id": "cummins_vta903_t600",
+  "name": "Cummins VTA903-T600 (V903 military)",
+  "class": "tank",
+  "fuel": "diesel",
+  "aspiration": "turbo",
+  "layout": "V",
+  "cylinders": 8,
+  "bore_mm": 140,
+  "stroke_mm": 121,
+  "displacement_cc": 14800,
+  "power_kw": 448,
+  "power_rpm": 2600,
+  "torque_nm": null,
+  "torque_rpm": null,
+  "redline_rpm": null,
+  "dry_mass_kg": 1171,
+  "mass_includes": "dry",
+  "length_mm": 1435,
+  "width_mm": 892,
+  "height_mm": 980,
+  "year": null,
+  "sources": [
+   {
+    "field": "cylinders",
+    "url": "https://mart.cummins.com/imagelibrary/data/assetfiles/0063416.pdf",
+    "quote": "90° V-8, 4-stroke diesel"
+   },
+   {
+    "field": "bore_mm/stroke_mm",
+    "url": "https://mart.cummins.com/imagelibrary/data/assetfiles/0063416.pdf",
+    "quote": "Bore and Stroke 5.5 in x 4.75 in / 140 mm x 121 mm"
+   },
+   {
+    "field": "displacement_cc",
+    "url": "https://mart.cummins.com/imagelibrary/data/assetfiles/0063416.pdf",
+    "quote": "Displacement 903 cubic in3 / 14.8L"
+   },
+   {
+    "field": "power_kw/power_rpm",
+    "url": "https://mart.cummins.com/imagelibrary/data/assetfiles/0063416.pdf",
+    "quote": "VTA903-T600 448 kW ... 600 BHP ... 2600 RPM (garbled table row)"
+   },
+   {
+    "field": "dry_mass_kg",
+    "url": "https://mart.cummins.com/imagelibrary/data/assetfiles/0063416.pdf",
+    "quote": "Weight (Dry) 2580 lb / 1171 kg"
+   },
+   {
+    "field": "length_mm",
+    "url": "https://mart.cummins.com/imagelibrary/data/assetfiles/0063416.pdf",
+    "quote": "Overall Length 56.5 in / 1435 mm"
+   },
+   {
+    "field": "width_mm",
+    "url": "https://mart.cummins.com/imagelibrary/data/assetfiles/0063416.pdf",
+    "quote": "Overall Width 35.1 in / 892 mm"
+   },
+   {
+    "field": "height_mm",
+    "url": "https://mart.cummins.com/imagelibrary/data/assetfiles/0063416.pdf",
+    "quote": "Overall Height 38.6 in / 980 mm"
+   }
+  ],
+  "notes": "Primary: Cummins bulletin 5600645 Rev 9/24 (current V903, not necessarily the Bradley-era spec). Rating table text extracts garbled; kW/hp pairing (448 kW = 600 hp) and 2600 rpm for T600 read from column order. Torque not stated."
+ },
+ {
+  "id": "cummins_x15_605",
+  "name": "Cummins X15 Productivity 605 hp",
+  "class": "truck",
+  "fuel": "diesel",
+  "aspiration": "turbo",
+  "layout": "I",
+  "cylinders": 6,
+  "bore_mm": null,
+  "stroke_mm": null,
+  "displacement_cc": null,
+  "power_kw": 450,
+  "power_rpm": null,
+  "torque_nm": 2779,
+  "torque_rpm": 1150,
+  "redline_rpm": 2000,
+  "dry_mass_kg": 1343,
+  "mass_includes": "engine dry, excl. aftertreatment (191 lb)",
+  "length_mm": null,
+  "width_mm": null,
+  "height_mm": null,
+  "year": 2020,
+  "sources": [
+   {
+    "field": "cylinders",
+    "url": "https://mart.cummins.com/imagelibrary/data/assetfiles/0063393.pdf",
+    "quote": "NUMBER OF CYLINDERS 6"
+   },
+   {
+    "field": "power_kw",
+    "url": "https://mart.cummins.com/imagelibrary/data/assetfiles/0063393.pdf",
+    "quote": "X15 605 605 (450 kW) 2050 @ 1150 2000"
+   },
+   {
+    "field": "torque_nm/torque_rpm",
+    "url": "https://mart.cummins.com/imagelibrary/data/assetfiles/0063393.pdf",
+    "quote": "PEAK TORQUE 1650 - 2050 lb-ft 2237 - 2779 N-m; X15 605 ... 2050 @ 1150"
+   },
+   {
+    "field": "redline_rpm",
+    "url": "https://mart.cummins.com/imagelibrary/data/assetfiles/0063393.pdf",
+    "quote": "Governed RPM 2000 (X15 605 row)"
+   },
+   {
+    "field": "dry_mass_kg",
+    "url": "https://mart.cummins.com/imagelibrary/data/assetfiles/0063393.pdf",
+    "quote": "ENGINE (DRY) 2961 lb ... 1343 Kg"
+   },
+   {
+    "field": "year",
+    "url": "https://mart.cummins.com/imagelibrary/data/assetfiles/0063393.pdf",
+    "quote": "2020 X15 Productivity Series ratings from 430-500 horsepower share common hardware"
+   }
+  ],
+  "notes": "Primary: Cummins X15 Productivity Series brochure. Torque 2050 lb-ft = 2779 N-m per brochure. Power rpm not stated (governed 2000 rpm). Bore/stroke/displacement not in brochure, left null. Mass: brochure lists 2961 lb with 1343 Kg in an adjacent garbled column."
+ },
+ {
+  "id": "volvo_d13s540a",
+  "name": "Volvo D13S540A (Euro 6)",
+  "class": "truck",
+  "fuel": "diesel",
+  "aspiration": "turbo",
+  "layout": "I",
+  "cylinders": 6,
+  "bore_mm": 131,
+  "stroke_mm": 158,
+  "displacement_cc": 12800,
+  "power_kw": 397,
+  "power_rpm": null,
+  "torque_nm": 2600,
+  "torque_rpm": null,
+  "redline_rpm": 2150,
+  "dry_mass_kg": 1105,
+  "mass_includes": "dry base engine, excl. aftertreatment (approx. 120 kg)",
+  "length_mm": null,
+  "width_mm": null,
+  "height_mm": null,
+  "year": null,
+  "sources": [
+   {
+    "field": "cylinders",
+    "url": "https://stpi.it.volvo.com/STPIFiles/Volvo/FactSheet/D13S540A_Eng_02_338836622.pdf",
+    "quote": "No. of cylinders 6"
+   },
+   {
+    "field": "bore_mm",
+    "url": "https://stpi.it.volvo.com/STPIFiles/Volvo/FactSheet/D13S540A_Eng_02_338836622.pdf",
+    "quote": "Bore 131mm"
+   },
+   {
+    "field": "stroke_mm",
+    "url": "https://stpi.it.volvo.com/STPIFiles/Volvo/FactSheet/D13S540A_Eng_02_338836622.pdf",
+    "quote": "Stroke 158mm"
+   },
+   {
+    "field": "displacement_cc",
+    "url": "https://stpi.it.volvo.com/STPIFiles/Volvo/FactSheet/D13S540A_Eng_02_338836622.pdf",
+    "quote": "Displacement 12.8dm3"
+   },
+   {
+    "field": "power_kw",
+    "url": "https://stpi.it.volvo.com/STPIFiles/Volvo/FactSheet/D13S540A_Eng_02_338836622.pdf",
+    "quote": "Max power output at 1458–1700 rpm 540 hp(397 kW)"
+   },
+   {
+    "field": "torque_nm",
+    "url": "https://stpi.it.volvo.com/STPIFiles/Volvo/FactSheet/D13S540A_Eng_02_338836622.pdf",
+    "quote": "Max torque at 1000–1400 rpm 2600Nm"
+   },
+   {
+    "field": "redline_rpm",
+    "url": "https://stpi.it.volvo.com/STPIFiles/Volvo/FactSheet/D13S540A_Eng_02_338836622.pdf",
+    "quote": "Max revs 2150rpm"
+   },
+   {
+    "field": "dry_mass_kg",
+    "url": "https://stpi.it.volvo.com/STPIFiles/Volvo/FactSheet/D13S540A_Eng_02_338836622.pdf",
+    "quote": "Dry weight (base engine) approx.1105 kg"
+   }
+  ],
+  "notes": "Primary: Volvo fact sheet v02 2025-06-16. Peak power at 1458-1700 rpm and peak torque at 1000-1400 rpm (ranges, rpm fields left null). Mass approximate, excludes ~120 kg aftertreatment."
+ },
+ {
+  "id": "rolls_royce_merlin_61",
+  "name": "Rolls-Royce Merlin 61",
+  "class": "aircraft",
+  "fuel": "avgas",
+  "aspiration": "supercharged",
+  "layout": "V",
+  "cylinders": 12,
+  "bore_mm": 137.2,
+  "stroke_mm": 152.4,
+  "displacement_cc": 27000,
+  "power_kw": 1167,
+  "power_rpm": 3000,
+  "torque_nm": null,
+  "torque_rpm": null,
+  "redline_rpm": null,
+  "dry_mass_kg": 743.9,
+  "mass_includes": "dry",
+  "length_mm": 2253,
+  "width_mm": 782,
+  "height_mm": 1016,
+  "year": null,
+  "sources": [
+   {
+    "field": "bore_mm",
+    "url": "https://en.wikipedia.org/wiki/Rolls-Royce_Merlin",
+    "quote": "5.4 in (137.2 mm)"
+   },
+   {
+    "field": "stroke_mm",
+    "url": "https://en.wikipedia.org/wiki/Rolls-Royce_Merlin",
+    "quote": "6.0 in (152.4 mm)"
+   },
+   {
+    "field": "displacement_cc",
+    "url": "https://en.wikipedia.org/wiki/Rolls-Royce_Merlin",
+    "quote": "1,649 cu in (27.0 L)"
+   },
+   {
+    "field": "cylinders",
+    "url": "https://en.wikipedia.org/wiki/Rolls-Royce_Merlin",
+    "quote": "Twelve cylinders consisting of high-carbon steel liners"
+   },
+   {
+    "field": "power_kw/power_rpm",
+    "url": "https://en.wikipedia.org/wiki/Rolls-Royce_Merlin",
+    "quote": "1,565 hp (1,167 kW) at 3,000 rpm at 12,250 ft (3,730 m), MS gear)"
+   },
+   {
+    "field": "dry_mass_kg",
+    "url": "https://en.wikipedia.org/wiki/Rolls-Royce_Merlin",
+    "quote": "1,640 lb (743.9 kg)"
+   },
+   {
+    "field": "length_mm",
+    "url": "https://en.wikipedia.org/wiki/Rolls-Royce_Merlin",
+    "quote": "88.7 in (225.3 cm)"
+   },
+   {
+    "field": "width_mm",
+    "url": "https://en.wikipedia.org/wiki/Rolls-Royce_Merlin",
+    "quote": "30.8 in (78.2 cm)"
+   },
+   {
+    "field": "height_mm",
+    "url": "https://en.wikipedia.org/wiki/Rolls-Royce_Merlin",
+    "quote": "40 in (101.6 cm)"
+   }
+  ],
+  "notes": "Wikipedia 'Specifications (Merlin 61)'; its sources (Jane's/Lumsden) not opened. Power = military power at 12,250 ft (MS gear); take-off 1,290 hp (960 kW) at 3,000 rpm. Year not stored."
+ },
+ {
+  "id": "pw_r2800_32w",
+  "name": "Pratt & Whitney R-2800-32W",
+  "class": "aircraft",
+  "fuel": "avgas",
+  "aspiration": "supercharged",
+  "layout": "R",
+  "cylinders": 18,
+  "bore_mm": 146.05,
+  "stroke_mm": 152.4,
+  "displacement_cc": 45960,
+  "power_kw": 1715,
+  "power_rpm": 2800,
+  "torque_nm": null,
+  "torque_rpm": null,
+  "redline_rpm": null,
+  "dry_mass_kg": 1227,
+  "mass_includes": "dry",
+  "length_mm": 2451,
+  "width_mm": null,
+  "height_mm": null,
+  "year": 1939,
+  "sources": [
+   {
+    "field": "cylinders",
+    "url": "https://en.wikipedia.org/wiki/Pratt_%26_Whitney_R-2800_Double_Wasp",
+    "quote": "18-cylinder air-cooled twin-row supercharged radial engine"
+   },
+   {
+    "field": "bore_mm",
+    "url": "https://en.wikipedia.org/wiki/Pratt_%26_Whitney_R-2800_Double_Wasp",
+    "quote": "5.75 in (146.05 mm)"
+   },
+   {
+    "field": "stroke_mm",
+    "url": "https://en.wikipedia.org/wiki/Pratt_%26_Whitney_R-2800_Double_Wasp",
+    "quote": "6 in (152.4 mm)"
+   },
+   {
+    "field": "displacement_cc",
+    "url": "https://en.wikipedia.org/wiki/Pratt_%26_Whitney_R-2800_Double_Wasp",
+    "quote": "2,804.5 in3 (45.96 L)"
+   },
+   {
+    "field": "power_kw/power_rpm",
+    "url": "https://en.wikipedia.org/wiki/Pratt_%26_Whitney_R-2800_Double_Wasp",
+    "quote": "2,300 hp (1,715 kW) at 2,800 rpm, takeoff/military power at sea level"
+   },
+   {
+    "field": "dry_mass_kg",
+    "url": "https://en.wikipedia.org/wiki/Pratt_%26_Whitney_R-2800_Double_Wasp",
+    "quote": "2,705 lb (1,227 kg)"
+   },
+   {
+    "field": "length_mm",
+    "url": "https://en.wikipedia.org/wiki/Pratt_%26_Whitney_R-2800_Double_Wasp",
+    "quote": "96.50 in (2,451 mm)"
+   },
+   {
+    "field": "year",
+    "url": "https://en.wikipedia.org/wiki/Pratt_%26_Whitney_R-2800_Double_Wasp",
+    "quote": "Produced from 1939 to 1960"
+   }
+  ],
+  "notes": "Wikipedia (cites Navy SAC F4U-5, not opened). Power = takeoff/military at sea level; 1,900 hp at 2,600 rpm normal. Source gives diameter 53.00 in (1,346 mm), not stored as width/height. Year = start of R-2800 production."
+ },
+ {
+  "id": "lycoming_o360_a1a",
+  "name": "Lycoming O-360-A1A",
+  "class": "aircraft",
+  "fuel": "avgas",
+  "aspiration": "NA",
+  "layout": "B",
+  "cylinders": 4,
+  "bore_mm": 130,
+  "stroke_mm": 111,
+  "displacement_cc": 5900,
+  "power_kw": 130,
+  "power_rpm": 2700,
+  "torque_nm": null,
+  "torque_rpm": null,
+  "redline_rpm": null,
+  "dry_mass_kg": 117,
+  "mass_includes": "dry",
+  "length_mm": null,
+  "width_mm": null,
+  "height_mm": null,
+  "year": 1955,
+  "sources": [
+   {
+    "field": "cylinders",
+    "url": "https://en.wikipedia.org/wiki/Lycoming_O-360",
+    "quote": "Four-cylinder"
+   },
+   {
+    "field": "bore_mm",
+    "url": "https://en.wikipedia.org/wiki/Lycoming_O-360",
+    "quote": "5.125 in (130 mm)"
+   },
+   {
+    "field": "stroke_mm",
+    "url": "https://en.wikipedia.org/wiki/Lycoming_O-360",
+    "quote": "4.375 in (111 mm)"
+   },
+   {
+    "field": "displacement_cc",
+    "url": "https://en.wikipedia.org/wiki/Lycoming_O-360",
+    "quote": "361 cu in (5.9 L)"
+   },
+   {
+    "field": "power_kw/power_rpm",
+    "url": "https://en.wikipedia.org/wiki/Lycoming_O-360",
+    "quote": "180 hp (130 kW) at 2700 rpm"
+   },
+   {
+    "field": "dry_mass_kg",
+    "url": "https://en.wikipedia.org/wiki/Lycoming_O-360",
+    "quote": "258 lb (117 kg)"
+   },
+   {
+    "field": "year",
+    "url": "https://en.wikipedia.org/wiki/Lycoming_O-360",
+    "quote": "certified on 20 July 1955"
+   }
+  ],
+  "notes": "Wikipedia (cites FAA TCDS E-286 Rev 20, not opened; TCDS fetch failed). Year = certification date of A1A."
+ },
+ {
+  "id": "yasa_400",
+  "name": "YASA 400 (axial-flux, car/hypercar class)",
+  "class": "electric",
+  "fuel": "electric",
+  "aspiration": "n/a",
+  "layout": "n/a",
+  "cylinders": null,
+  "bore_mm": null,
+  "stroke_mm": null,
+  "displacement_cc": null,
+  "power_kw": 165,
+  "power_rpm": null,
+  "torque_nm": 360,
+  "torque_rpm": null,
+  "redline_rpm": 7500,
+  "dry_mass_kg": 24,
+  "mass_includes": "motor only",
+  "length_mm": null,
+  "width_mm": null,
+  "height_mm": null,
+  "year": null,
+  "power_continuous_kw": 50,
+  "power_peak_kw": 165,
+  "torque_continuous_nm": 250,
+  "sources": [
+   {
+    "field": "power_kw/power_peak_kw",
+    "url": "https://www.e-kart.fr/images/stories/technique/yasa/YASA-400-Product-Sheet.pdf",
+    "quote": "Peak Power @ 700 VDC @ 65°C 165 kW"
+   },
+   {
+    "field": "power_continuous_kw",
+    "url": "https://www.e-kart.fr/images/stories/technique/yasa/YASA-400-Product-Sheet.pdf",
+    "quote": "Continuous Power 50 to 70 kW"
+   },
+   {
+    "field": "torque_nm",
+    "url": "https://www.e-kart.fr/images/stories/technique/yasa/YASA-400-Product-Sheet.pdf",
+    "quote": "Peak torque @ 450 ARMS @ 65°c 360 Nm"
+   },
+   {
+    "field": "torque_continuous_nm",
+    "url": "https://www.e-kart.fr/images/stories/technique/yasa/YASA-400-Product-Sheet.pdf",
+    "quote": "Continuous Torque 250 Nm"
+   },
+   {
+    "field": "redline_rpm",
+    "url": "https://www.e-kart.fr/images/stories/technique/yasa/YASA-400-Product-Sheet.pdf",
+    "quote": "Speed 0 – 7500 rpm"
+   },
+   {
+    "field": "dry_mass_kg",
+    "url": "https://www.e-kart.fr/images/stories/technique/yasa/YASA-400-Product-Sheet.pdf",
+    "quote": "Weight 24 kg"
+   }
+  ],
+  "notes": "Primary: YASA product sheet ID:22745 Rev 3 Aug 2015 (table extracts garbled; values read in order). power_kw = peak at 700 VDC; peak at 400 VDC is 90 kW; continuous 50 to 70 kW (low end stored). Peak torque @450 Arms, 65C coolant. Dimensions not on sheet."
+ },
+ {
+  "id": "crrc_tdriver_md31",
+  "name": "CRRC tDriver-MD31 (8-12 m bus motor)",
+  "class": "electric",
+  "fuel": "electric",
+  "aspiration": "n/a",
+  "layout": "n/a",
+  "cylinders": null,
+  "bore_mm": null,
+  "stroke_mm": null,
+  "displacement_cc": null,
+  "power_kw": 150,
+  "power_rpm": null,
+  "torque_nm": 2500,
+  "torque_rpm": null,
+  "redline_rpm": 2400,
+  "dry_mass_kg": 247,
+  "mass_includes": "motor (catalog 'Weight')",
+  "length_mm": 400,
+  "width_mm": null,
+  "height_mm": null,
+  "year": null,
+  "power_continuous_kw": 100,
+  "power_peak_kw": 150,
+  "torque_continuous_nm": 1057,
+  "diameter_mm": 460,
+  "sources": [
+   {
+    "field": "power_continuous_kw",
+    "url": "https://www.crrcgc.cc/zcdden/t_power/transmission_assembly/tdriver-md31/index.html",
+    "quote": "Rating power（kW） 100"
+   },
+   {
+    "field": "power_peak_kw/power_kw",
+    "url": "https://www.crrcgc.cc/zcdden/t_power/transmission_assembly/tdriver-md31/index.html",
+    "quote": "Peak power（kW） 150"
+   },
+   {
+    "field": "torque_continuous_nm",
+    "url": "https://www.crrcgc.cc/zcdden/t_power/transmission_assembly/tdriver-md31/index.html",
+    "quote": "Rating torque（N.m） 1057"
+   },
+   {
+    "field": "torque_nm",
+    "url": "https://www.crrcgc.cc/zcdden/t_power/transmission_assembly/tdriver-md31/index.html",
+    "quote": "Peak torque（N.m） 2500"
+   },
+   {
+    "field": "redline_rpm",
+    "url": "https://www.crrcgc.cc/zcdden/t_power/transmission_assembly/tdriver-md31/index.html",
+    "quote": "Peak rotation speed（r/min） 2400"
+   },
+   {
+    "field": "dry_mass_kg",
+    "url": "https://www.crrcgc.cc/zcdden/t_power/transmission_assembly/tdriver-md31/index.html",
+    "quote": "Weight（kg） 247"
+   },
+   {
+    "field": "length_mm/diameter_mm",
+    "url": "https://www.crrcgc.cc/zcdden/t_power/transmission_assembly/tdriver-md31/index.html",
+    "quote": "Dimensions Φ460x400"
+   }
+  ],
+  "notes": "Primary: CRRC catalog page. Dimensions 'Φ460x400' read as diameter x length (my interpretation). 'Rating power' used as continuous."
+ },
+ {
+  "id": "honeywell_agt1500",
+  "name": "Honeywell AGT1500",
+  "class": "turbine",
+  "fuel": "multifuel",
+  "aspiration": "n/a",
+  "layout": "n/a",
+  "cylinders": null,
+  "bore_mm": null,
+  "stroke_mm": null,
+  "displacement_cc": null,
+  "power_kw": 1100,
+  "power_rpm": 3000,
+  "torque_nm": 3730,
+  "torque_rpm": 3000,
+  "redline_rpm": null,
+  "dry_mass_kg": 1100,
+  "mass_includes": "approximate engine weight, as stated",
+  "length_mm": null,
+  "width_mm": null,
+  "height_mm": null,
+  "year": 1980,
+  "sources": [
+   {
+    "field": "power_kw/power_rpm",
+    "url": "https://en.wikipedia.org/wiki/Honeywell_AGT1500",
+    "quote": "Engine output peaks at 1,500 hp (1,100 kW) ... which occurs at 3,000 rpm."
+   },
+   {
+    "field": "torque_nm/torque_rpm",
+    "url": "https://en.wikipedia.org/wiki/Honeywell_AGT1500",
+    "quote": "2,750 lb⋅ft (3,730 N⋅m) of torque at that peak"
+   },
+   {
+    "field": "dry_mass_kg",
+    "url": "https://en.wikipedia.org/wiki/Honeywell_AGT1500",
+    "quote": "The engine weighs approximately 2,500 lb (1,100 kg)"
+   },
+   {
+    "field": "year",
+    "url": "https://en.wikipedia.org/wiki/Honeywell_AGT1500",
+    "quote": "Serial production of the AGT1500 began in 1980"
+   }
+  ],
+  "notes": "Wikipedia (cites Honeywell/Horan ASME paper, not opened). Peak figures at 3,000 rpm; continuous power not stated. Dimensions 63x40x28 in unlabeled so not stored. Year = serial production start."
+ },
+ {
+  "id": "ge_t700_ge_700",
+  "name": "GE T700-GE-700",
+  "class": "turbine",
+  "fuel": "jet",
+  "aspiration": "n/a",
+  "layout": "n/a",
+  "cylinders": null,
+  "bore_mm": null,
+  "stroke_mm": null,
+  "displacement_cc": null,
+  "power_kw": 1210,
+  "power_rpm": null,
+  "torque_nm": null,
+  "torque_rpm": null,
+  "redline_rpm": null,
+  "dry_mass_kg": 198,
+  "mass_includes": "dry (T700-GE-700)",
+  "length_mm": 1200,
+  "width_mm": null,
+  "height_mm": null,
+  "year": 1978,
+  "sources": [
+   {
+    "field": "power_kw",
+    "url": "https://en.wikipedia.org/wiki/General_Electric_T700",
+    "quote": "The T700-GE-700 is rated at 1,622 shp (1,210 kW) intermediate power."
+   },
+   {
+    "field": "dry_mass_kg",
+    "url": "https://en.wikipedia.org/wiki/General_Electric_T700",
+    "quote": "437 lb (198 kg) (T700-GE-700)"
+   },
+   {
+    "field": "length_mm",
+    "url": "https://en.wikipedia.org/wiki/General_Electric_T700",
+    "quote": "47 in (1,200 mm) (T700-GE-700/701 series)"
+   },
+   {
+    "field": "year",
+    "url": "https://en.wikipedia.org/wiki/General_Electric_T700",
+    "quote": "went into production in 1978"
+   }
+  ],
+  "notes": "Wikipedia (cites FAA TCDS E8NE, archive fetch blocked, not opened). power = intermediate rating 1,622 shp; continuous and output rpm not found. Length applies to T700-GE-700/701 series."
+ }
+]
