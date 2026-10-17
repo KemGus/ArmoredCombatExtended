@@ -1,14 +1,14 @@
 -- Link preview for the ACE menu tool: while entities are selected for linking, draws a beam from each
 -- of them to the aimed entity, coloured by whether the link would pass the mobility link rules.
 -- Idea from ACF-3 PR #449 (link visualisation). The checks mirror the server rules in
--- acf_engine/init.lua and acf_gearbox/init.lua; the server still decides.
+-- acf_engine/sv_engine_links.lua and acf_gearbox/init.lua; the server still decides.
 
 ACE = ACE or {}
 ACE.LinkVis = ACE.LinkVis or {}
 
 local LinkVis = ACE.LinkVis
 
--- Mirrors of the server constants. Keep in sync with acf_engine/init.lua and acf_gearbox/init.lua.
+-- Mirrors of the server constants. Keep in sync with acf_engine/sv_engine_links.lua and acf_gearbox/init.lua.
 LinkVis.FuelLinkDist   = 512 -- FuelLinkDistBase: fuel tanks and radiators
 LinkVis.MaxShaftDot    = 0.7 -- Checkdriveshaft MaxAngle
 LinkVis.WarnFraction   = 0.9 -- within 10% of a limit shows as a warning
@@ -102,7 +102,7 @@ local function ShaftResult(Dot, From, To)
 	return Result(ColorOk, "OK"), nil, From, To
 end
 
--- Engine driveshaft check, same as ENT:Checkdriveshaft in acf_engine/init.lua.
+-- Engine driveshaft check, same as ENT:Checkdriveshaft in acf_engine/sv_engine_links.lua.
 local function EngineToGearbox(Engine, Gearbox)
 	local OutPos = AttachmentPos(Engine, "driveshaft")
 	local InPos  = AttachmentPos(Gearbox, "input")

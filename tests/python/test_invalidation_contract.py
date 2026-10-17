@@ -77,7 +77,7 @@ class InvalidationContractTests(unittest.TestCase):
             "lua/entities/acf_ammo/init.lua",
             ("ammo-updated", "ammo-removed"),
         )
-        self.assert_reasons("lua/entities/acf_engine/init.lua", ("engine-updated",))
+        self.assert_reasons("lua/entities/acf_engine/sv_engine_spawn.lua", ("engine-updated",))
 
     def test_paste_and_ammo_update_suppress_intermediate_link_events(self):
         gun = source("lua/entities/acf_gun/init.lua")

@@ -47,7 +47,7 @@ assertEqual(ACE.GetDefaultActiveInputState(ent), false, "illegal entities cannot
 ent.Legal = true
 assertEqual(ACE.GetDefaultActiveInputState(ent), true, "stored state returns after legality recovery")
 
-local engine = read("lua/entities/acf_engine/init.lua")
+local engine = read("lua/entities/acf_engine/sv_engine_think.lua")
 assert(engine:find("ACE.HasDefaultActiveInputState(self)", 1, true), "engine refreshes explicit stored state")
 assert(engine:find("ACE.GetDefaultActiveInputState(self) and 1 or 0", 1, true), "engine legality recovery preserves requested off")
 assert(read("lua/entities/gmod_wire_expression2/core/custom/acf.lua"):find("ACE.SetDefaultActiveInputState(this, on)", 1, true), "E2 stores state")
