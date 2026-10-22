@@ -76,6 +76,8 @@ SWEP.NPCMinBurst = 1 --Min bullets to fire per burst
 SWEP.NPCMaxBurst = 10 --Max bullets to fire per burst
 SWEP.NPCLookDistance = 10000 -- How far an NPC holding this weapon can spot targets, in units.
 SWEP.NPCMaxRange = 4000 -- How far an NPC holding this weapon will open fire, in units.
+SWEP.NPCUsable = true -- Whether NPCs can be given this weapon. Set it to false on weapons NPCs cannot use.
+SWEP.NPCVehicleAimSpread = 0.5 -- NPCs aim within this fraction of a vehicle's size around its middle, on each axis.
 
 
 function SWEP:GetNPCBurstSettings()
@@ -206,6 +208,52 @@ function SWEP:GetSharedRandomSpread()
 	local y = r * math.sin(theta)
 
 	return x, y
+end
+
+--- Returns the entity whose velocity tells how an NPC's enemy is moving.
+-- A seated player rides their vehicle, and a parented vehicle reads no velocity of its own, so this walks up to the root parent.
+-- @tparam Entity enemy The NPC's enemy.
+-- @treturn Entity The enemy, or the root of whatever it rides.
+-- @realm shared
+function SWEP:GetNPCMovingRoot(enemy)
+	local root = enemy
+	if enemy:IsPlayer() and enemy:InVehicle() then root = enemy:GetVehicle() end
+	while IsValid(root:GetParent()) do root = root:GetParent() end
+	return root
+end
+
+--- Returns where an NPC holding this weapon aims at an enemy.
+-- A seated player is aimed at through their whole vehicle, at a random point within NPCVehicleAimSpread of its middle.
+-- The vehicle's extent comes from its parts' positions in the baseplate's frame. Anyone else is aimed at their center.
+-- @tparam Entity enemy The NPC's enemy.
+-- @treturn Vector The position to aim at.
+-- @realm shared
+function SWEP:GetNPCAimPos(enemy)
+	local center = enemy:WorldSpaceCenter()
+	if not (enemy:IsPlayer() and enemy:InVehicle()) then return center end
+
+	local seat = enemy:GetVehicle()
+	local con = seat.CFW_GetContraption and seat:CFW_GetContraption()
+	local base = con and con:GetACEBaseplate()
+	if not IsValid(base) then return center end
+
+	local mins, maxs
+	for ent in pairs(con.ents) do
+		if IsValid(ent) then
+			local pos = base:WorldToLocal(ent:WorldSpaceCenter())
+			if mins then
+				mins = Vector(math.min(mins.x, pos.x), math.min(mins.y, pos.y), math.min(mins.z, pos.z))
+				maxs = Vector(math.max(maxs.x, pos.x), math.max(maxs.y, pos.y), math.max(maxs.z, pos.z))
+			else
+				mins, maxs = pos, pos
+			end
+		end
+	end
+	if not mins then return center end
+
+	local half = (maxs - mins) * 0.5 * self.NPCVehicleAimSpread
+	local offset = Vector(math.Rand(-1, 1) * half.x, math.Rand(-1, 1) * half.y, math.Rand(-1, 1) * half.z)
+	return base:LocalToWorld((mins + maxs) * 0.5 + offset)
 end
 
 SWEP.Heat = 0
