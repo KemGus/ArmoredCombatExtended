@@ -109,7 +109,8 @@ function SWEP:DoAmmoStatDisplay()
 		sendInfo = sendInfo .. string.format(", (2)%.1fmm pen", MaxPen)
 	end
 
-	ACE.SendNotification(self:GetOwner(), sendInfo, 10)
+	local Owner = self:GetOwner()
+	if IsValid(Owner) and Owner:IsPlayer() then ACE.SendNotification(Owner, sendInfo, 10) end
 end
 
 function SWEP:Equip()
