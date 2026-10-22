@@ -74,6 +74,8 @@ SWEP.NormalPlayerRunSpeed	= 400
 
 SWEP.NPCMinBurst = 1 --Min bullets to fire per burst
 SWEP.NPCMaxBurst = 10 --Max bullets to fire per burst
+SWEP.NPCLookDistance = 10000 -- How far an NPC holding this weapon can spot targets, in units.
+SWEP.NPCMaxRange = 4000 -- How far an NPC holding this weapon will open fire, in units.
 
 
 function SWEP:GetNPCBurstSettings()
@@ -104,11 +106,13 @@ function SWEP:SetupDataTables()
 
 			if not IsValid(owner) then return end
 
-			owner:SetCanZoom(not zoom) --Block HL2 suit zoom
+			if owner:IsPlayer() then
+				owner:SetCanZoom(not zoom) --Block HL2 suit zoom
 
-			timer.Simple(0, function() --If player is in a vehicle you need to delay by 1 tick because ???
-				owner:SetFOV(zoom and self.ZoomFOV or 0, 0.25)
-			end)
+				timer.Simple(0, function() --If player is in a vehicle you need to delay by 1 tick because ???
+					owner:SetFOV(zoom and self.ZoomFOV or 0, 0.25)
+				end)
+			end
 
 			if self.HasScope then
 				owner:EmitSound("weapons/awp/zoom.wav")
@@ -238,7 +242,8 @@ function SWEP:GetShootDir()
 
 		local spreadX, spreadY = self:GetSharedRandomSpread()
 		local degrees = math.Clamp((self.Heat / self.HeatMax) ^ 2 * self.MaxSpread + self.BaseSpread, self.BaseSpread, self.BaseSpread + self.MaxSpread)
-		degrees = degrees + math.min(owner:GetVelocity():Length() / self.NormalPlayerRunSpeed, 1) * self.MovementSpread
+		local runRef = self.NormalPlayerRunSpeed or 400
+		degrees = degrees + math.min(owner:GetVelocity():Length() / runRef, 1) * self.MovementSpread
 
 		degrees = (degrees + 0.5) * Prof
 
@@ -246,13 +251,18 @@ function SWEP:GetShootDir()
 		spreadY = spreadY * degrees * ACE.SWEPInaccuracyMul
 
 		local Enemy = owner:GetEnemy()
-		local EnemyPos = Enemy:WorldSpaceCenter()
-		local NPCPos = owner:GetShootPos()
-		local DifPos = EnemyPos - NPCPos
+		shootDir = owner:GetAimVector()
 
-		local TravelTime = DifPos:Length() / self.BulletData.MuzzleVel / 39.37 + engine.TickInterval()
+		if IsValid(Enemy) then
+			local EnemyPos = Enemy:WorldSpaceCenter()
+			local NPCPos = owner:GetShootPos()
+			local DifPos = EnemyPos - NPCPos
 
-		shootDir = (DifPos + Enemy:GetVelocity() * TravelTime):GetNormalized()
+			local TravelTime = DifPos:Length() / self.BulletData.MuzzleVel / 39.37 + engine.TickInterval()
+
+			shootDir = (DifPos + Enemy:GetVelocity() * TravelTime):GetNormalized()
+		end
+
 		local sideAxis = shootDir:Cross(Vector(0, 0, 1)):GetNormalized()
 		local upAxis = shootDir:Cross(sideAxis):GetNormalized()
 		shootDir = shootDir:RotateAroundAxis(upAxis, spreadX)
@@ -419,9 +429,9 @@ function SWEP:HandleRecoil()
 		self.Heat = math.max(self.Heat - (self.HeatReductionRate * delta), 0)
 	end
 
-	if game.SinglePlayer() and SERVER or CLIENT then
-		local owner = self:GetOwner()
+	local owner = self:GetOwner()
 
+	if owner:IsPlayer() and (game.SinglePlayer() and SERVER or CLIENT) then
 		local zoomBonus = self:GetZoomState() and self.ZoomRecoilBonus or 1
 		local crouchBonus = owner:Crouching() and self.CrouchRecoilBonus or 1
 		local totalBonus = zoomBonus * crouchBonus
@@ -451,7 +461,9 @@ function SWEP:Think()
 			self:EmitSound(Sound(self.ReloadSound))
 			self:SendWeaponAnim(ACT_VM_RELOAD)
 			self:SetClip1(self:Clip1() + 1)
-			self:GetOwner():RemoveAmmo(1, self:GetPrimaryAmmoType())
+			if self:GetOwner():IsPlayer() then --NPCs have no RemoveAmmo, their reserve is not tracked
+				self:GetOwner():RemoveAmmo(1, self:GetPrimaryAmmoType())
+			end
 
 			self.NextReload = CurTime() + 0.5
 		elseif (self:Clip1() == self.Primary.ClipSize or self:Ammo1() == 0) and self.Reloading then
@@ -548,7 +560,7 @@ function SWEP:Deploy()
 
 	local owner = self:GetOwner()
 	if not owner:IsPlayer() then
-		owner:SetMaxLookDistance( 10000 )
+		owner:SetMaxLookDistance( self.NPCLookDistance or 10000 )
 
 if SERVER then
 self:SetOwnerZoomSpeed(self:GetZoomState())

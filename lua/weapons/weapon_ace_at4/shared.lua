@@ -1,5 +1,6 @@
 SWEP.PrintName = "AT-4"
 SWEP.Base = "weapon_ace_base"
+SWEP.NPCMaxRange = 3000
 SWEP.Category = "ACE Weapons"
 SWEP.SubCategory = "Special"
 SWEP.Purpose = "Clear Backblast!"
@@ -134,6 +135,84 @@ function SWEP:InitBulletData()
 end
 
 
+local LaunchSpeed = 234 --Rocket speed off the tube, in m/s. Matches InitialVelocity below
+local LaunchDrag = 0.003 --Matches Drag below
+
+--The thing an NPC is shooting at that actually moves: a seated player rides a vehicle, and a parented vehicle reads no velocity of its own
+local function GetMovingRoot(Enemy)
+	local Root = Enemy
+	if Enemy:IsPlayer() and Enemy:InVehicle() then Root = Enemy:GetVehicle() end
+	while IsValid(Root:GetParent()) do Root = Root:GetParent() end
+	return Root
+end
+
+local VehicleAimSpread = 0.5 --NPCs aim within the middle half of a vehicle on each axis
+
+--Where an NPC aims: a seated player's whole vehicle at a random point near its middle, anyone else at their center.
+--The vehicle's extent comes from its parts' positions in the baseplate's frame
+local function GetNPCAimPos(Enemy)
+	local Center = Enemy:WorldSpaceCenter()
+	if not (Enemy:IsPlayer() and Enemy:InVehicle()) then return Center end
+
+	local Seat = Enemy:GetVehicle()
+	local Con = Seat.CFW_GetContraption and Seat:CFW_GetContraption()
+	local Base = Con and Con:GetACEBaseplate()
+	if not IsValid(Base) then return Center end
+
+	local Mins, Maxs
+	for Ent in pairs(Con.ents) do
+		if IsValid(Ent) then
+			local Pos = Base:WorldToLocal(Ent:WorldSpaceCenter())
+			if Mins then
+				Mins = Vector(math.min(Mins.x, Pos.x), math.min(Mins.y, Pos.y), math.min(Mins.z, Pos.z))
+				Maxs = Vector(math.max(Maxs.x, Pos.x), math.max(Maxs.y, Pos.y), math.max(Maxs.z, Pos.z))
+			else
+				Mins, Maxs = Pos, Pos
+			end
+		end
+	end
+	if not Mins then return Center end
+
+	local Half = (Maxs - Mins) * 0.5 * VehicleAimSpread
+	local Offset = Vector(math.Rand(-1, 1) * Half.x, math.Rand(-1, 1) * Half.y, math.Rand(-1, 1) * Half.z)
+	return Base:LocalToWorld((Mins + Maxs) * 0.5 + Offset)
+end
+
+--Launch direction for an NPC: at the enemy, led by its velocity and raised for drop, then spread by proficiency.
+--The rocket slows by Drag * v^2, so it covers d meters in (e^(Drag * d) - 1) / (Drag * v0) seconds
+local function GetNPCLaunchDir(Weapon, Owner)
+	local Dir = Owner:GetAimVector()
+	local Enemy = Owner:GetEnemy()
+
+	if IsValid(Enemy) then
+		local From = Owner:GetShootPos()
+		local Center = GetNPCAimPos(Enemy)
+		local Velocity = GetMovingRoot(Enemy):GetVelocity()
+		local AimPos = Center
+		local Time = 0
+
+		for _ = 1, 2 do --The second pass times the flight to the led position
+			local Meters = From:Distance(AimPos) / 39.37
+			Time = (math.exp(LaunchDrag * Meters) - 1) / (LaunchDrag * LaunchSpeed)
+			AimPos = Center + Velocity * Time
+		end
+
+		AimPos.z = AimPos.z + 0.5 * 9.8 * Time ^ 2 * 39.37 --Missiles fall at 9.8 m/s^2
+		Dir = (AimPos - From):GetNormalized()
+	end
+
+	local Prof = 6 - Owner:GetCurrentWeaponProficiency()
+	local Degrees = (Weapon.BaseSpread + math.min(Owner:GetVelocity():Length() / Weapon.NormalPlayerRunSpeed, 1) * Weapon.MovementSpread + 0.5) * Prof * ACE.SWEPInaccuracyMul
+	local SpreadX, SpreadY = Weapon:GetSharedRandomSpread()
+
+	local SideAxis = Dir:Cross(Vector(0, 0, 1)):GetNormalized()
+	local UpAxis = Dir:Cross(SideAxis):GetNormalized()
+	Dir = Dir:RotateAroundAxis(UpAxis, SpreadX * Degrees)
+	Dir = Dir:RotateAroundAxis(SideAxis, SpreadY * Degrees)
+
+	return Dir
+end
+
 function SWEP:PrimaryAttack()
 
 	if self:Clip1() == 0 and self:Ammo1() > 0 then
@@ -153,12 +232,17 @@ function SWEP:PrimaryAttack()
 
 		if SERVER then
 
+			local LaunchDir = owner:GetAimVector()
+			if not owner:IsPlayer() then
+				LaunchDir = GetNPCLaunchDir(self, owner)
+			end
+
 			local MDat = {
 				Owner = owner,
 				Launcher = owner,
 
-				Pos = owner:GetShootPos() + owner:GetAimVector() * 1500,
-				Ang = owner:GetAimVector():Angle(),
+				Pos = owner:GetShootPos() + LaunchDir * 75,
+				Ang = LaunchDir:Angle(),
 
 				Mdl = "models/munitions/round_100mm_mortar_shot.mdl",
 
@@ -211,6 +295,8 @@ function SWEP:PrimaryAttack()
 			else
 				self:TakePrimaryAmmo(1)
 			end
+		else
+			self:TakePrimaryAmmo(1) --NPC owners have no RemoveAmmo, so the clip is the only count
 		end
 
 	end
