@@ -256,6 +256,45 @@ function SWEP:GetNPCAimPos(enemy)
 	return base:LocalToWorld((mins + maxs) * 0.5 + offset)
 end
 
+--- Returns the direction an NPC launches a rocket at its enemy.
+-- Aims at GetNPCAimPos, led by the target's velocity and raised for drop, then spread by proficiency.
+-- Uses the weapon's LaunchSpeed (m/s) and LaunchDrag; the rocket slows by drag * v^2, so it covers d meters in (e^(drag * d) - 1) / (drag * v0) seconds.
+-- @treturn Vector The launch direction.
+-- @realm server
+function SWEP:GetNPCLaunchDir()
+	local owner = self:GetOwner()
+	local dir = owner:GetAimVector()
+	local enemy = owner:GetEnemy()
+
+	if IsValid(enemy) then
+		local from = owner:GetShootPos()
+		local center = self:GetNPCAimPos(enemy)
+		local velocity = self:GetNPCMovingRoot(enemy):GetVelocity()
+		local aimPos = center
+		local time = 0
+
+		for _ = 1, 2 do --The second pass times the flight to the led position
+			local meters = from:Distance(aimPos) / 39.37
+			time = (math.exp(self.LaunchDrag * meters) - 1) / (self.LaunchDrag * self.LaunchSpeed)
+			aimPos = center + velocity * time
+		end
+
+		aimPos.z = aimPos.z + 0.5 * 9.8 * time ^ 2 * 39.37 --Missiles fall at 9.8 m/s^2
+		dir = (aimPos - from):GetNormalized()
+	end
+
+	local prof = 6 - owner:GetCurrentWeaponProficiency()
+	local degrees = (self.BaseSpread + math.min(owner:GetVelocity():Length() / self.NormalPlayerRunSpeed, 1) * self.MovementSpread + 0.5) * prof * ACE.SWEPInaccuracyMul
+	local spreadX, spreadY = self:GetSharedRandomSpread()
+
+	local sideAxis = dir:Cross(Vector(0, 0, 1)):GetNormalized()
+	local upAxis = dir:Cross(sideAxis):GetNormalized()
+	dir = dir:RotateAroundAxis(upAxis, spreadX * degrees)
+	dir = dir:RotateAroundAxis(sideAxis, spreadY * degrees)
+
+	return dir
+end
+
 SWEP.Heat = 0
 
 function SWEP:GetShootDir()

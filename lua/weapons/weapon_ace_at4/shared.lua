@@ -135,43 +135,8 @@ function SWEP:InitBulletData()
 end
 
 
-local LaunchSpeed = 234 --Rocket speed off the tube, in m/s. Matches InitialVelocity below
-local LaunchDrag = 0.003 --Matches Drag below
-
---Launch direction for an NPC: at the enemy, led by its velocity and raised for drop, then spread by proficiency.
---The rocket slows by Drag * v^2, so it covers d meters in (e^(Drag * d) - 1) / (Drag * v0) seconds
-local function GetNPCLaunchDir(Weapon, Owner)
-	local Dir = Owner:GetAimVector()
-	local Enemy = Owner:GetEnemy()
-
-	if IsValid(Enemy) then
-		local From = Owner:GetShootPos()
-		local Center = Weapon:GetNPCAimPos(Enemy)
-		local Velocity = Weapon:GetNPCMovingRoot(Enemy):GetVelocity()
-		local AimPos = Center
-		local Time = 0
-
-		for _ = 1, 2 do --The second pass times the flight to the led position
-			local Meters = From:Distance(AimPos) / 39.37
-			Time = (math.exp(LaunchDrag * Meters) - 1) / (LaunchDrag * LaunchSpeed)
-			AimPos = Center + Velocity * Time
-		end
-
-		AimPos.z = AimPos.z + 0.5 * 9.8 * Time ^ 2 * 39.37 --Missiles fall at 9.8 m/s^2
-		Dir = (AimPos - From):GetNormalized()
-	end
-
-	local Prof = 6 - Owner:GetCurrentWeaponProficiency()
-	local Degrees = (Weapon.BaseSpread + math.min(Owner:GetVelocity():Length() / Weapon.NormalPlayerRunSpeed, 1) * Weapon.MovementSpread + 0.5) * Prof * ACE.SWEPInaccuracyMul
-	local SpreadX, SpreadY = Weapon:GetSharedRandomSpread()
-
-	local SideAxis = Dir:Cross(Vector(0, 0, 1)):GetNormalized()
-	local UpAxis = Dir:Cross(SideAxis):GetNormalized()
-	Dir = Dir:RotateAroundAxis(UpAxis, SpreadX * Degrees)
-	Dir = Dir:RotateAroundAxis(SideAxis, SpreadY * Degrees)
-
-	return Dir
-end
+SWEP.LaunchSpeed = 234 --Rocket speed off the tube, in m/s
+SWEP.LaunchDrag = 0.003
 
 function SWEP:PrimaryAttack()
 
@@ -194,7 +159,7 @@ function SWEP:PrimaryAttack()
 
 			local LaunchDir = owner:GetAimVector()
 			if not owner:IsPlayer() then
-				LaunchDir = GetNPCLaunchDir(self, owner)
+				LaunchDir = self:GetNPCLaunchDir()
 			end
 
 			local MDat = {
@@ -210,7 +175,7 @@ function SWEP:PrimaryAttack()
 				FinMul = 0,
 				ThrusterTurnRate = 0,
 
-				InitialVelocity = 234,
+				InitialVelocity = self.LaunchSpeed,
 				Thrust = 0,
 				BurnTime = 5,
 				MotorDelay = 0,
@@ -219,7 +184,7 @@ function SWEP:PrimaryAttack()
 				BoostTime = 0,
 				BoostDelay = 0,
 
-				Drag = 0.003,
+				Drag = self.LaunchDrag,
 				GuidanceName = "Dumb",
 				FuseName = "Contact",
 				HasInertial = false,
