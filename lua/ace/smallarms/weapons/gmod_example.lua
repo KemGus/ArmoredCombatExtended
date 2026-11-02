@@ -1,0 +1,3 @@
+-- Round tables for weapon packs go in this folder, one file per pack:
+--   ACE.SmallArms.SetWeaponRound("weapon_class", "round_id")
+-- A pack's own SWEP.ACE_Round always takes priority. Class names must be checked against the pack's source.
