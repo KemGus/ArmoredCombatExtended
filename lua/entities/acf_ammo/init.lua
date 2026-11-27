@@ -698,6 +698,10 @@ do
 			debugoverlay.Text(self:GetPos() + Vector(0,0,10), "Total Ammo Mass: " .. self.AmmoMassMax .. "kgs", 20 )
 			WireName = AmmoGunData.name .. " Ammo"
 			local _, KeyCalMM = ACE.GunScale.ParseKey( self.BulletData.Id )
+			if not KeyCalMM then
+				local _, AliasCalMM = ACE.GunScale.ResolveSpec( self.BulletData.Id )
+				KeyCalMM = AliasCalMM
+			end
 			if KeyCalMM then
 				WireName = string.format( "%s Ammo (%gmm)", AmmoGunData.name, KeyCalMM )
 			end

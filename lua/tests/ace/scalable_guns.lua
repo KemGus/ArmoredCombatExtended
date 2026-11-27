@@ -199,7 +199,7 @@ return {
 				expect( gun.IsScalable ).to.equal( true )
 				expect( gun.ScaleData ).to.exist()
 				expect( gun.ScaleData.Split ).to.exist()
-				expect( gun.ScaleData.Split.bore.y ).to.equal( -1 )
+				expect( gun.ScaleData.Split.bore.x ).to.equal( 1 )
 				expect( gun.GunOpts ).to.equal( "50x55" )
 				expect( gun.GunKey ).to.equal( "SA@50x55" )
 

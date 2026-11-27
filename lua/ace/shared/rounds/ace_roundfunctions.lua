@@ -18,9 +18,18 @@ do
 		local IsMissile = GunClass.type == "missile"
 		--local Type = PlayerData.Type or ""
 
+		-- Legacy aliased ids carry no key suffix but still imply their authored
+		-- caliber: a crate keyed "140mmC" must build 140mm rounds, or old dupes
+		-- stop linking. Key suffixes win when both are present.
+		local EffCalMM = KeyCalMM
+		if not EffCalMM then
+			local _, AliasCalMM = ACE.GunScale.ResolveSpec( BaseId )
+			EffCalMM = AliasCalMM
+		end
+
 		local CalScale = 1
-		if KeyCalMM then
-			CalScale = ( ACE.GunScale.ClampCalMM( PlayerData["Id"], KeyCalMM ) / 10 ) / GunData["caliber"]
+		if EffCalMM then
+			CalScale = ( ACE.GunScale.ClampCalMM( PlayerData["Id"], EffCalMM ) / 10 ) / GunData["caliber"]
 		end
 
 		GUIData.MaxTotalLength    = BulletMax.maxlength * CalScale * (Data.LengthAdj or 1)
