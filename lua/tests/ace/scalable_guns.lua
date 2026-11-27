@@ -123,7 +123,7 @@ return {
 				expect( gun.TubeSplit ).to.equal( gun.ScaleData.Split )
 				expect( gun.GunOpts ).to.equal( "140x55" )
 				expect( gun.GunKey ).to.equal( "C@140x55" )
-				expect( gun.MVMod ).to.beGreaterThan( 1 )
+				expect( gun.MuzVelMod ).to.beGreaterThan( 1 )
 				expect( gun.ChamberLen ).to.beGreaterThan( 110 )
 				expect( gun.Muzzle ).to.exist()
 

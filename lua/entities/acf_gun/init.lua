@@ -290,7 +290,7 @@ do
 		Gun.ScalableSpec   = Limits
 		Gun.CaliberMM      = CalMM
 		Gun.BoreLength     = BoreLen
-		Gun.MVMod          = Stats.mvmod
+		Gun.MuzVelMod          = Stats.mvmod
 		Gun.ChamberLen     = Stats.chamberLen
 		Gun.PropLimit      = Stats.propLimit
 		Gun.GunScaleVec    = Stats.scale
@@ -524,7 +524,7 @@ function ENT:Update( ArgTable )
 	self.ScalableSpec    = Limits
 	self.CaliberMM       = CalMM
 	self.BoreLength      = BoreLen
-	self.MVMod           = Stats.mvmod
+	self.MuzVelMod           = Stats.mvmod
 	self.ChamberLen      = Stats.chamberLen
 	self.PropLimit       = Stats.propLimit
 	self.GunScaleVec     = Stats.scale
@@ -924,7 +924,7 @@ function ENT:Link( Target )
 
 		RefreshGunRateOfFire(self, Target)
 		Wire_TriggerOutput( self, "Muzzle Weight", math.floor( Target.BulletData.ProjMass * 1000 ) )
-		Wire_TriggerOutput( self, "Muzzle Velocity", math.floor( Target.BulletData.MuzzleVel * ( self.MVMod or 1 ) * ACE.VelScale ) )
+		Wire_TriggerOutput( self, "Muzzle Velocity", math.floor( Target.BulletData.MuzzleVel * ( self.MuzVelMod or 1 ) * ACE.VelScale ) )
 
 		if ACE.PointsInputChanged and not self._ACEPointsSuppress and (not Target or not Target._ACEPointsSuppress) then
 			ACE.PointsInputChanged({ self, Target }, "gun-ammo-linked")
@@ -1459,8 +1459,8 @@ function ENT:LoadAmmo( AddTime, Reload )
 		-- factor without mutating the crate's canonical BulletData.
 		self.BulletData = table.Copy( AmmoEnt.BulletData )
 		self.BulletData.Crate = AmmoEnt:EntIndex()
-		if ( self.MVMod or 1 ) ~= 1 then
-			self.BulletData.MuzzleVel = self.BulletData.MuzzleVel * self.MVMod
+		if ( self.MuzVelMod or 1 ) ~= 1 then
+			self.BulletData.MuzzleVel = self.BulletData.MuzzleVel * self.MuzVelMod
 		end
 
 		local ReloadTime, Loader = GetGunReloadTime(self, AmmoEnt.BulletData, AmmoEnt.RoFMul)

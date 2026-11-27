@@ -1239,7 +1239,12 @@ local function resolveGunPricingCandidate(gun)
 			local round = ACE.Points.RoundFromBullet(crate.BulletData)
 			if round then
 				local rate = ACE.Points.GunSustainedRps(gun, crate.BulletData, crate)
-				local score = ACE.Points.BaseRoundCost(round)
+				-- Cost follows performance: bore length moves penetration
+				-- through the muzzle-velocity law, so the round is priced at
+				-- THIS gun's velocity modifier rather than the crate's shared
+				-- base data. The modifier is exactly 1 at pivot length, so
+				-- legacy-spec gun costs are unchanged.
+				local score = ACE.Points.BaseRoundCost(round) * (tonumber(gun.MuzVelMod) or 1)
 				local candidate = {
 					Round = round,
 					Rate = rate,
