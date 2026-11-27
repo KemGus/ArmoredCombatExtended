@@ -1,8 +1,7 @@
 # Scalable guns — as built
 
 This document describes the scalable-guns feature as it actually shipped on
-`feat/scalable-guns`. It replaces the original two-stage plan; both stages are
-now implemented.
+`feat/scalable-guns`.
 
 ## The one-paragraph version
 

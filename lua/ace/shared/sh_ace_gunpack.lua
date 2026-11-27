@@ -137,11 +137,23 @@ GunScale.BarrelJoints = {
 	["models/tankgun_new/tankgun_75mm.mdl"] = { joint = Vector(-24.0002, 20.25, -0.0636), bore = Vector(0, -1, 0), tubelen = 127.50, mdir = Vector(0, -1, 0) },
 }
 
+-- Parameterized gun keys. A scalable gun is identified everywhere (dupes,
+-- networking, ammo crates) by a string of the form
+--     <baseid>@<caliberMM>x<lengthCal>
+-- for example "120mmC@140x55" means: the gun whose base id is "120mmC", but
+-- bored out to 140mm with an L/55 barrel. The "x<length>" part is optional
+-- for classes without a length envelope. KEY_PATTERN splits such a key into
+-- its pieces; OPTS_PATTERN parses just the parameter part ("140x55"), which
+-- is what the duplicator stores in the GunOpts field and what the
+-- acemenu_gunopts convar carries.
 local KEY_PATTERN  = "^(.-)@(%d+%.?%d*)x?(%d*%.?%d*)$"
 local OPTS_PATTERN = "^(%d+%.?%d*)x?(%d*%.?%d*)$"
 
 --- Splits a parameterized id into its base id and optional scale parameters.
+-- Example: ParseKey("120mmC@140x55") returns "120mmC", 140, 55;
+-- ParseKey("120mmC") returns "120mmC", nil, nil.
 -- @param id string Gun id or key ("120mmC", "120mmC@140x55").
+-- @usage local base, calMM, len = ACE.GunScale.ParseKey("120mmC@140x55")
 -- @return string base Base definition id.
 -- @return number|nil calMM Effective caliber in millimeters, if present.
 -- @return number|nil len Bore length in calibers, if present.
@@ -165,9 +177,14 @@ function GunScale.Key( id, calMM, len )
 	return id .. "@" .. calMM .. ( len and ( "x" .. len ) or "" )
 end
 
---- Parses a GunOpts string ("140x55", a full key, or "" -> nil).
--- @return number|nil calMM
--- @return number|nil len
+--- Parses a GunOpts string — the bare parameter suffix without a base id
+-- ("140x55", or caliber-only "140"), returning nil for an empty string.
+-- Named after the duplicator's GunOpts field whose format it parses.
+-- These functions live on ACE.GunScale (not as locals) because they are the
+-- public kernel API: entities, tools, starfall/e2 extensions and the spawn
+-- menu all call them from outside this file.
+-- @return number|nil calMM caliber in millimeters
+-- @return number|nil len barrel length in calibers (L/d)
 function GunScale.ParseOpts( str )
 	if not isstring( str ) or str == "" then return end
 
@@ -201,10 +218,11 @@ function GunScale.Resolve( id )
 end
 
 --- Resolves any id shape to its def + effective spec. Handles synthetic
--- class ids ("C", "C@140x55"), stage-1 keyed legacy ids ("120mmC@140x55")
--- and bare legacy ids ("120mmC") through ACE.LegacyGunAliases: the alias
--- carries the authored caliber/length, and key suffix parameters override
--- them, so a stage-1 dupe pastes into the class system at the same spec.
+-- class ids ("C", "C@140x55"), keyed legacy ids ("120mmC@140x55" — the shape
+-- dupes saved since the scalable-keys introduction carry) and bare legacy
+-- ids ("120mmC") through ACE.LegacyGunAliases: the alias carries the
+-- authored caliber/length, and key suffix parameters override them, so an
+-- old keyed dupe pastes into the class system at the same spec.
 -- @return table|nil def Synthetic (or surviving) def of the resolved class
 -- @return number|nil calMM Effective caliber in millimeters
 -- @return number|nil len Bore length in calibers
