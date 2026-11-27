@@ -73,15 +73,15 @@ GunScale.SoundPitch    = GunScale.SoundPitch    ~= false -- deeper sound on bigg
 -- lenScale), and `mdir` the slide direction in the parent (barrel) frame for
 -- ManipulateBonePosition. Models without an entry fall back to stretching the
 -- whole entity axially.
-GunScale.BarrelJoints = GunScale.BarrelJoints or {
+GunScale.BarrelJoints = {
 	["models/autocannon/semiautocannon_25mm.mdl"] = { joint = Vector(0, -15.6251, 0), bore = Vector(0, -1, 0), tubelen = 28.33, mdir = Vector(1, 0, 0) },
 	["models/autocannon/semiautocannon_37mm.mdl"] = { joint = Vector(0, -23.1251, 0), bore = Vector(0, -1, 0), tubelen = 41.92, mdir = Vector(1, 0, 0) },
 	["models/autocannon/semiautocannon_45mm.mdl"] = { joint = Vector(0, -28.1251, 0), bore = Vector(0, -1, 0), tubelen = 50.99, mdir = Vector(1, 0, 0) },
-	["models/autocannon/semiautocannon_57mm.mdl"] = { joint = Vector(0, -38.7501, 0), bore = Vector(0, -1, 0), tubelen = 70.25, mdir = Vector(1, 0, 0) },
+	["models/autocannon/semiautocannon_57mm.mdl"] = { joint = Vector(22.5, 0, 0), bore = Vector(1, 0, 0), tubelen = 86.5, mdir = Vector(1, 0, 0) },
 	["models/autocannon/semiautocannon_76mm.mdl"] = { joint = Vector(0, -59.3752, 0), bore = Vector(0, -1, 0), tubelen = 107.64, mdir = Vector(1, 0, 0) },
 	["models/howitzer/howitzer_105mm.mdl"] = { joint = Vector(0, -5.5782, -0.8198), bore = Vector(0, -1, 0), tubelen = 95.88, mdir = Vector(1, 0, 0) },
 	["models/howitzer/howitzer_122mm.mdl"] = { joint = Vector(0, -6.4815, -0.953), bore = Vector(0, -1, 0), tubelen = 111.47, mdir = Vector(1, 0, 0) },
-	["models/howitzer/howitzer_155mm.mdl"] = { joint = Vector(0, -8.2399, -1.211), bore = Vector(0, -1, 0), tubelen = 141.63, mdir = Vector(1, 0, 0) },
+	["models/howitzer/howitzer_155mm.mdl"] = { joint = Vector(8.24, 0, 0), bore = Vector(1, 0, 0), tubelen = 141.63, mdir = Vector(1, 0, 0) },
 	["models/howitzer/howitzer_203mm.mdl"] = { joint = Vector(0, -10.792, -1.5864), bore = Vector(0, -1, 0), tubelen = 185.54, mdir = Vector(1, 0, 0) },
 	["models/howitzer/howitzer_240mm.mdl"] = { joint = Vector(0, -12.7555, -1.8746), bore = Vector(0, -1, 0), tubelen = 219.24, mdir = Vector(1, 0, 0) },
 	["models/howitzer/howitzer_290mm.mdl"] = { joint = Vector(0, -15.407, -2.2645), bore = Vector(0, -1, 0), tubelen = 264.85, mdir = Vector(1, 0, 0) },
@@ -111,7 +111,7 @@ GunScale.BarrelJoints = GunScale.BarrelJoints or {
 	["models/tankgun/tankgun_short_75mm.mdl"] = { joint = Vector(11.625, 0, -0.097), bore = Vector(1, 0, 0), tubelen = 59.62, mdir = Vector(1, 0, 0) },
 	["models/tankgun/tankgun_short_85mm.mdl"] = { joint = Vector(9.7144, -0.1096, 0), bore = Vector(1, 0, 0), tubelen = 67.36, mdir = Vector(1, 0, 0) },
 	["models/tankgun_new/tankgun_100mm.mdl"] = { joint = Vector(-24.0002, 19, -0.0848), bore = Vector(0, -1, 0), tubelen = 170.00, mdir = Vector(0, -1, 0) },
-	["models/tankgun_new/tankgun_120mm.mdl"] = { joint = Vector(-24.0003, 18, -0.1017), bore = Vector(0, -1, 0), tubelen = 204.00, mdir = Vector(0, -1, 0) },
+	["models/tankgun_new/tankgun_120mm.mdl"] = { joint = Vector(18, 0, 0), bore = Vector(1, 0, 0), tubelen = 192, mdir = Vector(1, 0, 0) },
 	["models/tankgun_new/tankgun_140mm.mdl"] = { joint = Vector(-24.0003, 17, -0.1187), bore = Vector(0, -1, 0), tubelen = 238.00, mdir = Vector(1, 0, 0) },
 	["models/tankgun_new/tankgun_170mm.mdl"] = { joint = Vector(-24.0004, 15.5, -0.1441), bore = Vector(0, -1, 0), tubelen = 289.00, mdir = Vector(0, -1, 0) },
 	["models/tankgun_new/tankgun_50mm.mdl"] = { joint = Vector(-24.0001, 21.5, -0.0424), bore = Vector(0, -1, 0), tubelen = 85.00, mdir = Vector(0, -1, 0) },
