@@ -168,6 +168,9 @@ function ACE.GunGUICreate( Table )
 	local ScaleLimits = ACE.GunScale and ACE.GunScale.Limits( Table.id )
 	if ScaleLimits and not ScaleLimits.hasbarrels then
 
+		-- Slider state starts at the class pivot; the current value of the
+		-- acemenu_gunopts convar (the spec suffix the tool will spawn with)
+		-- overrides it when the player already dialed something in.
 		local GunScaleState = { cal = ScaleLimits.basecal * 10, len = ScaleLimits.baselen }
 		local CurOpts = GetConVar( "acemenu_gunopts" )
 		if CurOpts then

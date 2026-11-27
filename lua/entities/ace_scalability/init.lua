@@ -93,6 +93,10 @@ do
 
 			-- Optional piecewise tube stretch; the split itself comes from the
 			-- shared ACE.GunScale.BarrelJoints registry via the entity's model.
+			-- Example: a 120mm cannon dialed from L/45 to L/70 gets LenScale
+			-- 70/45 = 1.556; clients stretch every hull vertex past the
+			-- breech/tube joint along the bore by that factor, so the physics
+			-- mesh elongates exactly like the visual barrel does.
 			net.WriteBool( ScaleData.Split ~= nil )
 			if ScaleData.Split then
 				net.WriteFloat( ScaleData.LenScale or 1 )

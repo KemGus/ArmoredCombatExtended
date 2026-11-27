@@ -7,8 +7,8 @@ TOOL.Command		= nil
 TOOL.ConfigName		= ""
 
 TOOL.ClientConVar[ "type" ] = "gun"
-TOOL.ClientConVar[ "id" ] = "7.62mmMG" --Used by guns and crates (as example)
-TOOL.ClientConVar[ "gunopts" ] = "" --Scalable gun spec suffix ("140x55") - empty for base spec
+TOOL.ClientConVar[ "id" ] = "7.62mmMG" -- base gun/ammo id; legacy ids are fine here, the resolver maps them to their class
+TOOL.ClientConVar[ "gunopts" ] = "" -- scalable spec suffix in OPTS format ("140x55" = 140mm bore, L/55 tube); empty means the id's own default spec
 
 TOOL.ClientConVar[ "data1" ] = "7.62mmMG"
 TOOL.ClientConVar[ "data2" ] = "AP"

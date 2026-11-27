@@ -150,10 +150,11 @@ function ACE.DefineGunClass( id, data )
 		data.id = id
 		GunClasses[ id ] = data
 
-		-- Stage-2 unified scalable guns: a class with a numeric caliber
-		-- envelope has no per-caliber def ladder. Instead we synthesize the
-		-- single pivot def here; the scaling kernel derives every concrete
-		-- spec from it. Legacy ids resolve through ACE.LegacyGunAliases.
+		-- Scalable gun classes: when `caliber` is an envelope table rather
+		-- than a number, there is no per-caliber def ladder. We synthesize the
+		-- single pivot def here; the scaling kernel (sh_ace_gunpack.lua)
+		-- derives every concrete spec from it. Legacy ids resolve through
+		-- ACE.LegacyGunAliases.
 		if istable( data.caliber ) then
 			local env = data.caliber
 			local len = data.length
@@ -226,7 +227,10 @@ function ACE.DefineGun( id, data )
 		GunTable[ id ] = data
 
 		-- Scalable guns need their model in ModelData so clients can rebuild
-		-- matching collision hulls from the scaled convexes.
+		-- matching collision hulls from the scaled convexes. Without this the
+		-- server hull is correct but the client-side physics mesh keeps the
+		-- unscaled shape — bullets and vcollide_wireframe disagree with the
+		-- server, worst exactly where the barrel stretched.
 		local sc = data.scalable
 		if sc == nil then
 			local class = GunClasses[ data.gunclass ]
