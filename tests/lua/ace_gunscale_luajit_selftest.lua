@@ -343,12 +343,16 @@ mp = GS.MapPoint(Vector(10, 2, 3), uni, nil, 1.5)
 near(mp.x, 12, 1e-9, "MapPoint nil split uniform x")
 near(mp.y, 2.4, 1e-9, "MapPoint nil split uniform y")
 near(mp.z, 3.6, 1e-9, "MapPoint nil split uniform z")
--- tankgun_new: joint y=18-ish, bore -y.
+-- tankgun_new: joint x=18, tube len 192, bore +x (re-measured from the
+-- physics mesh — the original registry entry claimed -y, which sheared
+-- scaled hulls sideways instead of stretching them forward).
 local spn = GS.BarrelInfo("models/tankgun_new/tankgun_120mm.mdl")
-check(spn and spn.bore.y == -1, "tankgun_new bore runs -y")
-mp = GS.MapPoint(Vector(-24, -150, 0), Vector(1, 1, 1), spn, 1.25)
-near(mp.y, -150 - 0.25 * 168, 0.01, "tankgun_new maps along -y bore")
-near(mp.x, -24, 1e-9, "tankgun_new x untouched")
+check(spn and spn.bore.x == 1, "tankgun_new bore runs +x")
+mp = GS.MapPoint(Vector(150, -24, 0), Vector(1, 1, 1), spn, 1.25)
+near(mp.x, 150 + (150 - 18) * 0.25, 0.01, "tankgun_new maps along +x bore")
+near(mp.y, -24, 1e-9, "tankgun_new y untouched")
+mp = GS.MapPoint(Vector(300, 0, 0), Vector(1, 1, 1), spn, 1.25)
+near(mp.x, 300 + 0.25 * 192, 0.01, "tankgun_new slide caps at tubelen")
 
 -- ClampCalMM -----------------------------------------------------------------
 near(GS.ClampCalMM("120mmC", 999), 150, 1e-9, "ClampCalMM clamps to max")

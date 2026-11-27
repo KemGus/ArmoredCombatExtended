@@ -118,7 +118,7 @@ check(Guns["37mmC"] == nil, "37mmC ladder def retired")
 check(Guns["20mmHRAC"] == nil, "HRAC defs retired")
 
 -- 3. alias resolution: legacy id resolves to class + authored spec
-local def, calMM, len, base = GS.ResolveSpec("120mmC")
+local def, calMM, len = GS.ResolveSpec("120mmC")
 check(def ~= nil and def.id == "C", "120mmC resolves to class C")
 check(close(calMM, 120, 0.001), "120mmC authored caliber 120mm (got " .. tostring(calMM) .. ")")
 check(close(len, 45, 0.001), "120mmC authored length L45")
@@ -146,7 +146,7 @@ check(small.mass > purecubic * 1.5, "overhead floor keeps 50mm cannon off pure c
 local lim = GS.Limits("C")
 check(close(lim.calmax, 20, 0.001), "cannon max caliber 20cm")
 check(close(lim.calmin, 3.7, 0.001), "cannon min caliber 3.7cm")
-local ncal, nlen = GS.Normalize("C", 250, 45)
+local ncal = (GS.Normalize("C", 250, 45))
 check(close(ncal, 200, 0.001), "250mm request clamps to 200mm")
 
 -- 8. caliber-only classes: length axis locked
@@ -164,17 +164,27 @@ check(Guns.AL.magsize == 12, "AL drum magsize 12")
 local alstats = GS.Stats(Guns.AL, 12.0, 45)
 check(alstats.magreload and close(alstats.magreload, 35, 0.001), "AL magreload 35 at pivot")
 
--- 11. ammo family crossfeed: BAL eats AL ammo
-check(GS.AmmoFits == nil or true, "AmmoFits exists") -- signature needs gun ent; tested live
-check((Classes.AL.ammofamily or "AL") == (Classes.BAL.ammofamily or "BAL") or Classes.BAL.ammofamily == "AL", "AL/BAL crossfeed configured")
+-- 11. ammo family crossfeed: BAL eats AL ammo — exercise the actual fit
+-- function with mock gun/bullet tables rather than only checking metadata
+check(type(GS.AmmoFits) == "function", "AmmoFits is a function")
+check(Classes.BAL.ammofamily == "AL", "BAL shares the AL ammo family")
+if type(GS.AmmoFits) == "function" then
+	-- Mocks mirror the entity shape: guns carry ScalableSpec/Class/Caliber
+	-- (cm), rounds carry the crate's BulletData Id/Caliber.
+	local mockGun = { ScalableSpec = true, Class = "BAL", Id = "120mmBAL", Caliber = 12 }
+	local alRound = { Id = "120mmAL", Caliber = 12 }
+	check(GS.AmmoFits(mockGun, alRound) == true, "BAL accepts AL-family round")
+	local cRound = { Id = "120mmC", Caliber = 12 }
+	check(GS.AmmoFits(mockGun, cRound) ~= true, "BAL rejects cannon round")
+end
 
 -- 12. every legacy alias resolves
 local unresolved = {}
-for id, alias in pairs(ACE.LegacyGunAliases) do
+for id in pairs(ACE.LegacyGunAliases) do
 	local d = GS.ResolveSpec(id)
 	if not d then unresolved[#unresolved + 1] = id end
 end
-check(#unresolved == 0, "all " .. (84) .. " legacy aliases resolve (" .. #unresolved .. " unresolved" .. (#unresolved > 0 and ": " .. table.concat(unresolved, ",") or "") .. ")")
+check(#unresolved == 0, "all 84 legacy aliases resolve (" .. #unresolved .. " unresolved" .. (#unresolved > 0 and ": " .. table.concat(unresolved, ",") or "") .. ")")
 
 -- 13. effective-caliber naming data: synthetic def names carry no caliber digits
 check(not tostring(Guns.C.name):match("%d"), "class C name has no caliber digits")
@@ -183,7 +193,7 @@ check(not tostring(Guns.C.name):match("%d"), "class C name has no caliber digits
 check(GS.ResolveDef("120mmC") == Guns.C, "ResolveDef maps 120mmC to synthetic class def")
 check(GS.ResolveDef("120mmC@140x55") == Guns.C, "ResolveDef maps keyed legacy id to class def")
 check(GS.Limits("120mmC") ~= nil, "Limits works on legacy id")
-local lmcal, lmlen = GS.Normalize("120mmC", nil, nil)
+local lmcal = (GS.Normalize("120mmC", nil, nil))
 check(lmcal ~= nil, "Normalize works on legacy id")
 
 print(string.format("ace_stage2_integration: %d passed, %d failed", passed, failed))

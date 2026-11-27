@@ -27,6 +27,10 @@ do
 			EffCalMM = AliasCalMM
 		end
 
+		-- CalScale is the ratio between the round's actual caliber and the
+		-- caliber the round data was authored at. Every linear round dimension
+		-- (length, diameter, frontal area) multiplies by it, so a 140mm round
+		-- built from the 120mm cannon pivot gets CalScale 140/120 = 1.1667.
 		local CalScale = 1
 		if EffCalMM then
 			CalScale = ( ACE.GunScale.ClampCalMM( PlayerData["Id"], EffCalMM ) / 10 ) / GunData["caliber"]

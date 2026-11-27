@@ -5,7 +5,6 @@ include("shared.lua")
 
 local GunClasses = ACE.Classes.GunClass
 
-local GunTable = ACE.Weapons.Guns
 
 --The distances these ents would have if its caliber was 10mm. Incremented by caliber size.
 local CrewLinkDistBase = 200
@@ -667,10 +666,14 @@ function ENT:Link( Target )
 			return false, Reason
 		end
 
-		-- Don't link if it's a blacklisted round type for this gun
+		-- Don't link if it's a blacklisted round type for this gun.
+		-- Classes sharing an ammo family inherit the family's restrictions
+		-- (drum and breech autoloaders blacklist identically, as the legacy
+		-- per-caliber defs did when both were gunclass AL).
 		local Blacklist = ACE.AmmoBlacklist[ Target.RoundType ] or {}
+		local Fam = (ACE.Classes.GunClass[self.Class] or {}).ammofamily
 
-		if table.HasValue( Blacklist, self.Class ) then
+		if table.HasValue( Blacklist, self.Class ) or (Fam and table.HasValue( Blacklist, Fam )) then
 			return false, "That round type cannot be used with this gun!"
 		end
 
@@ -1120,7 +1123,7 @@ do
 				Blacklist = ACE.AmmoBlacklist[self.BulletData.Type]
 			end
 
-			if ( ACE.RoundTypes[self.BulletData.Type] and not table.HasValue( Blacklist, self.Class ) ) then	--Check if the roundtype loaded actually exists
+			if ( ACE.RoundTypes[self.BulletData.Type] and not table.HasValue( Blacklist, self.Class ) and not ( (ACE.Classes.GunClass[self.Class] or {}).ammofamily and table.HasValue( Blacklist, (ACE.Classes.GunClass[self.Class] or {}).ammofamily ) ) ) then	--Check if the roundtype loaded actually exists
 
 				self.HeatFire = true  --Used by Heat
 

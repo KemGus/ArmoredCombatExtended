@@ -352,7 +352,8 @@ do
 		if acftype == "" then return "" end
 		local List = ACE.Weapons
 
-		return List[acftype][this.Id].name or ""
+		local entry = List[acftype][this.Id] or (acftype == "Guns" and ACE.GunScale.ResolveDef(this.Id))
+	return (entry and entry.name) or ""
 	end
 
 	--- Returns the type of ACF entity
@@ -672,7 +673,13 @@ do
 
 		local listEntries = ACE.Weapons.Guns
 
-		-- Not a valid id, try name
+		-- Not a valid id, try the scalable-gun alias resolver, then name
+		if not listEntries[id] and ACE.GunScale.ResolveDef(id) then
+			local specs = table.Copy(ACE.GunScale.ResolveDef(id))
+			specs.BaseClass = nil
+			return sanitize(specs)
+		end
+
 		if not listEntries[id] then
 			id = listIDFromName(listEntries, id)
 

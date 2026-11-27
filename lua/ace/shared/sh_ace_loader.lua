@@ -136,6 +136,15 @@ end
 -- Be patient. There are alot of functions here
 
 --Gun class definition
+--- Registers a gun class. Besides the legacy class metadata, a class whose
+-- `caliber` field is a table (`{ base = cm, min = cm, max = cm }`) is a
+-- scalable class: this function synthesizes the single pivot weapon def for
+-- it (registered in ACE.Weapons.Guns under the class id, so it is spawnable),
+-- and the scaling kernel in sh_ace_gunpack.lua derives every concrete
+-- caliber/length spec from that pivot. `length = { base, min, max }` (in L/d)
+-- adds the barrel-length slider; omit it for fixed-length classes.
+-- @param id string class id, e.g. "C"
+-- @param data table class fields (type, name, sound, model, caliber, mass, ...)
 function ACE.DefineGunClass( id, data )
 	if (data.year or 0) < ACE.Year then
 		data.id = id

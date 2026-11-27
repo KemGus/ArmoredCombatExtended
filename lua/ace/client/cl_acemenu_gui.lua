@@ -143,9 +143,9 @@ function PANEL:Init( )
 		-- the nearest concrete def at spawn time. Classes made of distinct lines
 		-- (drum vs breech autoloaders, marked by `family` on the defs) get one
 		-- child node per line instead of a single merged entry.
-		local fams = ACE.GunScale and ACE.GunScale.Families( Class.id )
+		local familyLines = ACE.GunScale and ACE.GunScale.Families( Class.id )
 		local famCover = 0
-		if fams then for _, f in ipairs( fams ) do famCover = famCover + #f.defs end end
+		if familyLines then for _, f in ipairs( familyLines ) do famCover = famCover + #f.defs end end
 		local total = 0
 		for _, Ent in pairs(FinalContainer["Guns"]) do
 			if Ent.gunclass == Class.id then total = total + 1 end
@@ -172,10 +172,10 @@ function PANEL:Init( )
 				end
 			end
 
-			if #fams == 1 then
-				SetupFamilyNode( SubNode, fams[1], Class.id == "AL" and "Autoloader" or ( Class.name or Class.id ) )
+			if #familyLines == 1 then
+				SetupFamilyNode( SubNode, familyLines[1], Class.id == "AL" and "Autoloader" or ( Class.name or Class.id ) )
 			else
-				for _, fam in ipairs( fams ) do
+				for _, fam in ipairs( familyLines ) do
 					local FamNode = SubNode:AddNode( fam.name )
 					SetupFamilyNode( FamNode, fam, fam.name )
 					FamNode.Icon:SetImage( "icon16/newspaper.png" )
@@ -1186,7 +1186,7 @@ do
 		acemenupanel.AmmoData["Type"]       = "Ammo"
 		acemenupanel.AmmoData["Classname"]  = Classes.GunClass["MG"]["name"]
 		acemenupanel.AmmoData["ClassData"]  = Classes.GunClass["MG"]["id"]
-		acemenupanel.AmmoData["Data"]       = ACFEnts["Guns"]["12.7mmMG"]["round"]
+		acemenupanel.AmmoData["Data"]       = ACE.GunScale.ResolveDef("12.7mmMG")["round"]
 	end
 
 	if not acemenupanel.AmmoPanelConfig then
@@ -1481,8 +1481,11 @@ do
 end
 
 --- Rebuilds acemenupanel.AmmoData["Data"] so .id resolves to the parameterized
--- key ("120mmC@140") when a caliber override is active. Every round guiupdate
--- reads Data.id, so the key flows into acemenu_data1 untouched.
+-- key ("120mmC@140") when a caliber override is active. This exists because
+-- every one of the ~20 round-type guiupdate functions reads Data.id directly
+-- and passes it into the networked acemenu_data1 string — rather than editing
+-- each round file, the proxy table intercepts the id in one place and the
+-- key flows downstream untouched.
 function PANEL:UpdateAmmoProxy()
 
 	local Data = acemenupanel.AmmoData["Data"]

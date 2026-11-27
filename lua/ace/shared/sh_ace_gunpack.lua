@@ -52,14 +52,24 @@ ACE.GunScale = ACE.GunScale or {}
 
 local GunScale = ACE.GunScale
 
--- Tunables. mvmod = (len / baselen) ^ MVLengthExp clamped to [MVMin, MVMax].
-GunScale.MVLengthExp   = GunScale.MVLengthExp   or 0.35
-GunScale.MVMin         = GunScale.MVMin         or 0.80
-GunScale.MVMax         = GunScale.MVMax         or 1.20
-GunScale.DefTubeFrac   = GunScale.DefTubeFrac   or 0.44
-GunScale.DefBoreLength = GunScale.DefBoreLength or 45
-GunScale.DefCalRange   = GunScale.DefCalRange   or { 0.85, 1.25 }
-GunScale.DefLenRange   = GunScale.DefLenRange   or { 0.8, 1.4 }
+-- Tunables for the scaling laws. These are kernel-wide defaults; per-class
+-- values (caliber/length envelopes, pivot mass, tubefrac) live in the class
+-- files under lua/ace/shared/guns/. To add a new scalable gun class, copy an
+-- existing class file — you should not need to touch anything in this file.
+--
+-- Muzzle velocity (MV) scales with barrel length: a longer tube gives the
+-- propellant gases more time to accelerate the shell, but with diminishing
+-- returns. The law is
+--     mvmod = clamp((len / baselen) ^ MVLengthExp, MVMin, MVMax)
+-- so at the pivot length mvmod is exactly 1, L/70 vs L/45 gives +16%, and
+-- very short or long barrels saturate at the clamps instead of running away.
+GunScale.MVLengthExp   = GunScale.MVLengthExp   or 0.35  -- diminishing-returns exponent for MV vs barrel length
+GunScale.MVMin         = GunScale.MVMin         or 0.80  -- shortest-barrel MV multiplier floor
+GunScale.MVMax         = GunScale.MVMax         or 1.20  -- longest-barrel MV multiplier cap
+GunScale.DefTubeFrac   = GunScale.DefTubeFrac   or 0.44  -- default barrel mass fraction; calibrated from the Rh-120 L/44 -> L/55 weight delta
+GunScale.DefBoreLength = GunScale.DefBoreLength or 45    -- L/d pivot for classes that don't declare a length envelope
+GunScale.DefCalRange   = GunScale.DefCalRange   or { 0.85, 1.25 } -- fallback caliber slider range as a fraction of pivot
+GunScale.DefLenRange   = GunScale.DefLenRange   or { 0.8, 1.4 }   -- fallback length slider range as a fraction of pivot
 GunScale.CalEpsilon    = GunScale.CalEpsilon    or 0.051 -- cm, ammo-fit tolerance
 GunScale.LenEpsilon    = GunScale.LenEpsilon    or 0.51  -- cm, chamber slack
 GunScale.PropSlack     = GunScale.PropSlack     or 1.02  -- prop mass tolerance
@@ -67,7 +77,16 @@ GunScale.SoundPitch    = GunScale.SoundPitch    ~= false -- deeper sound on bigg
 
 -- Per-model barrel-split registry for the rebuilt rigs (tools/modelrig):
 -- every model carries `tube` and `muzzledev` bones, children of the barrel
--- bone. `joint` is the bind-space position of the breech/tube boundary (the
+-- bone. Geometry, in model space looking down the gun:
+--
+--     breech        joint          tube end (muzzle device zone)
+--     [==== breech body ====][====== barrel tube ======][dev]
+--     |<-- rigid-ish zone -->|<-- length-stretch zone -->|
+--     origin            joint pos                  joint + bore * tubelen
+--
+-- Length scaling stretches only the region past `joint` along `bore` —
+-- the breech keeps its shape while the barrel elongates. `joint` is the
+-- bind-space position of the breech/tube boundary (the
 -- tube bone origin), `bore` the normalized bind-space direction toward the
 -- muzzle, `tubelen` the J->T span (the muzzledev slide distance per unit of
 -- lenScale), and `mdir` the slide direction in the parent (barrel) frame for
@@ -510,7 +529,18 @@ function GunScale.OptString( id, calMM, len )
 	local lim = GunScale.Limits( id )
 	if not lim or not calMM or not len then return "" end
 
-	if math.abs( calMM - lim.basecal * 10 ) < 0.05 and math.abs( len - lim.baselen ) < 0.5 then
+	-- The empty string must round-trip: it is only correct when the spec matches
+	-- what a bare paste of the id would produce. That default is the key suffix
+	-- embedded in the id, then the legacy alias spec, then the class pivot —
+	-- not just the pivot. A legacy gun dialed back to the pivot (170mmC at
+	-- 120mm L/45) still needs explicit options or the next paste restores the
+	-- alias dimensions.
+	local BaseId, KeyCal, KeyLen = GunScale.ParseKey( id )
+	local _, AliasCal, AliasLen = GunScale.ResolveSpec( BaseId )
+	local DefCal = ( KeyCal or AliasCal or lim.basecal * 10 )
+	local DefLen = ( KeyLen or AliasLen or lim.baselen )
+
+	if math.abs( calMM - DefCal ) < 0.05 and math.abs( len - DefLen ) < 0.5 then
 		return ""
 	end
 
