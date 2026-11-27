@@ -131,8 +131,6 @@ function PANEL:Init( )
 
 	for _,Class in pairs(self.GunClasses["GunClass"]) do
 
-		-- Breech autoloaders live inside the drum autoloader's menu entry as a
-		-- mechanism dropdown (see GunFamilyGUICreate); no separate tree node.
 		if Class.id ~= "BAL" then
 
 		local NodeName = Class.id == "AL" and "Autoloader" or ( Class.name or "No Name" )
