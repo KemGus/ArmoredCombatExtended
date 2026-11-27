@@ -219,10 +219,20 @@ do
 		local KeyCal, KeyLen
 		Id, KeyCal, KeyLen = ACE.GunScale.ParseKey(Id)
 
-		-- Legacy retired ids rewrite first (old BackComp table), then resolve
-		-- through the alias chain: a legacy id contributes its authored
-		-- caliber/length as the default spec, overridable by key suffix.
-		if BackComp then Id = BackComp[Id] or Id end
+		-- Resolution order matters and must match the crate factory exactly:
+		-- resolve through the modern chain FIRST (exact defs, legacy aliases,
+		-- then the suffix-migration fallback), and rewrite through the legacy
+		-- BackComp table only when nothing recognizes the id. The migration
+		-- layer resolves ids like "105mmSB" at their true caliber, so applying
+		-- BackComp first would pin the gun to the rewrite target (100mmSBC)
+		-- while the crate factory — which resolves first — builds rounds at
+		-- 105mm, breaking ammo links on pasted dupes. BackComp remains the
+		-- last resort for ids the migration suffixes don't know ("40mmGLSingle",
+		-- missile rewrites).
+		if BackComp then
+			local Probe = ACE.GunScale.ResolveSpec( Id )
+			if not Probe then Id = BackComp[Id] or Id end
+		end
 
 		local Lookup, AliasCalMM, AliasLen = ACE.GunScale.ResolveSpec(Id)
 		if not Lookup then
