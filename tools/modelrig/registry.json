@@ -1,0 +1,422 @@
+{
+ "models/tankgun/tankgun_37mm.mdl": {
+  "joint": 5.735,
+  "tubeend": 63.825,
+  "mdir": [
+   1.0,
+   0.0,
+   0.0
+  ],
+  "ok": true
+ },
+ "models/tankgun/tankgun_50mm.mdl": {
+  "joint": 7.75,
+  "tubeend": 86.25,
+  "mdir": [
+   1.0,
+   0.0,
+   0.0
+  ],
+  "ok": true
+ },
+ "models/tankgun/tankgun_75mm.mdl": {
+  "joint": 11.625,
+  "tubeend": 129.375,
+  "mdir": [
+   1.0,
+   0.0,
+   0.0
+  ],
+  "ok": true
+ },
+ "models/tankgun/tankgun_85mm.mdl": {
+  "joint": 13.136,
+  "tubeend": 146.179,
+  "mdir": [
+   1.0,
+   0.0,
+   0.0
+  ],
+  "ok": true
+ },
+ "models/tankgun/tankgun_100mm.mdl": {
+  "joint": 15.5,
+  "tubeend": 172.5,
+  "mdir": [
+   1.0,
+   0.0,
+   0.0
+  ],
+  "ok": true
+ },
+ "models/tankgun/tankgun_120mm.mdl": {
+  "joint": 18.6,
+  "tubeend": 207.0,
+  "mdir": [
+   1.0,
+   0.0,
+   0.0
+  ],
+  "ok": true
+ },
+ "models/tankgun/tankgun_140mm.mdl": {
+  "joint": 21.7,
+  "tubeend": 241.5,
+  "mdir": [
+   1.0,
+   0.0,
+   0.0
+  ],
+  "ok": true
+ },
+ "models/tankgun/tankgun_170mm.mdl": {
+  "joint": 23.87,
+  "tubeend": 265.65,
+  "mdir": [
+   1.0,
+   0.0,
+   0.0
+  ],
+  "ok": true
+ },
+ "models/tankgun/tankgun_170mmsb.mdl": {
+  "joint": 29.561,
+  "tubeend": 223.49,
+  "mdir": [
+   0.0,
+   0.0,
+   -1.0
+  ],
+  "ok": true
+ },
+ "models/tankgun/tankgun_al_50mm.mdl": {
+  "joint": 6.588,
+  "tubeend": 73.312,
+  "mdir": [
+   1.0,
+   0.0,
+   0.0
+  ],
+  "ok": true
+ },
+ "models/tankgun/tankgun_al_75mm.mdl": {
+  "joint": 9.881,
+  "tubeend": 109.969,
+  "mdir": [
+   1.0,
+   0.0,
+   0.0
+  ],
+  "ok": true
+ },
+ "models/tankgun/tankgun_al_100mm.mdl": {
+  "joint": 13.175,
+  "tubeend": 146.625,
+  "mdir": [
+   1.0,
+   0.0,
+   0.0
+  ],
+  "ok": true
+ },
+ "models/tankgun/tankgun_al_120mm.mdl": {
+  "joint": 15.81,
+  "tubeend": 175.95,
+  "mdir": [
+   1.0,
+   0.0,
+   0.0
+  ],
+  "ok": true
+ },
+ "models/tankgun/tankgun_al_140mm.mdl": {
+  "joint": 18.445,
+  "tubeend": 205.275,
+  "mdir": [
+   1.0,
+   0.0,
+   0.0
+  ],
+  "ok": true
+ },
+ "models/tankgun/tankgun_al_170mm.mdl": {
+  "joint": 22.319,
+  "tubeend": 248.383,
+  "mdir": [
+   1.0,
+   0.0,
+   0.0
+  ],
+  "ok": true
+ },
+ "models/tankgun/tankgun_short_37mm.mdl": {
+  "joint": 5.735,
+  "tubeend": 35.15,
+  "mdir": [
+   1.0,
+   0.0,
+   0.0
+  ],
+  "ok": true
+ },
+ "models/tankgun/tankgun_short_50mm.mdl": {
+  "joint": 7.75,
+  "tubeend": 47.5,
+  "mdir": [
+   1.0,
+   0.0,
+   0.0
+  ],
+  "ok": true
+ },
+ "models/tankgun/tankgun_short_75mm.mdl": {
+  "joint": 11.625,
+  "tubeend": 71.25,
+  "mdir": [
+   1.0,
+   0.0,
+   0.0
+  ],
+  "ok": true
+ },
+ "models/tankgun/tankgun_short_85mm.mdl": {
+  "joint": 13.136,
+  "tubeend": 80.497,
+  "mdir": [
+   1.0,
+   0.0,
+   0.0
+  ],
+  "ok": true
+ },
+ "models/tankgun/tankgun_short_100mm.mdl": {
+  "joint": 15.5,
+  "tubeend": 95.0,
+  "mdir": [
+   1.0,
+   0.0,
+   0.0
+  ],
+  "ok": true
+ },
+ "models/tankgun/tankgun_short_120mm.mdl": {
+  "joint": 18.6,
+  "tubeend": 114.0,
+  "mdir": [
+   1.0,
+   0.0,
+   0.0
+  ],
+  "ok": true
+ },
+ "models/tankgun/tankgun_short_140mm.mdl": {
+  "joint": 21.7,
+  "tubeend": 132.994,
+  "mdir": [
+   1.0,
+   0.0,
+   0.0
+  ],
+  "ok": true
+ },
+ "models/tankgun/tankgun_short_170mm.mdl": {
+  "joint": 27.125,
+  "tubeend": 162.719,
+  "mdir": [
+   1.0,
+   0.0,
+   0.0
+  ],
+  "ok": true
+ },
+ "models/tankgun_new/tankgun_50mm.mdl": {
+  "joint": 2.5,
+  "tubeend": 87.5,
+  "mdir": [
+   0.0,
+   -1.0,
+   0.0
+  ],
+  "ok": true
+ },
+ "models/tankgun_new/tankgun_75mm.mdl": {
+  "joint": 3.75,
+  "tubeend": 131.25,
+  "mdir": [
+   0.0,
+   -1.0,
+   0.0
+  ],
+  "ok": true
+ },
+ "models/tankgun_new/tankgun_100mm.mdl": {
+  "joint": 5.0,
+  "tubeend": 175.0,
+  "mdir": [
+   0.0,
+   -1.0,
+   0.0
+  ],
+  "ok": true
+ },
+ "models/tankgun_new/tankgun_120mm.mdl": {
+  "joint": 6.0,
+  "tubeend": 210.0,
+  "mdir": [
+   0.0,
+   -1.0,
+   0.0
+  ],
+  "ok": true
+ },
+ "models/tankgun_new/tankgun_140mm.mdl": {
+  "joint": 7.0,
+  "tubeend": 245.0,
+  "mdir": [
+   0.0,
+   -1.0,
+   0.0
+  ],
+  "ok": true
+ },
+ "models/tankgun_new/tankgun_170mm.mdl": {
+  "joint": 8.5,
+  "tubeend": 297.5,
+  "mdir": [
+   0.0,
+   -1.0,
+   0.0
+  ],
+  "ok": true
+ },
+ "models/howitzer/howitzer_75mm.mdl": {
+  "joint": 3.954,
+  "tubeend": 71.939,
+  "mdir": [
+   1.0,
+   0.0,
+   0.0
+  ],
+  "ok": true
+ },
+ "models/howitzer/howitzer_105mm.mdl": {
+  "joint": 5.58,
+  "tubeend": 101.465,
+  "mdir": [
+   1.0,
+   0.0,
+   0.0
+  ],
+  "ok": true
+ },
+ "models/howitzer/howitzer_122mm.mdl": {
+  "joint": 6.484,
+  "tubeend": 117.951,
+  "mdir": [
+   1.0,
+   0.0,
+   0.0
+  ],
+  "ok": true
+ },
+ "models/howitzer/howitzer_155mm.mdl": {
+  "joint": 8.243,
+  "tubeend": 149.874,
+  "mdir": [
+   1.0,
+   0.0,
+   0.0
+  ],
+  "ok": true
+ },
+ "models/howitzer/howitzer_203mm.mdl": {
+  "joint": 10.792,
+  "tubeend": 196.33,
+  "mdir": [
+   1.0,
+   0.0,
+   0.0
+  ],
+  "ok": true
+ },
+ "models/howitzer/howitzer_240mm.mdl": {
+  "joint": 12.756,
+  "tubeend": 232.0,
+  "mdir": [
+   1.0,
+   0.0,
+   0.0
+  ],
+  "ok": true
+ },
+ "models/howitzer/howitzer_290mm.mdl": {
+  "joint": 15.407,
+  "tubeend": 280.258,
+  "mdir": [
+   1.0,
+   0.0,
+   0.0
+  ],
+  "ok": true
+ },
+ "models/howitzer/howitzer_406mm.mdl": {
+  "joint": 94.185,
+  "tubeend": 387.043,
+  "mdir": [
+   -0.0002,
+   0.0449,
+   -0.999
+  ],
+  "ok": true
+ },
+ "models/autocannon/semiautocannon_25mm.mdl": {
+  "joint": 15.625,
+  "tubeend": 43.95,
+  "mdir": [
+   1.0,
+   0.0,
+   0.0
+  ],
+  "ok": true
+ },
+ "models/autocannon/semiautocannon_37mm.mdl": {
+  "joint": 23.125,
+  "tubeend": 65.046,
+  "mdir": [
+   1.0,
+   0.0,
+   0.0
+  ],
+  "ok": true
+ },
+ "models/autocannon/semiautocannon_45mm.mdl": {
+  "joint": 28.125,
+  "tubeend": 79.11,
+  "mdir": [
+   1.0,
+   0.0,
+   0.0
+  ],
+  "ok": true
+ },
+ "models/autocannon/semiautocannon_57mm.mdl": {
+  "joint": 38.75,
+  "tubeend": 108.997,
+  "mdir": [
+   1.0,
+   0.0,
+   0.0
+  ],
+  "ok": true
+ },
+ "models/autocannon/semiautocannon_76mm.mdl": {
+  "joint": 59.375,
+  "tubeend": 167.011,
+  "mdir": [
+   1.0,
+   0.0,
+   0.0
+  ],
+  "ok": true
+ }
+}
