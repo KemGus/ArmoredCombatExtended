@@ -201,17 +201,41 @@ do
 		HMG = true
 	}
 
-	function ACE.MakeGun(Owner, Pos, Angle, Id)
+	function ACE.MakeGun(Owner, Pos, Angle, Id, GunOpts)
 
 		local Gun = ents.Create("acf_gun")
 		if not IsValid(Gun) then return false end
 
-		if not ACE.CheckGun( Id ) then
-			Id = BackComp[Id] or "100mmC"
+		-- Parameterized ids ("120mmC@140x55") arrive whole from dupes; the spawn
+		-- tool passes only the suffix through GunOpts ("140x55").
+		local KeyCal, KeyLen
+		Id, KeyCal, KeyLen = ACE.GunScale.ParseKey(Id)
+
+		-- Legacy retired ids rewrite first (old BackComp table), then resolve
+		-- through the alias chain: a legacy id contributes its authored
+		-- caliber/length as the default spec, overridable by key suffix.
+		Id = BackComp[Id] or Id
+
+		local Lookup, AliasCalMM, AliasLen = ACE.GunScale.ResolveSpec(Id)
+		if not Lookup then
+			Id = "100mmC"
+			Lookup, AliasCalMM, AliasLen = ACE.GunScale.ResolveSpec(Id)
+		end
+		if not Lookup then return false end
+
+		local ClassData = GunClasses[Lookup.gunclass]
+
+		-- Resolve the effective spec inside the class envelope. GunOpts wins
+		-- over parameters embedded in the id, which win over alias defaults.
+		local Limits = ACE.GunScale.Limits(Lookup.id)
+		local CalMM, BoreLen
+		if Limits then
+			local OptCal, OptLen = ACE.GunScale.ParseOpts(GunOpts)
+			CalMM, BoreLen = ACE.GunScale.Normalize(Lookup.id, OptCal or KeyCal or AliasCalMM, OptLen or KeyLen or AliasLen)
 		end
 
-		local Lookup	= GunTable[Id]
-		local ClassData = GunClasses[Lookup.gunclass]
+		local Stats  = ACE.GunScale.Stats(Lookup, CalMM and CalMM / 10, BoreLen)
+		local EffCal = Stats.caliber -- effective caliber in cm
 
 		if Lookup.gunclass == "SL" then
 			if not Owner:CheckLimit("_ace_smokelauncher") then return false end
@@ -221,7 +245,7 @@ do
 			if not Owner:CheckLimit("_ace_rapidgun") then return false end
 			Owner:AddCount("_ace_rapidgun", Gun)
 
-		elseif Lookup.caliber >= ACE.LargeCaliber then
+		elseif EffCal >= ACE.LargeCaliber then
 			if not Owner:CheckLimit("_ace_largegun") then return false end
 			Owner:AddCount("_ace_largegun", Gun)
 
@@ -235,14 +259,26 @@ do
 		Gun:Spawn()
 		Gun:CPPISetOwner(Owner)
 		Gun.Id              = Id
-		Gun.Caliber         = Lookup.caliber
+		Gun.Caliber         = EffCal
 		Gun.Model           = Lookup.model
-		Gun.Mass            = Lookup.weight
+		Gun.Mass            = Stats.mass
 		Gun.Class           = Lookup.gunclass
 		Gun.Heat            = ACE.AmbientTemp
 		Gun.LinkRangeMul    = math.max(Gun.Caliber / 10,1) ^ 1.2
 		Gun.RequiresGunner	= false
 		local GunnerExcluded	= Lookup.gunnerexception or false
+
+		-- Scalable-gun state. ScalableSpec marks the ammo-fit rule even at base
+		-- spec; IsScalable only when the hull/render actually scales.
+		Gun.ScalableSpec   = Limits
+		Gun.CaliberMM      = CalMM
+		Gun.BoreLength     = BoreLen
+		Gun.MVMod          = Stats.mvmod
+		Gun.ChamberLen     = Stats.chamberLen
+		Gun.PropLimit      = Stats.propLimit
+		Gun.GunScaleVec    = Stats.scale
+		Gun.GunOpts        = Limits and ACE.GunScale.OptString(Lookup.id, CalMM, BoreLen) or nil
+		Gun.GunKey         = Limits and ACE.GunScale.Key(Lookup.id, CalMM, Limits.lenmin < Limits.lenmax and BoreLen or nil) or Id
 
 		Gun.noloaders	= ClassData.noloader or nil
 
@@ -257,7 +293,7 @@ do
 		end
 
 		Gun.PGRoFmod	= Lookup.rofmod and math.max(0.01, Lookup.rofmod) or 1 --per gun rof
-		Gun.maxrof = Lookup.maxrof
+		Gun.maxrof = Stats.maxrof or Lookup.maxrof
 		Gun.CurrentShot = 0
 		Gun.MagSize	= 1
 
@@ -265,7 +301,7 @@ do
 		--to cover guns that uses magazines
 		if Lookup.magsize then
 
-			Gun.MagSize = math.max(Gun.MagSize, Lookup.magsize)
+			Gun.MagSize = math.max(Gun.MagSize, Stats.magsize or Lookup.magsize)
 			local Cal = Gun.Caliber
 
 			if Cal >= 3 then
@@ -291,10 +327,10 @@ do
 
 		Gun.MagReload = 0
 		if Lookup.magreload then
-			Gun.MagReload = math.max(Gun.MagReload, Lookup.magreload )
+			Gun.MagReload = math.max(Gun.MagReload, Stats.magreload or Lookup.magreload )
 		end
 
-		Gun.MinLengthBonus    = 0.5 * 3.1416 * (Gun.Caliber / 2) ^ 2 * Lookup.round.maxlength
+		Gun.MinLengthBonus    = 0.5 * 3.1416 * (Gun.Caliber / 2) ^ 2 * Stats.chamberLen
 
 		Gun.Muzzleflash       = Lookup.muzzleflash or ClassData.muzzleflash
 		Gun.RoFmod            = ClassData.rofmod
@@ -302,13 +338,18 @@ do
 		Gun.Sound             = Lookup.sound or ClassData.sound
 		Gun.DefaultSound      = Gun.Sound
 		Gun.SoundPitch        = 100
+		if Limits and Stats.calscale ~= 1 and ACE.GunScale.SoundPitch then
+			-- Bigger guns sound deeper.
+			Gun.SoundPitch = math.Clamp( math.Round( 100 / math.sqrt( Stats.calscale ) ), 60, 140 )
+		end
 		Gun.AutoSound         = ClassData.autosound and (Lookup.autosound or ClassData.autosound) or nil
 		Gun.CurrentRecoil     = 0
 
 		Gun:SetNWInt( "Caliber", Gun.Caliber )
-		Gun:SetNWString( "WireName", Lookup.name )
+		Gun:SetNWString( "WireName", Limits and ACE.GunScale.DisplayName( Lookup, CalMM, BoreLen ) or Lookup.name )
 		Gun:SetNWString( "Class", Gun.Class )
 		Gun:SetNWString( "ID", Gun.Id )
+		Gun:SetNWString( "GunKey", Gun.GunKey )
 		Gun:SetNWString( "Muzzleflash", Gun.Muzzleflash )
 		Gun:SetNWString( "Sound", Gun.Sound )
 		Gun:SetNWInt( "SoundPitch", Gun.SoundPitch )
@@ -319,17 +360,72 @@ do
 		Gun:SetMoveType( MOVETYPE_VPHYSICS )
 		Gun:SetSolid( SOLID_VPHYSICS )
 
-		local Muzzle = Gun:GetAttachment( Gun:LookupAttachment( "muzzle" ) )
-		Gun.Muzzle = Gun:WorldToLocal(Muzzle.Pos)
+		if Stats.calscale ~= 1 or Stats.lenscale ~= 1 then
+			-- Scaled hull: rebuild the convexes from the base physics mesh.
+			local Phys = Gun:GetPhysicsObject()
+			if IsValid( Phys ) then
+				Gun.ScaleData = {
+					Mesh     = Phys:GetMeshConvexes(),
+					Scale    = Stats.scale,
+					Material = "metal",
+				}
 
-		local longbarrel = ClassData.longbarrel
+				if Stats.split and Stats.lenscale ~= 1 then
+					-- Piecewise tube stretch: the registry carries the
+					-- breech/tube joint, the bore direction and the tube
+					-- length, all in bind space. Only the tube side of the
+					-- mesh stretches; the breech keeps the uniform caliber
+					-- scale.
+					Gun.ScaleData.Split    = Stats.split
+					Gun.ScaleData.LenScale = Stats.lenscale
+
+					Gun.TubeSplit    = Stats.split
+					Gun.TubeLenScale = Stats.lenscale
+
+					-- Tube tip measured along the bore: the muzzle is never
+					-- mapped past it, so authored attachments that sit ahead
+					-- of the mesh can't float the muzzle flash.
+					local Tip
+					for _, group in pairs( Gun.ScaleData.Mesh ) do
+						for _, vertex in pairs( group ) do
+							local v = istable( vertex ) and vertex.pos or vertex
+							if isvector( v ) then
+								local t = ( v - Stats.split.joint ):Dot( Stats.split.bore )
+								if not Tip or t > Tip then Tip = t end
+							end
+						end
+					end
+					Gun.TubeTip = Tip
+
+					-- Cache the bind muzzle before the bones move: once the
+					-- rig slides, GetAttachment already reports the stretched
+					-- position and UpdateMuzzlePoint would apply it twice.
+					local AttachName = ACE.GunScale.ResolveBarrel( Gun )
+					local AttachId = AttachName and Gun:LookupAttachment( AttachName ) or 0
+					local Attach = AttachId > 0 and Gun:GetAttachment( AttachId )
+					if Attach and Attach.Pos then
+						Gun.MuzzleBindPos = Gun:WorldToLocal( Attach.Pos )
+						Gun.MuzzleBindAtt = AttachId
+					end
+
+					-- Stretch the render tube via the rig's `tube`/`muzzledev`
+					-- bones; bone manipulations set server-side network to
+					-- every client on their own.
+					ACE.GunScale.ApplyBarrelBones( Gun, Stats.lenscale, Stats.split )
+				end
+
+				Gun.IsScalable = true
+				Gun:ACE_SetScale( Gun.ScaleData )
+			end
+		end
+
+		Gun:UpdateMuzzlePoint()
+
+		local longbarrel = Lookup.barrels or ClassData.barrels or ClassData.longbarrel
 		if longbarrel ~= nil then
 			timer.Simple(0.25, function() --need to wait until after the property is actually set
 				if not IsValid(Gun) then return end
-				if Gun:GetBodygroup( longbarrel.index ) == longbarrel.submodel then
-					local Muzzle = Gun:GetAttachment( Gun:LookupAttachment( longbarrel.newpos ) )
-					Gun.Muzzle = Gun:WorldToLocal(Muzzle.Pos)
-				end
+				Gun:UpdateMuzzlePoint()
 			end)
 		end
 
@@ -350,8 +446,47 @@ do
 	end
 end
 
-list.Set( "ACFCvars", "acf_gun", {"id"} )
-duplicator.RegisterEntityClass("acf_gun", ACE.MakeGun, "Pos", "Angle", "Id")
+list.Set( "ACFCvars", "acf_gun", {"id", "gunopts"} )
+duplicator.RegisterEntityClass("acf_gun", ACE.MakeGun, "Pos", "Angle", "Id", "GunOpts")
+
+-- Resolves the muzzle offset in LOCAL space. QC attachments do not follow the
+-- render-matrix scale used on scalable guns, so the base attachment position
+-- is scaled by the same vector the hull/render use instead.
+function ENT:UpdateMuzzlePoint()
+
+	local AttachName = ACE.GunScale.ResolveBarrel( self )
+	local AttachId = AttachName and self:LookupAttachment( AttachName ) or 0
+	local Muzzle = AttachId > 0 and self:GetAttachment( AttachId ) or nil
+
+	if Muzzle and Muzzle.Pos then
+		-- Cache the bind-space position per attachment: on rigs where the
+		-- muzzle attachment rides the sliding muzzledev bone, later reads
+		-- already include the stretch and mapping them would apply it twice.
+		if not self.MuzzleBindPos or self.MuzzleBindAtt ~= AttachId then
+			self.MuzzleBindPos = self:WorldToLocal( Muzzle.Pos )
+			self.MuzzleBindAtt = AttachId
+		end
+		local LocalPos = self.MuzzleBindPos
+
+		if self.TubeSplit then
+			self.Muzzle = ACE.GunScale.MapPoint( LocalPos, self.GunScaleVec or Vector( 1, 1, 1 ),
+				self.TubeSplit, self.TubeLenScale )
+
+			if self.TubeTip then -- don't let the flash sit ahead of the stretched tip
+				local t = ( LocalPos - self.TubeSplit.joint ):Dot( self.TubeSplit.bore )
+				if t > self.TubeTip then
+					local capped = LocalPos - self.TubeSplit.bore * ( t - self.TubeTip )
+					self.Muzzle = ACE.GunScale.MapPoint( capped, self.GunScaleVec or Vector( 1, 1, 1 ), self.TubeSplit, self.TubeLenScale )
+				end
+			end
+		else
+			self.Muzzle = LocalPos * ( self.GunScaleVec or Vector( 1, 1, 1 ) )
+		end
+	end
+
+	self:SetNWVector( "ACE_Muzzle", self.Muzzle or Vector() )
+
+end
 
 function ENT:UpdateOverlayText()
 
@@ -371,6 +506,10 @@ function ENT:UpdateOverlayText()
 	local text = roundType .. " - " .. ammoLeft .. (ammoLeft == 1 and " shot left" or " shots left ( " .. gunStatus .. " )")
 
 	text = text .. "\nRounds Per Minute: " .. math.Round( self.RateOfFire or 0, 2 )
+
+	if self.ScalableSpec and self.CaliberMM then
+		text = text .. string.format( "\nSpec: %gmm L%g - %d kg", self.CaliberMM, self.BoreLength or 0, math.Round( self.Mass ) )
+	end
 
 	if ACE.GetGunFirepowerReadout then
 		local readout = ACE.GetGunFirepowerReadout(self)
@@ -521,9 +660,11 @@ function ENT:Link( Target )
 			return false, "Refill crates cannot be linked!"
 		end
 
-		-- Don't link if it's not the right ammo type
-		if Target.BulletData.Id ~= self.Id then
-			return false, "Wrong ammo type!"
+		-- Don't link if it's not the right ammo type. Scalable guns match on
+		-- caliber/chamber/propellant; legacy guns keep the exact-id rule.
+		local AmmoFits, Reason = ACE.GunScale.AmmoFits( self, Target.BulletData )
+		if not AmmoFits then
+			return false, Reason
 		end
 
 		-- Don't link if it's a blacklisted round type for this gun
@@ -544,7 +685,7 @@ function ENT:Link( Target )
 
 		RefreshGunRateOfFire(self, Target)
 		Wire_TriggerOutput( self, "Muzzle Weight", math.floor( Target.BulletData.ProjMass * 1000 ) )
-		Wire_TriggerOutput( self, "Muzzle Velocity", math.floor( Target.BulletData.MuzzleVel * ACE.VelScale ) )
+		Wire_TriggerOutput( self, "Muzzle Velocity", math.floor( Target.BulletData.MuzzleVel * ( self.MVMod or 1 ) * ACE.VelScale ) )
 
 		if ACE.PointsInputChanged and not self._ACEPointsSuppress and (not Target or not Target._ACEPointsSuppress) then
 			ACE.PointsInputChanged({ self, Target }, "gun-ammo-linked")
@@ -596,18 +737,11 @@ end
 function ENT:CanProperty( _, property )
 
 	if property == "bodygroups" then
-		local longbarrel = GunClasses[self.Class].longbarrel
-		if longbarrel ~= nil then
-			timer.Simple(0.25, function() --need to wait until after the property is actually set
-				if self:GetBodygroup( longbarrel.index ) == longbarrel.submodel then
-					local Muzzle = self:GetAttachment( self:LookupAttachment( longbarrel.newpos ) )
-					self.Muzzle = self:WorldToLocal(Muzzle.Pos)
-				else
-					local Muzzle = self:GetAttachment( self:LookupAttachment( "muzzle" ) )
-					self.Muzzle = self:WorldToLocal(Muzzle.Pos)
-				end
-			end)
-		end
+		-- Any barrel-variant setup (legacy longbarrel, class/def barrels, or a
+		-- scalable def) needs the muzzle re-resolved once the property lands.
+		timer.Simple(0.25, function()
+			if IsValid(self) then self:UpdateMuzzlePoint() end
+		end)
 	end
 
 	return true
@@ -1082,8 +1216,13 @@ function ENT:LoadAmmo( AddTime, Reload )
 
 	if AmmoEnt and AmmoEnt.Legal then
 		AmmoEnt.Ammo = AmmoEnt.Ammo - 1
-		self.BulletData = AmmoEnt.BulletData
+		-- Copy the round so the gun can apply its own bore-length muzzle velocity
+		-- factor without mutating the crate's canonical BulletData.
+		self.BulletData = table.Copy( AmmoEnt.BulletData )
 		self.BulletData.Crate = AmmoEnt:EntIndex()
+		if ( self.MVMod or 1 ) ~= 1 then
+			self.BulletData.MuzzleVel = self.BulletData.MuzzleVel * self.MVMod
+		end
 
 		local ReloadTime, Loader = GetGunReloadTime(self, AmmoEnt.BulletData, AmmoEnt.RoFMul)
 		self.ReloadTime = ReloadTime

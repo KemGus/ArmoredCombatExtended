@@ -131,22 +131,74 @@ function PANEL:Init( )
 
 	for _,Class in pairs(self.GunClasses["GunClass"]) do
 
-		local SubNode = Guns:AddNode( Class.name or "No Name" , ItemIcon )
+		-- Breech autoloaders live inside the drum autoloader's menu entry as a
+		-- mechanism dropdown (see GunFamilyGUICreate); no separate tree node.
+		if Class.id ~= "BAL" then
 
+		local NodeName = Class.id == "AL" and "Autoloader" or ( Class.name or "No Name" )
+		local SubNode = Guns:AddNode( NodeName , ItemIcon )
+
+		-- Fully-scalable classes collapse into family entries (ACF-3 style): one
+		-- unified caliber/length UI per weapon line, each caliber resolving to
+		-- the nearest concrete def at spawn time. Classes made of distinct lines
+		-- (drum vs breech autoloaders, marked by `family` on the defs) get one
+		-- child node per line instead of a single merged entry.
+		local fams = ACE.GunScale and ACE.GunScale.Families( Class.id )
+		local famCover = 0
+		if fams then for _, f in ipairs( fams ) do famCover = famCover + #f.defs end end
+		local total = 0
 		for _, Ent in pairs(FinalContainer["Guns"]) do
-			if Ent.gunclass == Class.id then
+			if Ent.gunclass == Class.id then total = total + 1 end
+		end
 
-				local EndNode = SubNode:AddNode( Ent.name or "No Name")
-				EndNode.mytable = Ent
+		if famCover > 0 and famCover == total then
+			local function SetupFamilyNode( node, fam, displayName )
+				node.mytable = {
+					id       = fam.defs[1].id,
+					ent      = fam.defs[1].ent,
+					type     = "Guns",
+					name     = displayName,
+					model    = fam.defs[1].model,
+					class    = Class.id,
+					gunclass = Class.id,
+					family   = fam,
+					guicreate = function( _, Table ) ACE.GunFamilyGUICreate( Table ) end,
+					guiupdate = function() return end,
+				}
 
-				function EndNode:DoClick()
+				function node:DoClick()
 					RunConsoleCommand( "acemenu_type", self.mytable.type )
 					acemenupanel:UpdateDisplay( self.mytable )
 				end
+			end
 
-				EndNode.Icon:SetImage( "icon16/newspaper.png" )
+			if #fams == 1 then
+				SetupFamilyNode( SubNode, fams[1], Class.id == "AL" and "Autoloader" or ( Class.name or Class.id ) )
+			else
+				for _, fam in ipairs( fams ) do
+					local FamNode = SubNode:AddNode( fam.name )
+					SetupFamilyNode( FamNode, fam, fam.name )
+					FamNode.Icon:SetImage( "icon16/newspaper.png" )
+				end
+			end
+		else
+			for _, Ent in pairs(FinalContainer["Guns"]) do
+				if Ent.gunclass == Class.id then
+
+					local EndNode = SubNode:AddNode( Ent.name or "No Name")
+					EndNode.mytable = Ent
+
+					function EndNode:DoClick()
+						RunConsoleCommand( "acemenu_type", self.mytable.type )
+						acemenupanel:UpdateDisplay( self.mytable )
+					end
+
+					EndNode.Icon:SetImage( "icon16/newspaper.png" )
+				end
 			end
 		end
+		end
+
 	end
 
 	------------------- Missiles folder -------------------
@@ -1393,6 +1445,8 @@ do
 	acemenupanel.CData.CaliberSelect.OnSelect = function( _ , _ , gun )
 
 		acemenupanel.AmmoData["Data"] = ACFEnts["Guns"][gun]["round"]
+		acemenupanel.AmmoData["GunCalMM"] = nil --reset to the def's base caliber
+		MainPanel:UpdateGunCalSlider( gun )
 		MainPanel:UpdateAttribs()
 		MainPanel:UpdateAttribs() --Note : this is intentional
 
@@ -1400,7 +1454,84 @@ do
 
 	acemenupanel.CustomDisplay:AddItem( acemenupanel.CData.CaliberSelect )
 
+	--===========================================================================================
+	-----Creating the scalable round caliber slider (only for scalable gun defs)
+	--===========================================================================================
+
+	acemenupanel.CData.GunCalSlider = vgui.Create( "DNumSlider", acemenupanel.CustomDisplay )
+	local GunCalSlider = acemenupanel.CData.GunCalSlider
+	GunCalSlider:SetText( "Round caliber (mm)" )
+	GunCalSlider:SetDark( true )
+	GunCalSlider:SetDecimals( 1 )
+	GunCalSlider:SetVisible( false )
+
+	GunCalSlider.OnValueChanged = function( _, val )
+		-- Same programmatic-change guard as AmmoSlider: SetMin/SetMax/SetValue
+		-- fire this handler while the slider is being configured.
+		acemenupanel.AmmoData["GunCalMM"] = val
+		if GunCalSlider.ACEProgrammatic then return end
+
+		MainPanel:UpdateAmmoProxy()
+		MainPanel:UpdateAttribs()
 	end
+
+	acemenupanel.CustomDisplay:AddItem( GunCalSlider )
+
+	end
+end
+
+--- Rebuilds acemenupanel.AmmoData["Data"] so .id resolves to the parameterized
+-- key ("120mmC@140") when a caliber override is active. Every round guiupdate
+-- reads Data.id, so the key flows into acemenu_data1 untouched.
+function PANEL:UpdateAmmoProxy()
+
+	local Data = acemenupanel.AmmoData["Data"]
+	local GunId = ( istable( Data ) and rawget( Data, "id" ) ) or acemenupanel.AmmoData["GunId"]
+	local Round = GunId and ACFEnts["Guns"][GunId] and ACFEnts["Guns"][GunId]["round"]
+	if not Round then return end
+
+	local Limits = ACE.GunScale and ACE.GunScale.Limits( GunId )
+	local CalMM = acemenupanel.AmmoData["GunCalMM"]
+
+	if not Limits or not CalMM or math.abs( CalMM - Limits.basecal * 10 ) < 0.05 then
+		acemenupanel.AmmoData["Data"] = Round
+		return
+	end
+
+	local Key = ACE.GunScale.Key( GunId, CalMM )
+	acemenupanel.AmmoData["Data"] = setmetatable( {}, {
+		__index = function( _, k )
+			if k == "id" then return Key end
+			return Round[k]
+		end
+	} )
+
+end
+
+--- Shows/configures the round-caliber slider for a selected gun def, or hides
+-- it when the def isn't scalable. Resets Data to the raw round table.
+function PANEL:UpdateGunCalSlider( gun )
+
+	local Slider = acemenupanel.CData and acemenupanel.CData.GunCalSlider
+	acemenupanel.AmmoData["GunId"] = gun
+
+	local Limits = ACE.GunScale and ACE.GunScale.Limits( gun )
+	if not Limits or not Slider then
+		if Slider then Slider:SetVisible( false ) end
+		acemenupanel.AmmoData["GunCalMM"] = nil
+		self:UpdateAmmoProxy()
+		return
+	end
+
+	Slider.ACEProgrammatic = true
+	Slider:SetMin( Limits.calmin * 10 )
+	Slider:SetMax( Limits.calmax * 10 )
+	Slider:SetValue( Limits.basecal * 10 )
+	Slider.ACEProgrammatic = false
+	Slider:SetVisible( true )
+
+	self:UpdateAmmoProxy()
+
 end
 
 function PANEL:AmmoSlider(Name, Value, Min, Max, Decimals, Title, Desc) --Variable name in the table, Value, Min value, Max Value, slider text title, slider decimeals, description text below slider

@@ -20,7 +20,7 @@ local MACHINEGUN_ROUND_TYPES = {
 local function IsMachineGunAmmo( ent )
 	local bullet = ent and ent.BulletData or {}
 	local id = bullet.Id or ent.RoundId
-	local gun = (id and GunTable and GunTable[id]) or nil
+	local gun = (id and GunTable and (GunTable[id] or ACE.GunScale.ResolveDef(id))) or nil
 	local gunclass = (gun and gun.gunclass) or bullet.GunClass or ent.GunClass
 	local roundType = bullet.Type or ent.RoundType
 
@@ -33,7 +33,7 @@ end
 local function IsMissileAmmo( ent )
 	local bullet = ent and ent.BulletData or {}
 	local id = bullet.Id or ent.RoundId
-	local gun = (id and GunTable and GunTable[id]) or nil
+	local gun = (id and GunTable and (GunTable[id] or ACE.GunScale.ResolveDef(id))) or nil
 	local gunclass = (gun and gun.gunclass) or bullet.GunClass or ent.GunClass
 	local classData = gunclass and GunClasses and GunClasses[gunclass] or nil
 
@@ -573,7 +573,9 @@ do
 	function ENT:CreateAmmo(_, Data1, Data2, Data3, Data4, Data5, Data6, Data7, Data8, Data9, Data10 , Data11 , Data12 , Data13 , Data14 , Data15)
 
 		if not ACE.CheckGun( Data1 ) then
-			Data1 = BackComp[Data1] or "100mmC"
+			-- BackComp maps base ids only; strip a scale suffix before resolving.
+			local BaseId = ACE.GunScale.ParseKey( Data1 )
+			Data1 = BackComp[BaseId] or BackComp[Data1] or "100mmC"
 		end
 		if not ACE.CheckRound( Data2 ) then
 			Data2 = AmmoComp[ Data2 ] or "AP"
@@ -628,7 +630,7 @@ do
 
 	function ENT:BuildAmmoCapacity()
 
-		local AmmoGunData = GunTable[self.BulletData.Id]
+		local AmmoGunData = GunTable[self.BulletData.Id] or ACE.GunScale.ResolveDef( self.BulletData.Id )
 		local Vol		= Floor(self:GetPhysicsObject():GetVolume())
 		local WireName	= "No data"
 		local Capacity
@@ -653,6 +655,7 @@ do
 
 			local width
 			local shellLength
+			local EffCal = self.BulletData.Caliber or AmmoGunData.caliber --cm, respects scaled rounds
 
 			if WeaponType == "missile" then
 
@@ -661,7 +664,7 @@ do
 
 			else
 
-				width = AmmoGunData.caliber / ACE.AmmoWidthMul / toInch
+				width = EffCal / ACE.AmmoWidthMul / toInch
 				shellLength = ((self.BulletData.PropLength or 0) + (self.BulletData.ProjLength or 0)) / ACE.AmmoLengthMul / toInch
 
 			end
@@ -681,7 +684,7 @@ do
 
 			--Why would you need the 2 piece for rounds below 50mm? Unless you want legos there....
 			--Missiles & bombs are excluded from using this method...
-			if AmmoGunData.caliber >= 5 and WeaponType ~= "missile" and FpieceCap > FCap and self.BulletData.TwoPiece > 0 then
+			if EffCal >= 5 and WeaponType ~= "missile" and FpieceCap > FCap and self.BulletData.TwoPiece > 0 then
 				FCap = FpieceCap
 				self.IsTwoPiece = true
 			end
@@ -694,6 +697,10 @@ do
 			debugoverlay.Text(self:GetPos() + Vector(0,0,15), "Mass per Round: " .. (self.BulletData.ProjMass + self.BulletData.PropMass) .. "kgs", 20 )
 			debugoverlay.Text(self:GetPos() + Vector(0,0,10), "Total Ammo Mass: " .. self.AmmoMassMax .. "kgs", 20 )
 			WireName = AmmoGunData.name .. " Ammo"
+			local _, KeyCalMM = ACE.GunScale.ParseKey( self.BulletData.Id )
+			if KeyCalMM then
+				WireName = string.format( "%s Ammo (%gmm)", AmmoGunData.name, KeyCalMM )
+			end
 
 		-- end capacity calculations
 		end
@@ -701,7 +708,7 @@ do
 		self.AmmoMassMax    = AmmoMaxMass
 		self.Capacity       = Capacity
 		self.Volume         = Vol --Used by the missile reload bonus
-		self.Caliber        = AmmoGunData.caliber or 1
+		self.Caliber        = self.BulletData.Caliber or AmmoGunData.caliber or 1
 		self.RoFMul         = self.IsTwoPiece and 0.3 or 0						--30% ROF penalty for 2 piece
 
 		self:SetNWString( "Ammo", self.Ammo )
@@ -740,7 +747,7 @@ end
 function ENT:GetInaccuracy()
 	--local SpreadScale = ACE.SpreadScale
 	local inaccuracy = 0
-	local Gun = GunTable[self.RoundId]
+	local Gun = GunTable[self.RoundId] or ACE.GunScale.ResolveDef( self.RoundId )
 
 	if Gun then
 		inaccuracy = (GunClasses[Gun.gunclass] or {spread = 0}).spread

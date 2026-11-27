@@ -8,6 +8,7 @@ TOOL.ConfigName		= ""
 
 TOOL.ClientConVar[ "type" ] = "gun"
 TOOL.ClientConVar[ "id" ] = "7.62mmMG" --Used by guns and crates (as example)
+TOOL.ClientConVar[ "gunopts" ] = "" --Scalable gun spec suffix ("140x55") - empty for base spec
 
 TOOL.ClientConVar[ "data1" ] = "7.62mmMG"
 TOOL.ClientConVar[ "data2" ] = "AP"
