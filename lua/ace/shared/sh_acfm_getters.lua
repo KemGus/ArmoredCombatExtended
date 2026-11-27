@@ -9,6 +9,9 @@ function ACE.GetGunValue(bdata, val)
 
 	local guns = GunsTable
 	local class = guns[bdata]
+	if not class and ACE.GunScale then
+		class = ACE.GunScale.ResolveDef( bdata )
+	end
 
 	if class then
 		local ret
@@ -95,7 +98,7 @@ function ACE.CanLinkRack(rackId, ammoId, bdata, rack)
 	local rack = ACE.Weapons.Racks[rackId]
 	if not rack then return false, "Rack '" .. tostring(rackId) .. "' does not exist." end
 
-	local gun = GunsTable[ammoId]
+	local gun = GunsTable[ammoId] or (ACE.GunScale and ACE.GunScale.ResolveDef( ammoId ))
 	if not rack then return false, "Ammo '" .. tostring(ammoId) .. "' does not exist." end
 
 

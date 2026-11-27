@@ -140,6 +140,48 @@ function ACE.DefineGunClass( id, data )
 	if (data.year or 0) < ACE.Year then
 		data.id = id
 		GunClasses[ id ] = data
+
+		-- Stage-2 unified scalable guns: a class with a numeric caliber
+		-- envelope has no per-caliber def ladder. Instead we synthesize the
+		-- single pivot def here; the scaling kernel derives every concrete
+		-- spec from it. Legacy ids resolve through ACE.LegacyGunAliases.
+		if istable( data.caliber ) then
+			local env = data.caliber
+			local len = data.length
+			local baselen = ( len and len.base ) or data.borelength or 45
+			local def = {
+				id            = id,
+				name          = data.name,
+				desc          = data.desc,
+				gunclass      = id,
+				model         = data.model,
+				sound         = data.sound,
+				caliber       = env.base,
+				weight        = data.mass,
+				year          = data.year,
+				maxrof        = data.maxrof,
+				scalable      = true,
+				calrange      = { env.min * 10, env.max * 10 },
+				borelength    = baselen,
+				lenrange      = len and { len.min, len.max } or { baselen, baselen },
+				tubefrac      = data.tubefrac,
+				massoverhead  = data.massoverhead,
+				ammofamily    = data.ammofamily,
+				magsize       = data.magsize,
+				magreload     = data.magreload,
+				round         = {
+					id         = id,
+					maxlength  = data.round.maxlength,
+					propweight = data.round.propweight
+				},
+			}
+			table.Inherit( def, gun_base )
+			GunTable[ id ] = def
+
+			if def.model and not ModelData[ def.model ] then
+				ACE.DefineModelData( id .. "_model", { Model = def.model } )
+			end
+		end
 	end
 end
 
@@ -173,6 +215,17 @@ function ACE.DefineGun( id, data )
 		data.round.id = id
 		table.Inherit( data, gun_base )
 		GunTable[ id ] = data
+
+		-- Scalable guns need their model in ModelData so clients can rebuild
+		-- matching collision hulls from the scaled convexes.
+		local sc = data.scalable
+		if sc == nil then
+			local class = GunClasses[ data.gunclass ]
+			sc = class and class.scalable
+		end
+		if sc and data.model and not ModelData[ data.model ] then
+			ACE.DefineModelData( id .. "_model", { Model = data.model } )
+		end
 	end
 end
 

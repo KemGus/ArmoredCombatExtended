@@ -1,4 +1,6 @@
---define the class
+-- Stage-2 unified scalable class. One definition covers the whole caliber
+-- and length envelope; legacy per-caliber ids resolve through ACE.LegacyGunAliases.
+-- Base spec: 40mmSL (4.0cm, 1kg).
 ACE.DefineGunClass("SL", {
 	type		= "Gun",
 	spread		= 0.2,
@@ -8,59 +10,13 @@ ACE.DefineGunClass("SL", {
 	rofmod		= 50,
 	year		= 1941,
 	sound		= "ace_weapons/multi_sound/smoke_multi.mp3",
-	nolights	= true
-} )
+	nolights	= true,
 
---add a gun to the class
-ACE.DefineGun("40mmSL", { --id
-	name		= "40mm Smoke Launcher",
-	desc		= "",
-	model		= "models/launcher/40mmsl.mdl",
-	sound		= "ace_weapons/multi_sound/smoke_multi.mp3",
-	gunclass	= "SL",
-	caliber	= 4.0,
-	rofmod		= 0.2,
-	weight		= 1,
-	year		= 1941,
-	round = {
-		maxlength	= 17.5,
-		propweight	= 0.007
-	},
-	gunnerexception = true --Bypasses regular gunner rules.
-} )
-
-ACE.DefineGun("20mmSL", { --id
-	name		= "20mm Smoke Launcher",
-	desc		= "",
-	model		= "models/launcher/20mmsl.mdl",
-	sound		= "ace_weapons/multi_sound/smoke_multi.mp3",
-	gunclass	= "SL",
-	caliber	= 2.0,
-	rofmod		= 2,
-	weight		= 1,
-	year		= 1941,
-	round = {
-		maxlength	= 17.5,
-		propweight	= 0.0055
-	},
-	gunnerexception = true --Bypasses regular gunner rules.
-} )
-
-ACE.DefineGun("40mmCL", { --id
-	name		= "40mm Countermeasure Launcher",
-	desc		= "A revolver-style launcher capable of firing off several smoke or flare rounds.",
-	model		= "models/launcher/40mmgl.mdl",
-	sound		= "ace_weapons/multi_sound/smoke_multi.mp3",
-	gunclass	= "SL",
-	caliber	= 4.0,
-	weight		= 10,
-	rofmod		= 0.015,
-	magsize	= 6,
-	magreload	= 20,
-	year		= 1975,
-	round = {
-		maxlength	= 17.5,
-		propweight	= 0.007
-	},
-	gunnerexception = true --Bypasses regular gunner rules.
+	-- scaling envelope (stage 2)
+	model        = "models/launcher/40mmsl.mdl",
+	caliber      = { base = 4, min = 2, max = 5 }, -- cm
+	mass         = 1, -- kg at base caliber + base length
+	tubefrac     = 0.44, -- barrel mass fraction (Rh-120 L/44->L/55 calibrated)
+	massoverhead = 0.08, -- fraction of mass that never scales (mechanism floor, calibrated vs real KwK 36/39/40 weights)
+	round        = { maxlength = 17.5, propweight = 0.007 }, -- at base caliber
 } )

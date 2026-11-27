@@ -167,7 +167,7 @@ function Round.cratetxt( BulletData )
 	local DData = Round.getDisplayData(BulletData)
 
 	local inaccuracy = 0
-	local Gun = ACE.Weapons.Guns[BulletData.Id]
+	local Gun = ACE.Weapons.Guns[BulletData.Id] or ACE.GunScale.ResolveDef( BulletData.Id )
 
 	if Gun then
 		local Classes = ACE.Classes

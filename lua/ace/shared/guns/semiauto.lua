@@ -1,4 +1,6 @@
---define the class
+-- Stage-2 unified scalable class. One definition covers the whole caliber
+-- and length envelope; legacy per-caliber ids resolve through ACE.LegacyGunAliases.
+-- Base spec: 57mmSA (5.7cm, 780kg).
 ACE.DefineGunClass("SA", {
 	type = "Gun",
 	spread = 0.15,
@@ -9,96 +11,15 @@ ACE.DefineGunClass("SA", {
 	year = 1935,
 	sound = "ace_weapons/multi_sound/20mm_multi.mp3",
 	noloader = true,
+	magsize = 12, -- rounds at base caliber; scales inverse-sqrt with caliber
+	magreload = 9, -- seconds at base caliber; scales with caliber^0.7
 
-} )
-
---add a gun to the class
-ACE.DefineGun("25mmSA", { --id
-	name = "25mm Semiautomatic Cannon",
-	desc = "The 25mm semiauto can quickly put five rounds downrange, being lethal, yet light.",
-	model = "models/autocannon/semiautocannon_25mm.mdl",
-	sound = "ace_weapons/multi_sound/20mm_multi.mp3",
-	gunclass = "SA",
-	caliber = 2.5,
-	weight = 75,
-	year = 1935,
-	rofmod = 0.45,
-	magsize = 12,
-	magreload = 2,
-	round = {
-		maxlength = 39,
-		propweight = 0.5
-	},
-} )
-
-ACE.DefineGun("37mmSA", {
-	name = "37mm Semiautomatic Cannon",
-	desc = "The 37mm is surprisingly powerful, its five-round clips boasting a respectable payload and a high muzzle velocity.",
-	model = "models/autocannon/semiautocannon_37mm.mdl",
-	sound = "ace_weapons/multi_sound/30mm_multi.mp3",
-	gunclass = "SA",
-	caliber = 3.7,
-	weight = 180,
-	year = 1940,
-	rofmod = 0.4,
-	magsize = 15,
-	magreload = 4,
-	round = {
-		maxlength = 42,
-		propweight = 1.125
-	},
-} )
-
-ACE.DefineGun("45mmSA", { --
-	name = "45mm Semiautomatic Cannon",
-	desc = "The 45mm can easily shred light armor, with a respectable rate of fire, but its armor penetration pales in comparison to regular cannons.",
-	model = "models/autocannon/semiautocannon_45mm.mdl",
-	sound = "ace_weapons/multi_sound/40mm_multi.mp3",
-	gunclass = "SA",
-	caliber = 4.5,
-	weight = 495,
-	year = 1965,
-	rofmod = 0.325,
-	magsize = 12,
-	magreload = 5,
-	round = {
-		maxlength = 52,
-		propweight = 1.8
-	},
-} )
-
-ACE.DefineGun("57mmSA", {
-	name = "57mm Semiautomatic Cannon",
-	desc = "The 57mm is a respectable light armament, offering considerable penetration and moderate fire rate.",
-	model = "models/autocannon/semiautocannon_57mm.mdl",
-	sound = "ace_weapons/multi_sound/50mm_multi.mp3",
-	gunclass = "SA",
-	caliber = 5.7,
-	weight = 780,
-	year = 1965,
-	rofmod = 0.4,
-	magsize = 12,
-	magreload = 9,
-	round = {
-		maxlength = 62,
-		propweight = 2
-	},
-} )
-
-ACE.DefineGun("76mmSA", {
-	name = "76mm Semiautomatic Cannon",
-	desc = "The 76mm semiauto is a fearsome weapon, able to put 12 76mm rounds downrange in 7 seconds.",
-	model = "models/autocannon/semiautocannon_76mm.mdl",
-	sound = "ace_weapons/multi_sound/75mm_multi.mp3",
-	gunclass = "SA",
-	caliber = 7.62,
-	weight = 1700,
-	year = 1984,
-	rofmod = 0.325,
-	magsize = 12,
-	magreload = 12,
-	round = {
-		maxlength = 70,
-		propweight = 4.75
-	},
+	-- scaling envelope (stage 2)
+	model        = "models/autocannon/semiautocannon_57mm.mdl",
+	caliber      = { base = 5.7, min = 2.5, max = 7.62 }, -- cm
+	length       = { base = 45, min = 30, max = 70 }, -- L/d
+	mass         = 780, -- kg at base caliber + base length
+	tubefrac     = 0.44, -- barrel mass fraction (Rh-120 L/44->L/55 calibrated)
+	massoverhead = 0.08, -- fraction of mass that never scales (mechanism floor, calibrated vs real KwK 36/39/40 weights)
+	round        = { maxlength = 62, propweight = 2 }, -- at base caliber
 } )

@@ -1,4 +1,6 @@
---define the class
+-- Stage-2 unified scalable class. One definition covers the whole caliber
+-- and length envelope; legacy per-caliber ids resolve through ACE.LegacyGunAliases.
+-- Base spec: 40mmFGL (4.0cm, 75kg).
 ACE.DefineGunClass("FGL", {
 	type = "Gun",
 	spread = 3,
@@ -9,43 +11,15 @@ ACE.DefineGunClass("FGL", {
 	year = 1970,
 	sound = "acf_new/weapons/skyfire/close/close (1).wav",
 
-	ammoBlacklist	= {"AP", "APHE", "FL", "HE", "HEAT", "HP", "SM"} -- ok fun's over
-} )
+	ammoBlacklist	= {"AP", "APHE", "FL", "HE", "HEAT", "HP", "SM"}, -- ok fun's over
+	magsize = 30, -- rounds at base caliber; scales inverse-sqrt with caliber
+	magreload = 30, -- seconds at base caliber; scales with caliber^0.7
 
---add a gun to the class
-ACE.DefineGun("40mmFGL", { --id
-	name = "40mm Flare Launcher",
-	desc = "Put on an all-American fireworks show with this flare launcher: high fire rate, low distraction rate.  Fill the air with flare.  Careful of your reload time.",
-	model = "models/missiles/blackjellypod.mdl",
-	sound = "acf_extra/tankfx/flare_launch.wav",
-	gunclass = "FGL",
-	caliber = 4.0,
-	weight = 75,
-	magsize = 30,
-	magreload = 30,
-	year = 1970,
-	round = {
-		maxlength = 9,
-		propweight = 0.007
-	},
-	gunnerexception = true --Bypasses regular gunner rules.
-} )
-
---add a gun to the class
-ACE.DefineGun("60mmFGL", { --id
-	name = "60mm Flare Launcher",
-	desc = "Large countermeasure shooting out heavy flares. Has fewer shots than the its 40mm counterpart but reloads faster and is much better for distracting.",
-	model = "models/launcher/40mmgl.mdl",
-	sound = "acf_extra/tankfx/flare_launch.wav",
-	gunclass = "FGL",
-	caliber = 6.0,
-	weight = 125,
-	magsize = 6,
-	magreload = 20,
-	year = 1970,
-	round = {
-		maxlength = 3,
-		propweight = 0.014
-	},
-	gunnerexception = true --Bypasses regular gunner rules.
+	-- scaling envelope (stage 2)
+	model        = "models/missiles/blackjellypod.mdl",
+	caliber      = { base = 4, min = 4, max = 7.5 }, -- cm
+	mass         = 75, -- kg at base caliber + base length
+	tubefrac     = 0.44, -- barrel mass fraction (Rh-120 L/44->L/55 calibrated)
+	massoverhead = 0.08, -- fraction of mass that never scales (mechanism floor, calibrated vs real KwK 36/39/40 weights)
+	round        = { maxlength = 9, propweight = 0.007 }, -- at base caliber
 } )

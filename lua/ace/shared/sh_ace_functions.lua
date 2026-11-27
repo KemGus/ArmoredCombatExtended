@@ -611,6 +611,10 @@ end
 function ACE.CheckGun( gunid )
 
 	local gundata = ACE.Weapons.Guns[ gunid ]
+	if not gundata and ACE.GunScale then
+		-- Parameterized ids ("120mmC@140x55") resolve through the base def.
+		gundata = ACE.GunScale.ResolveDef( gunid )
+	end
 
 	if not gundata then return false end
 
@@ -1061,6 +1065,9 @@ function ACE.GetAmmoGunClass(bdata)
 	if gunClass and gunClass ~= "" then return gunClass end
 
 	local gunData = (bdata.Id and ACE and ACE.Weapons and ACE.Weapons.Guns and ACE.Weapons.Guns[bdata.Id]) or nil
+	if not gunData and bdata.Id and ACE.GunScale then
+		gunData = ACE.GunScale.ResolveDef( bdata.Id )
+	end
 	return gunData and gunData.gunclass or nil
 end
 
