@@ -115,6 +115,11 @@ local function CreatePropVisualScale( entity, Scale )
 	-- this keeps preview/fullupdate paths working regardless.
 	if entity.TubeSplit then
 		ACE.GunScale.ApplyBarrelBones( entity, entity.TubeLenScale, entity.TubeSplit )
+	else
+		-- No split on this spec: any manipulations a previous split left on
+		-- the bones must be zeroed explicitly, the same reset the server runs.
+		local Info = ACE.GunScale.BarrelInfo( entity:GetModel() )
+		if Info then ACE.GunScale.ApplyBarrelBones( entity, 1, Info ) end
 	end
 
 	BuildRealPhysics( entity, Scale )
@@ -136,6 +141,13 @@ net.Receive("ACE_Scalable_Network", function()
 		if lenScale then
 			entity.TubeSplit    = ACE.GunScale.BarrelInfo( entity:GetModel() )
 			entity.TubeLenScale = lenScale
+		else
+			-- A packet without a split means the tube is back at pivot length
+			-- (or the gun back at pivot entirely). The cached split must be
+			-- cleared explicitly — otherwise CreatePropVisualScale keeps
+			-- re-applying the old stretch on every fullupdate.
+			entity.TubeSplit    = nil
+			entity.TubeLenScale = nil
 		end
 
 		local Scale = Vector(x,y,z)

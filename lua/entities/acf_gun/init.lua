@@ -124,6 +124,10 @@ function ENT:Initialize()
 	end)
 end
 
+-- Forward declaration: defined inside the spawn-path do-block where the
+-- input tables live, used by ENT:Update outside that block.
+local SelectGunInputs
+
 do
 	local Inputs = {
 		Fire        = "Fire (Shoots a bullet if loaded. Hold to keep shooting.)",
@@ -179,6 +183,17 @@ do
 		Outputs.Heat,
 		Outputs.OverHeat
 	}
+
+	-- Shared between spawn and retune: magazine support decides whether a
+	-- manual Reload port exists, caliber decides the Fuse Time port (30mm
+	-- threshold). Assigned to the file-scope forward declaration so
+	-- ENT:Update — outside this block — can reuse it.
+	SelectGunInputs = function( hasMag, cal )
+		if hasMag then
+			return cal >= 3 and Inputs_Fuse or Inputs_NoFuse
+		end
+		return cal >= 3 and Inputs_Fuse_noreload or Inputs_NoFuse_noreload
+	end
 
 	--List of ids which no longer stay on ACE. Useful to replace them with the closest counterparts
 	local BackComp = {
@@ -329,24 +344,13 @@ do
 		if Lookup.magsize then
 
 			Gun.MagSize = math.max(Gun.MagSize, Stats.magsize or Lookup.magsize)
-			local Cal = Gun.Caliber
 
-			if Cal >= 3 then
-				Gun.Inputs = WireLib.CreateInputs( Gun, Inputs_Fuse )
-			else
-				Gun.Inputs = WireLib.CreateInputs( Gun, Inputs_NoFuse )
-			end
-
-		--to cover guns that get its ammo directly from the crate
-		else
-			local Cal = Gun.Caliber
-
-			if Cal >= 3 then
-				Gun.Inputs = WireLib.CreateInputs( Gun, Inputs_Fuse_noreload )
-			else
-				Gun.Inputs = WireLib.CreateInputs( Gun, Inputs_NoFuse_noreload )
-			end
 		end
+
+		-- Magazine guns get a manual Reload port, crate-fed guns do not;
+		-- caliber past the 30mm threshold adds the Fuse Time port. Shared
+		-- with the retune path through SelectGunInputs.
+		Gun.Inputs = WireLib.CreateInputs( Gun, SelectGunInputs( Lookup.magsize ~= nil, Gun.Caliber ) )
 
 		Gun.Outputs = WireLib.CreateOutputs( Gun, Outputs_Default )
 
@@ -583,6 +587,16 @@ function ENT:Update( ArgTable )
 	if Lookup.magsize then
 		self.MagSize = math.max( self.MagSize, Stats.magsize or Lookup.magsize )
 	end
+
+	-- Wire inputs are spec-dependent, same selection as the spawn path:
+	-- magazine support decides whether a manual Reload port exists, caliber
+	-- decides the Fuse Time port (30mm threshold). Adjust in place rather
+	-- than recreating so wiring on the common ports (Fire, Unload, ROFLimit)
+	-- keeps its connections across the retune.
+	if WireLib and WireLib.AdjustInputs and SelectGunInputs then
+		self.Inputs = WireLib.AdjustInputs( self, SelectGunInputs( Lookup.magsize ~= nil, self.Caliber ) )
+	end
+
 	self.MagReload       = 0
 	if Lookup.magreload then
 		self.MagReload = math.max( self.MagReload, Stats.magreload or Lookup.magreload )
@@ -661,6 +675,7 @@ function ENT:Update( ArgTable )
 
 	-- Reset barrel-bone manipulations from any previous spec before the new
 	-- ones apply; a retune back to base length must zero them explicitly.
+	local WasScaled = self.IsScalable or false
 	if self.IsScalable then
 		ACE.GunScale.ApplyBarrelBones( self, 1, ACE.GunScale.BarrelInfo( self.Model ) )
 		self.IsScalable = nil
@@ -669,6 +684,7 @@ function ENT:Update( ArgTable )
 		self.TubeTip = nil
 		self.MuzzleBindPos = nil
 		self.MuzzleBindAtt = nil
+		self.ScaleData = nil
 	end
 
 	if Stats.calscale ~= 1 or Stats.lenscale ~= 1 then
@@ -712,6 +728,14 @@ function ENT:Update( ArgTable )
 			self.IsScalable = true
 			self:ACE_SetScale( self.ScaleData )
 		end
+	end
+
+	-- Returning all the way to pivot sends no scale packet on its own, so
+	-- without an explicit reset clients keep the old render matrix, collision
+	-- hull and cached tube split. The server hull is already correct — the
+	-- PhysicsInit above rebuilt the base mesh — this is purely a client sync.
+	if WasScaled and not self.IsScalable and ACE.NetworkScaleReset then
+		ACE.NetworkScaleReset( self )
 	end
 
 	local phys = self:GetPhysicsObject()

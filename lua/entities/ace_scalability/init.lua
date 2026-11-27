@@ -81,6 +81,26 @@ end
 ]]
 do
 
+	--- Networks an explicit pivot reset to clients. Needed when a previously
+	--- scaled entity returns to its unscaled spec: no scale packet would go
+	--- out on its own, so clients would keep the old render matrix, collision
+	--- hull and cached tube split forever.
+	--- @param Ent entity The entity returning to pivot scale
+	--- @param ply? player Optional single recipient; broadcasts when omitted
+	function ACE.NetworkScaleReset( Ent, ply )
+		net.Start("ACE_Scalable_Network")
+			net.WriteFloat(1)
+			net.WriteFloat(1)
+			net.WriteFloat(1)
+			net.WriteEntity( Ent )
+			net.WriteBool( false )
+		if IsValid(ply) then
+			net.Send(ply)
+		else
+			net.Broadcast()
+		end
+	end
+
 	local function NetworkNewScale( Ent, ScaleData, ply )
 
 		local Scale = ScaleData.Scale
