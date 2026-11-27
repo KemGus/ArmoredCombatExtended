@@ -200,11 +200,20 @@ do
 		HMG = true
 	}
 
-	function ACE.MakeGun(Owner, Pos, Angle, Id, GunOpts)
-
-		local Gun = ents.Create("acf_gun")
-		if not IsValid(Gun) then return false end
-
+	--- Resolves a gun id plus optional spec suffix into everything the spawn
+	-- and in-place-update paths need. Centralized so both flows interpret
+	-- ids identically: key suffixes in the id, GunOpts from the tool, legacy
+	-- rewrites (BackComp), the alias chain, migration fallback and envelope
+	-- clamping. Resolution precedence: GunOpts wins over parameters embedded
+	-- in the id, which win over alias defaults.
+	-- @return string|nil Id processed base id (after legacy rewrites)
+	-- @return table|nil Lookup resolved gun def
+	-- @return table|nil ClassData class table of the resolved gun
+	-- @return table|nil Limits scalability envelope, when scalable
+	-- @return table|nil Stats derived stats at the effective spec
+	-- @return number|nil CalMM effective caliber in millimeters
+	-- @return number|nil BoreLen effective bore length in calibers
+	function ACE.ResolveGunSpec(Id, GunOpts, BackComp)
 		-- Parameterized ids ("120mmC@140x55") arrive whole from dupes; the spawn
 		-- tool passes only the suffix through GunOpts ("140x55").
 		local KeyCal, KeyLen
@@ -213,19 +222,17 @@ do
 		-- Legacy retired ids rewrite first (old BackComp table), then resolve
 		-- through the alias chain: a legacy id contributes its authored
 		-- caliber/length as the default spec, overridable by key suffix.
-		Id = BackComp[Id] or Id
+		if BackComp then Id = BackComp[Id] or Id end
 
 		local Lookup, AliasCalMM, AliasLen = ACE.GunScale.ResolveSpec(Id)
 		if not Lookup then
 			Id = "100mmC"
 			Lookup, AliasCalMM, AliasLen = ACE.GunScale.ResolveSpec(Id)
 		end
-		if not Lookup then return false end
+		if not Lookup then return end
 
 		local ClassData = GunClasses[Lookup.gunclass]
 
-		-- Resolve the effective spec inside the class envelope. GunOpts wins
-		-- over parameters embedded in the id, which win over alias defaults.
 		local Limits = ACE.GunScale.Limits(Lookup.id)
 		local CalMM, BoreLen
 		if Limits then
@@ -233,7 +240,18 @@ do
 			CalMM, BoreLen = ACE.GunScale.Normalize(Lookup.id, OptCal or KeyCal or AliasCalMM, OptLen or KeyLen or AliasLen)
 		end
 
-		local Stats  = ACE.GunScale.Stats(Lookup, CalMM and CalMM / 10, BoreLen)
+		local Stats = ACE.GunScale.Stats(Lookup, CalMM and CalMM / 10, BoreLen)
+		return Id, Lookup, ClassData, Limits, Stats, CalMM, BoreLen
+	end
+
+	function ACE.MakeGun(Owner, Pos, Angle, Id, GunOpts)
+
+		local Gun = ents.Create("acf_gun")
+		if not IsValid(Gun) then return false end
+
+		local Id2, Lookup, ClassData, Limits, Stats, CalMM, BoreLen = ACE.ResolveGunSpec(Id, GunOpts, BackComp)
+		if not Lookup then return false end
+		Id = Id2
 		local EffCal = Stats.caliber -- effective caliber in cm
 
 		if Lookup.gunclass == "SL" then
@@ -447,6 +465,224 @@ end
 
 list.Set( "ACFCvars", "acf_gun", {"id", "gunopts"} )
 duplicator.RegisterEntityClass("acf_gun", ACE.MakeGun, "Pos", "Angle", "Id", "GunOpts")
+
+-- The acemenu tool's left-click update path (same-class entity under the
+-- crosshair) calls ENT:Update with the spawn argument table, player first.
+ENT.CanUpdate = true
+
+--- Retunes this gun in place to a new id/spec, preserving position, angle,
+-- constraints, wire connections and compatible ammo links. With scalable
+-- guns the common case is not a model swap but a retune — same class, new
+-- caliber or bore length — so the entity rebuilds itself from the resolved
+-- spec exactly as it would at spawn, minus the spawn-only state.
+-- @param ArgTable table { player, pos, angle, id, gunopts } as passed by the acemenu tool
+-- @return boolean success
+-- @return string message
+function ENT:Update( ArgTable )
+	if not istable( ArgTable ) then return false, "Bad update arguments" end
+
+	local ply     = ArgTable[1]
+	local Id      = ArgTable[4]
+	local GunOpts = ArgTable[5]
+
+	if not IsValid( ply ) then return false, "No player" end
+	if not isstring( Id ) then return false, "No gun id" end
+
+	-- Ownership guard, same spirit as other ACE tools: the contraption's
+	-- owner retunes it, nobody else.
+	if CPPI and self.CPPIGetOwner then
+		local owner = self:CPPIGetOwner()
+		if IsValid( owner ) and owner ~= ply and not ply:IsAdmin() then
+			return false, "You can only update your own guns"
+		end
+	end
+
+	-- Clean the input the way the tool convars deliver it.
+	if isstring( GunOpts ) and GunOpts == "" then GunOpts = nil end
+
+	-- Legacy rewrites, same table the spawn path uses.
+	local BackComp = ACE.BackCompGun or {}
+	local NewId, Lookup, ClassData, Limits, Stats, CalMM, BoreLen = ACE.ResolveGunSpec( Id, GunOpts, BackComp )
+	if not Lookup then return false, "Unknown gun id" end
+
+	-- From here: apply the resolved spec in place. These assignments mirror
+	-- the spawn path field for field — anything spec-dependent must be
+	-- overwritten, anything positional or relational must not be touched.
+	self.Id              = NewId
+	self.Caliber         = Stats.caliber
+	self.Model           = Lookup.model
+	self.Mass            = Stats.mass
+	self.Class           = Lookup.gunclass
+	self.LinkRangeMul    = math.max( self.Caliber / 10, 1 ) ^ 1.2
+
+	local GunnerExcluded = Lookup.gunnerexception or false
+	self.RequiresGunner  = false
+	if not GunnerExcluded and ( self.Caliber * 10 ) > ACE.LargeGunsThreshold and ACE.LargeGunsRequireGunners ~= 0 then
+		self.RequiresGunner = true
+	end
+
+	self.ScalableSpec    = Limits
+	self.CaliberMM       = CalMM
+	self.BoreLength      = BoreLen
+	self.MVMod           = Stats.mvmod
+	self.ChamberLen      = Stats.chamberLen
+	self.PropLimit       = Stats.propLimit
+	self.GunScaleVec     = Stats.scale
+	self.GunOpts         = Limits and ACE.GunScale.OptString( Lookup.id, CalMM, BoreLen ) or nil
+	self.GunKey          = Limits and ACE.GunScale.Key( Lookup.id, CalMM, Limits.lenmin < Limits.lenmax and BoreLen or nil ) or NewId
+
+	self.noloaders       = ClassData.noloader or nil
+	self.Inaccuracy      = ClassData.spread
+	self.PGRoFmod        = Lookup.rofmod and math.max( 0.01, Lookup.rofmod ) or 1
+	self.maxrof          = Stats.maxrof or Lookup.maxrof
+
+	self.MagSize         = 1
+	if Lookup.magsize then
+		self.MagSize = math.max( self.MagSize, Stats.magsize or Lookup.magsize )
+	end
+	self.MagReload       = 0
+	if Lookup.magreload then
+		self.MagReload = math.max( self.MagReload, Stats.magreload or Lookup.magreload )
+	end
+
+	self.MinLengthBonus  = 0.5 * 3.1416 * ( self.Caliber / 2 ) ^ 2 * Stats.chamberLen
+	self.Muzzleflash     = Lookup.muzzleflash or ClassData.muzzleflash
+	self.RoFmod          = ClassData.rofmod
+	self.Sound           = Lookup.sound or ClassData.sound
+	self.DefaultSound    = self.Sound
+	self.SoundPitch      = 100
+	if Limits and Stats.calscale ~= 1 and ACE.GunScale.SoundPitch then
+		self.SoundPitch = math.Clamp( math.Round( 100 / math.sqrt( Stats.calscale ) ), 60, 140 )
+	end
+	self.AutoSound       = ClassData.autosound and ( Lookup.autosound or ClassData.autosound ) or nil
+
+	-- Fire/reload state resets as if freshly spawned; the tube may now be a
+	-- different length and any in-flight cycle is meaningless.
+	self.CurrentShot     = 0
+	self.CurrentRecoil   = 0
+	self.Reloading       = nil
+	self.Magazine        = 0
+	self.NextFire        = CurTime()
+	self.BulletData      = { Type = "Empty" }
+	self.Heat            = ACE.AmbientTemp
+
+	if ClassData.color then
+		self:SetColor( Color( ClassData.color[1], ClassData.color[2], ClassData.color[3], 255 ) )
+	end
+
+	self:SetNWInt( "Caliber", self.Caliber )
+	self:SetNWString( "WireName", Limits and ACE.GunScale.DisplayName( Lookup, CalMM, BoreLen ) or Lookup.name )
+	self:SetNWString( "Class", self.Class )
+	self:SetNWString( "ID", self.Id )
+	self:SetNWString( "GunKey", self.GunKey )
+	self:SetNWString( "Muzzleflash", self.Muzzleflash )
+	self:SetNWString( "Sound", self.Sound )
+	self:SetNWInt( "SoundPitch", self.SoundPitch )
+
+	-- Model and physics. PhysicsInit rebuilds the physics object from the
+	-- model's BASE collision mesh — required even when the model does not
+	-- change, because the scaled hull replaces convexes and re-reading the
+	-- live object would double-apply the scale. Frozen state survives the
+	-- rebuild: builders keep tanks frozen while retuning them.
+	local WasFrozen
+	do
+		local oldphys = self:GetPhysicsObject()
+		WasFrozen = IsValid( oldphys ) and not oldphys:IsMotionEnabled()
+	end
+	if self:GetModel() ~= self.Model then self:SetModel( self.Model ) end
+	self:PhysicsInit( SOLID_VPHYSICS )
+	self:SetMoveType( MOVETYPE_VPHYSICS )
+	self:SetSolid( SOLID_VPHYSICS )
+
+	-- Reset barrel-bone manipulations from any previous spec before the new
+	-- ones apply; a retune back to base length must zero them explicitly.
+	if self.IsScalable then
+		ACE.GunScale.ApplyBarrelBones( self, 1, ACE.GunScale.BarrelInfo( self.Model ) )
+		self.IsScalable = nil
+		self.TubeSplit = nil
+		self.TubeLenScale = nil
+		self.TubeTip = nil
+		self.MuzzleBindPos = nil
+		self.MuzzleBindAtt = nil
+	end
+
+	if Stats.calscale ~= 1 or Stats.lenscale ~= 1 then
+		local Phys = self:GetPhysicsObject()
+		if IsValid( Phys ) then
+			self.ScaleData = {
+				Mesh     = Phys:GetMeshConvexes(),
+				Scale    = Stats.scale,
+				Material = "metal",
+			}
+
+			if Stats.split and Stats.lenscale ~= 1 then
+				self.ScaleData.Split    = Stats.split
+				self.ScaleData.LenScale = Stats.lenscale
+				self.TubeSplit    = Stats.split
+				self.TubeLenScale = Stats.lenscale
+
+				local Tip
+				for _, group in pairs( self.ScaleData.Mesh ) do
+					for _, vertex in pairs( group ) do
+						local v = istable( vertex ) and vertex.pos or vertex
+						if isvector( v ) then
+							local t = ( v - Stats.split.joint ):Dot( Stats.split.bore )
+							if not Tip or t > Tip then Tip = t end
+						end
+					end
+				end
+				self.TubeTip = Tip
+
+				local AttachName = ACE.GunScale.ResolveBarrel( self )
+				local AttachId = AttachName and self:LookupAttachment( AttachName ) or 0
+				local Attach = AttachId > 0 and self:GetAttachment( AttachId )
+				if Attach and Attach.Pos then
+					self.MuzzleBindPos = self:WorldToLocal( Attach.Pos )
+					self.MuzzleBindAtt = AttachId
+				end
+
+				ACE.GunScale.ApplyBarrelBones( self, Stats.lenscale, Stats.split )
+			end
+
+			self.IsScalable = true
+			self:ACE_SetScale( self.ScaleData )
+		end
+	end
+
+	local phys = self:GetPhysicsObject()
+	if IsValid( phys ) then
+		phys:SetMass( self.Mass )
+		self.ModelInertia = 0.99 * phys:GetInertia() / phys:GetMass()
+		if WasFrozen then phys:EnableMotion( false ) end
+	end
+
+	self:UpdateMuzzlePoint()
+	self:UpdateOverlayText()
+
+	-- Ammo links survive when the crate still fits the new spec; anything
+	-- incompatible drops, since silently keeping it would fail at fire time.
+	if self.AmmoLink then
+		local kept = {}
+		for _, crate in ipairs( self.AmmoLink ) do
+			if IsValid( crate ) then
+				local fits = true
+				if self.ScalableSpec and crate.BulletData then
+					fits = ACE.GunScale.AmmoFits( self, crate.BulletData )
+				end
+				if fits then
+					kept[#kept + 1] = crate
+				elseif crate.Master then
+					for i, gun in ipairs( crate.Master ) do
+						if gun == self then table.remove( crate.Master, i ) break end
+					end
+				end
+			end
+		end
+		self.AmmoLink = kept
+	end
+
+	return true, "Gun updated to " .. ( Limits and ACE.GunScale.DisplayName( Lookup, CalMM, BoreLen ) or Lookup.name )
+end
 
 -- Resolves the muzzle offset in LOCAL space. QC attachments do not follow the
 -- render-matrix scale used on scalable guns, so the base attachment position
