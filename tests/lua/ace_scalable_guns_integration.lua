@@ -149,31 +149,27 @@ check(close(lim.calmin, 3.7, 0.001), "cannon min caliber 3.7cm")
 local ncal = (GS.Normalize("C", 250, 45))
 check(close(ncal, 200, 0.001), "250mm request clamps to 200mm")
 
--- 7b. SpecString round-trip contract for alias ids: the factories store the
--- original (alias) id on the entity and pass that same id here, so "" must
--- mean exactly "the spec a bare paste of this id would produce". An alias
--- gun dialed down to the class pivot needs an explicit suffix — otherwise
--- the next paste silently restores the alias dimensions.
+-- 8. SpecString round-trip contract: empty means the id's own default spec
 check(GS.SpecString("140mmC", 140, 45) == "", "alias-at-default SpecString empty (got '" .. GS.SpecString("140mmC", 140, 45) .. "')")
 check(GS.SpecString("140mmC", 120, 45) == "120x45", "alias-at-pivot SpecString explicit (got '" .. GS.SpecString("140mmC", 120, 45) .. "')")
 check(GS.SpecString("120mmC", 120, 45) == "", "pivot-alias at pivot stays empty (got '" .. GS.SpecString("120mmC", 120, 45) .. "')")
 
--- 8. caliber-only classes: length axis locked
+-- 9. caliber-only classes: length axis locked
 local glm = GS.Limits("GL")
 check(glm.lenmin == glm.lenmax, "grenade launcher length axis locked")
 
--- 9. rof cap scaling: smaller caliber cycles faster
+-- 10. rof cap scaling: smaller caliber cycles faster
 local big = GS.Stats(Guns.C, 12.0, 45)
 local sml = GS.Stats(Guns.C, 6.0, 45)
 check(big.maxrof and sml.maxrof and sml.maxrof > big.maxrof, "maxrof scales inverse with caliber")
 check(close(big.maxrof, 19, 0.001), "base maxrof 19 at pivot")
 
--- 10. drum autoloader mag mechanics
+-- 11. drum autoloader mag mechanics
 check(Guns.AL.magsize == 12, "AL drum magsize 12")
 local alstats = GS.Stats(Guns.AL, 12.0, 45)
 check(alstats.magreload and close(alstats.magreload, 35, 0.001), "AL magreload 35 at pivot")
 
--- 11. ammo family crossfeed: BAL eats AL ammo — exercise the actual fit
+-- 12. ammo family crossfeed: BAL eats AL ammo — exercise the actual fit
 -- function with mock gun/bullet tables rather than only checking metadata
 check(type(GS.AmmoFits) == "function", "AmmoFits is a function")
 check(Classes.BAL.ammofamily == "AL", "BAL shares the AL ammo family")
@@ -187,7 +183,7 @@ if type(GS.AmmoFits) == "function" then
 	check(GS.AmmoFits(mockGun, cRound) ~= true, "BAL rejects cannon round")
 end
 
--- 12. every legacy alias resolves
+-- 13. every legacy alias resolves
 local unresolved = {}
 for id in pairs(ACE.LegacyGunAliases) do
 	local d = GS.ResolveSpec(id)
@@ -195,17 +191,17 @@ for id in pairs(ACE.LegacyGunAliases) do
 end
 check(#unresolved == 0, "all 84 legacy aliases resolve (" .. #unresolved .. " unresolved" .. (#unresolved > 0 and ": " .. table.concat(unresolved, ",") or "") .. ")")
 
--- 13. effective-caliber naming data: synthetic def names carry no caliber digits
+-- 14. effective-caliber naming data: synthetic def names carry no caliber digits
 check(not tostring(Guns.C.name):match("%d"), "class C name has no caliber digits")
 
--- 14. ResolveDef alias transparency: legacy ids behave as their class def everywhere
+-- 15. ResolveDef alias transparency: legacy ids behave as their class def everywhere
 check(GS.ResolveDef("120mmC") == Guns.C, "ResolveDef maps 120mmC to synthetic class def")
 check(GS.ResolveDef("120mmC@140x55") == Guns.C, "ResolveDef maps keyed legacy id to class def")
 check(GS.Limits("120mmC") ~= nil, "Limits works on legacy id")
 local lmcal = (GS.Normalize("120mmC", nil, nil))
 check(lmcal ~= nil, "Normalize works on legacy id")
 
--- 15. migration suffix fallback: non-ACE ids resolve into envelopes
+-- 16. migration suffix fallback: non-ACE ids resolve into envelopes
 local mdef, mcal = GS.ResolveSpec("40mmC")
 check(mdef and mdef.id == "C", "40mmC migration resolves to cannon")
 check(close(mcal, 40, 0.001), "40mmC migration caliber preserved")
