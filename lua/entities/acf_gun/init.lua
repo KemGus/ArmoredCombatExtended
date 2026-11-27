@@ -563,7 +563,7 @@ function ENT:Update( ArgTable )
 	self.Reloading       = nil
 	self.Magazine        = 0
 	self.NextFire        = CurTime()
-	self.BulletData      = { Type = "Empty" }
+	self.BulletData      = { Type = "Empty", PropMass = 0, ProjMass = 0 }
 	self.Heat            = ACE.AmbientTemp
 
 	if ClassData.color then
