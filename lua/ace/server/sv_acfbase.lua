@@ -126,6 +126,20 @@ function ACE.Check( Entity )
 	if not ( physobj:IsValid() and (physobj:GetMass() or 0) > 0 and not Entity:IsWorld() and not Entity:IsWeapon() ) then return false end
 
 	local Class = Entity:GetClass()
+
+	-- Z-City/Homigrad bodies: a prop_ragdoll carrying .organism is a downed
+	-- creature, not a prop. Squishy resolver only - the armor path that got
+	-- ragdolls excluded (per-bone mass/plate math) is never involved.
+	if istable(Entity.organism) then
+		Entity.ACE = Entity.ACE or { Armour = 0, Material = "RHA" }
+		Entity.ACE.Type = "Squishy"
+		-- Fake bodies carry no CPPI owner: without this the permission veto
+		-- (DefaultCanDamage=false) blocks all damage to them.
+		Entity.DamageOwner = true
+
+		return "Squishy"
+	end
+
 	if IGNORED_CLASSES[Class] or (ACE.TraceFilter and ACE.TraceFilter[Class]) or ( Class ~= "func_breakable" and string.find( Class , "func_" )) then return false end
 	if Entity.Exploding then return false end
 

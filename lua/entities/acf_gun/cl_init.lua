@@ -164,28 +164,28 @@ function ACE.GunGUICreate( Table )
 	end
 
 	-- Scalable gun controls: caliber (mm) + bore length (calibers) sliders that
-	-- write the acemenu_gunopts spawn cvar. Live stats preview via GunScale.
+	-- write the acemenu_gunspec spawn cvar. Live stats preview via GunScale.
 	local ScaleLimits = ACE.GunScale and ACE.GunScale.Limits( Table.id )
 	if ScaleLimits and not ScaleLimits.hasbarrels then
 
 		-- Slider state starts at the class pivot; the current value of the
-		-- acemenu_gunopts convar (the spec suffix the tool will spawn with)
+		-- acemenu_gunspec convar (the spec suffix the tool will spawn with)
 		-- overrides it when the player already dialed something in.
 		local GunScaleState = { cal = ScaleLimits.basecal * 10, len = ScaleLimits.baselen }
-		local CurOpts = GetConVar( "acemenu_gunopts" )
-		if CurOpts then
-			local c, l = ACE.GunScale.ParseOpts( CurOpts:GetString() )
+		local CurSpec = GetConVar( "acemenu_gunspec" )
+		if CurSpec then
+			local c, l = ACE.GunScale.ParseSpec( CurSpec:GetString() )
 			if c then GunScaleState.cal = math.Clamp( c, ScaleLimits.calmin * 10, ScaleLimits.calmax * 10 ) end
 			if l then GunScaleState.len = math.Clamp( l, ScaleLimits.lenmin, ScaleLimits.lenmax ) end
 		end
 
 		acemenupanel:CPanelText("GunScaleTitle", "Scalable Configuration", "DermaDefaultBold")
 
-		local function PushGunOpts()
+		local function PushGunSpec()
 			local cal, len = ACE.GunScale.Normalize( Table.id, GunScaleState.cal, GunScaleState.len )
 			GunScaleState.cal, GunScaleState.len = cal, len
 
-			RunConsoleCommand( "acemenu_gunopts", ACE.GunScale.OptString( Table.id, cal, len ) )
+			RunConsoleCommand( "acemenu_gunspec", ACE.GunScale.SpecString( Table.id, cal, len ) )
 
 			local S = ACE.GunScale.Stats( Table, cal / 10, len )
 			acemenupanel.GunScaleVec = S.scale
@@ -220,21 +220,21 @@ function ACE.GunGUICreate( Table )
 
 		CalSlider.OnValueChanged = function( _, val )
 			GunScaleState.cal = val
-			PushGunOpts()
+			PushGunSpec()
 		end
 		if LenSlider then
 			LenSlider.OnValueChanged = function( _, val )
 				GunScaleState.len = val
-				PushGunOpts()
+				PushGunSpec()
 			end
 		end
 
-		PushGunOpts()
+		PushGunSpec()
 	else
 		acemenupanel.GunScaleVec = nil
 		acemenupanel.GunScaleLen = nil
 		acemenupanel.GunScaleSplit = nil
-		RunConsoleCommand( "acemenu_gunopts", "" )
+		RunConsoleCommand( "acemenu_gunspec", "" )
 	end
 
 	acemenupanel.CustomDisplay:PerformLayout()
@@ -252,10 +252,10 @@ function ACE.GunFamilyGUICreate( Table )
 	local fam = Table.family
 	local GunScaleState = { cal = nil, len = nil }
 
-	local CurOpts = GetConVar( "acemenu_gunopts" )
+	local CurSpec = GetConVar( "acemenu_gunspec" )
 	local initDef = ACE.GunScale.ResolveFamilyDef( fam, fam.defs[1].caliber * 10 )
-	if CurOpts then
-		local c, l = ACE.GunScale.ParseOpts( CurOpts:GetString() )
+	if CurSpec then
+		local c, l = ACE.GunScale.ParseSpec( CurSpec:GetString() )
 		if c then GunScaleState.cal = math.Clamp( c, fam.calmin * 10, fam.calmax * 10 ) end
 		if l then GunScaleState.len = math.Clamp( l, fam.lenmin, fam.lenmax ) end
 	end
@@ -320,7 +320,7 @@ function ACE.GunFamilyGUICreate( Table )
 
 	acemenupanel:CPanelText("GunScaleTitle", "Scalable Configuration", "DermaDefaultBold")
 
-	local function PushGunOpts()
+	local function PushGunSpec()
 		local newDef = ACE.GunScale.ResolveFamilyDef( fam, GunScaleState.cal )
 		if newDef ~= Def then
 			-- Reset stale bone manipulations before the model swap: they are
@@ -342,7 +342,7 @@ function ACE.GunFamilyGUICreate( Table )
 		GunScaleState.cal, GunScaleState.len = cal, len
 
 		RunConsoleCommand( "acemenu_id", Def.id )
-		RunConsoleCommand( "acemenu_gunopts", ACE.GunScale.OptString( Def.id, cal, len ) )
+		RunConsoleCommand( "acemenu_gunspec", ACE.GunScale.SpecString( Def.id, cal, len ) )
 
 		local S = ACE.GunScale.Stats( Def, cal / 10, len )
 		acemenupanel.GunScaleVec = S.scale
@@ -377,16 +377,16 @@ function ACE.GunFamilyGUICreate( Table )
 
 	CalSlider.OnValueChanged = function( _, val )
 		GunScaleState.cal = val
-		PushGunOpts()
+		PushGunSpec()
 	end
 	if LenSlider then
 		LenSlider.OnValueChanged = function( _, val )
 			GunScaleState.len = val
-			PushGunOpts()
+			PushGunSpec()
 		end
 	end
 
-	PushGunOpts()
+	PushGunSpec()
 	acemenupanel.CustomDisplay:PerformLayout()
 
 end

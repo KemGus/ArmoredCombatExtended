@@ -17,7 +17,7 @@
 		"120mmC@140"      -> 140mm effective caliber, base bore length
 		"120mmC@140x55"   -> 140mm effective caliber, L55 bore
 
-	GunOpts (spawn tool cvar + dupe field) carries only the suffix part:
+	GunSpec (spawn tool cvar + dupe field) carries only the suffix part:
 	"140x55". Ammo crates carry the key in RoundId/BulletData.Id, so every
 	existing consumer that resolves a def table just needs ParseKey/ResolveDef.
 
@@ -197,8 +197,8 @@ GunScale.BarrelJoints = {
 -- bored out to 140mm with an L/55 barrel. The "x<length>" part is optional
 -- for classes without a length envelope. KEY_PATTERN splits such a key into
 -- its pieces; OPTS_PATTERN parses just the parameter part ("140x55"), which
--- is what the duplicator stores in the GunOpts field and what the
--- acemenu_gunopts convar carries.
+-- is what the duplicator stores in the GunSpec field and what the
+-- acemenu_gunspec convar carries.
 local KEY_PATTERN  = "^(.-)@(%d+%.?%d*)x?(%d*%.?%d*)$"
 local OPTS_PATTERN = "^(%d+%.?%d*)x?(%d*%.?%d*)$"
 
@@ -230,15 +230,15 @@ function GunScale.Key( id, calMM, len )
 	return id .. "@" .. calMM .. ( len and ( "x" .. len ) or "" )
 end
 
---- Parses a GunOpts string — the bare parameter suffix without a base id
+--- Parses a GunSpec string — the bare parameter suffix without a base id
 -- ("140x55", or caliber-only "140"), returning nil for an empty string.
--- Named after the duplicator's GunOpts field whose format it parses.
+-- Named after the duplicator's GunSpec field whose format it parses.
 -- These functions live on ACE.GunScale (not as locals) because they are the
 -- public kernel API: entities, tools, starfall/e2 extensions and the spawn
 -- menu all call them from outside this file.
 -- @return number|nil calMM caliber in millimeters
 -- @return number|nil len barrel length in calibers (L/d)
-function GunScale.ParseOpts( str )
+function GunScale.ParseSpec( str )
 	if not isstring( str ) or str == "" then return end
 
 	local cal, len = string.match( str, OPTS_PATTERN )
@@ -635,14 +635,14 @@ function GunScale.ApplyBarrelBones( ent, lenScale, split )
 	end
 end
 
---- Formats the GunOpts suffix for a normalized pair, or "" when the pair is the
+--- Formats the GunSpec suffix for a normalized pair, or "" when the pair is the
 -- base spec (so unscaled guns produce byte-identical dupe data).
 -- @param id string The id the entity stores — original alias included, since
 --   the empty-string contract is defined against what pasting that id yields
 -- @param calMM number Effective caliber in millimeters
 -- @param len number Bore length in calibers
 -- @return string
-function GunScale.OptString( id, calMM, len )
+function GunScale.SpecString( id, calMM, len )
 	local lim = GunScale.Limits( id )
 	if not lim or not calMM or not len then return "" end
 

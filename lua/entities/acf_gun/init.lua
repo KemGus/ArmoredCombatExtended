@@ -217,9 +217,9 @@ do
 
 	--- Resolves a gun id plus optional spec suffix into everything the spawn
 	-- and in-place-update paths need. Centralized so both flows interpret
-	-- ids identically: key suffixes in the id, GunOpts from the tool, legacy
+	-- ids identically: key suffixes in the id, GunSpec from the tool, legacy
 	-- rewrites (BackComp), the alias chain, migration fallback and envelope
-	-- clamping. Resolution precedence: GunOpts wins over parameters embedded
+	-- clamping. Resolution precedence: GunSpec wins over parameters embedded
 	-- in the id, which win over alias defaults.
 	-- @return string|nil Id processed base id (after legacy rewrites)
 	-- @return table|nil Lookup resolved gun def
@@ -228,9 +228,9 @@ do
 	-- @return table|nil Stats derived stats at the effective spec
 	-- @return number|nil CalMM effective caliber in millimeters
 	-- @return number|nil BoreLen effective bore length in calibers
-	function ACE.ResolveGunSpec(Id, GunOpts, BackComp)
+	function ACE.ResolveGunSpec(Id, GunSpec, BackComp)
 		-- Parameterized ids ("120mmC@140x55") arrive whole from dupes; the spawn
-		-- tool passes only the suffix through GunOpts ("140x55").
+		-- tool passes only the suffix through GunSpec ("140x55").
 		local KeyCal, KeyLen
 		Id, KeyCal, KeyLen = ACE.GunScale.ParseKey(Id)
 
@@ -261,7 +261,7 @@ do
 		local Limits = ACE.GunScale.Limits(Lookup.id)
 		local CalMM, BoreLen
 		if Limits then
-			local OptCal, OptLen = ACE.GunScale.ParseOpts(GunOpts)
+			local OptCal, OptLen = ACE.GunScale.ParseSpec(GunSpec)
 			CalMM, BoreLen = ACE.GunScale.Normalize(Lookup.id, OptCal or KeyCal or AliasCalMM, OptLen or KeyLen or AliasLen)
 		end
 
@@ -269,12 +269,12 @@ do
 		return Id, Lookup, ClassData, Limits, Stats, CalMM, BoreLen
 	end
 
-	function ACE.MakeGun(Owner, Pos, Angle, Id, GunOpts)
+	function ACE.MakeGun(Owner, Pos, Angle, Id, GunSpec)
 
 		local Gun = ents.Create("acf_gun")
 		if not IsValid(Gun) then return false end
 
-		local Id2, Lookup, ClassData, Limits, Stats, CalMM, BoreLen = ACE.ResolveGunSpec(Id, GunOpts, BackComp)
+		local Id2, Lookup, ClassData, Limits, Stats, CalMM, BoreLen = ACE.ResolveGunSpec(Id, GunSpec, BackComp)
 		if not Lookup then return false end
 		Id = Id2
 		local EffCal = Stats.caliber -- effective caliber in cm
@@ -319,7 +319,7 @@ do
 		Gun.ChamberLen     = Stats.chamberLen
 		Gun.PropLimit      = Stats.propLimit
 		Gun.GunScaleVec    = Stats.scale
-		Gun.GunOpts        = Limits and ACE.GunScale.OptString(Id, CalMM, BoreLen) or nil
+		Gun.GunSpec        = Limits and ACE.GunScale.SpecString(Id, CalMM, BoreLen) or nil
 		Gun.GunKey         = Limits and ACE.GunScale.Key(Lookup.id, CalMM, Limits.lenmin < Limits.lenmax and BoreLen or nil) or Id
 
 		Gun.noloaders	= ClassData.noloader or nil
@@ -477,8 +477,8 @@ do
 	end
 end
 
-list.Set( "ACFCvars", "acf_gun", {"id", "gunopts"} )
-duplicator.RegisterEntityClass("acf_gun", ACE.MakeGun, "Pos", "Angle", "Id", "GunOpts")
+list.Set( "ACFCvars", "acf_gun", {"id", "gunspec"} )
+duplicator.RegisterEntityClass("acf_gun", ACE.MakeGun, "Pos", "Angle", "Id", "GunSpec")
 
 -- The acemenu tool's left-click update path (same-class entity under the
 -- crosshair) calls ENT:Update with the spawn argument table, player first.
@@ -489,7 +489,7 @@ ENT.CanUpdate = true
 -- guns the common case is not a model swap but a retune — same class, new
 -- caliber or bore length — so the entity rebuilds itself from the resolved
 -- spec exactly as it would at spawn, minus the spawn-only state.
--- @param ArgTable table { player, pos, angle, id, gunopts } as passed by the acemenu tool
+-- @param ArgTable table { player, pos, angle, id, gunspec } as passed by the acemenu tool
 -- @return boolean success
 -- @return string message
 function ENT:Update( ArgTable )
@@ -497,7 +497,7 @@ function ENT:Update( ArgTable )
 
 	local ply     = ArgTable[1]
 	local Id      = ArgTable[4]
-	local GunOpts = ArgTable[5]
+	local GunSpec = ArgTable[5]
 
 	if not IsValid( ply ) then return false, "No player" end
 	if not isstring( Id ) then return false, "No gun id" end
@@ -521,11 +521,11 @@ function ENT:Update( ArgTable )
 	end
 
 	-- Clean the input the way the tool convars deliver it.
-	if isstring( GunOpts ) and GunOpts == "" then GunOpts = nil end
+	if isstring( GunSpec ) and GunSpec == "" then GunSpec = nil end
 
 	-- Legacy rewrites, same table the spawn path uses.
 	local BackComp = ACE.BackCompGun or {}
-	local NewId, Lookup, ClassData, Limits, Stats, CalMM, BoreLen = ACE.ResolveGunSpec( Id, GunOpts, BackComp )
+	local NewId, Lookup, ClassData, Limits, Stats, CalMM, BoreLen = ACE.ResolveGunSpec( Id, GunSpec, BackComp )
 	if not Lookup then return false, "Unknown gun id" end
 
 	-- Quota categories mirror the spawn path in MakeGun. A retune can move a
@@ -575,7 +575,7 @@ function ENT:Update( ArgTable )
 	self.ChamberLen      = Stats.chamberLen
 	self.PropLimit       = Stats.propLimit
 	self.GunScaleVec     = Stats.scale
-	self.GunOpts         = Limits and ACE.GunScale.OptString( NewId, CalMM, BoreLen ) or nil
+	self.GunSpec         = Limits and ACE.GunScale.SpecString( NewId, CalMM, BoreLen ) or nil
 	self.GunKey          = Limits and ACE.GunScale.Key( Lookup.id, CalMM, Limits.lenmin < Limits.lenmax and BoreLen or nil ) or NewId
 
 	self.noloaders       = ClassData.noloader or nil

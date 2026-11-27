@@ -68,6 +68,7 @@ SWEP.CSMuzzleFlashes = true
 
 
 SWEP.CarrySpeedMul			= 1 --WalkSpeedMult when carrying the weapon
+SWEP.WorkWithFake = true -- Z-City/Homigrad: keep this weapon usable while the player is a moving ragdoll
 
 SWEP.NormalPlayerWalkSpeed	= 200 --Default walk and sprint speed in case all else fails
 SWEP.NormalPlayerRunSpeed	= 400
@@ -359,6 +360,27 @@ function SWEP:GetShootDir()
 	return shootDir
 end
 
+-- Z-City/Homigrad fake bodies: a downed player's gun sits in the ragdoll's
+-- right hand, so shots start there instead of at the standing eye position.
+function SWEP:FakeBody()
+	local owner = self:GetOwner()
+	if not IsValid(owner) then return end
+
+	local rag = owner.FakeRagdoll or owner:GetNWEntity("FakeRagdoll")
+	return IsValid(rag) and rag or nil
+end
+
+function SWEP:GetFakeShootPos()
+	local rag = self:FakeBody()
+	if rag then
+		local bone = rag:LookupBone("ValveBiped.Bip01_R_Hand")
+		local matrix = bone and rag:GetBoneMatrix(bone)
+		if matrix then return matrix:GetTranslation() end
+	end
+
+	return self:GetOwner():GetShootPos()
+end
+
 function SWEP:Shoot()
 	local owner = self:GetOwner()
 
@@ -367,7 +389,7 @@ function SWEP:Shoot()
 		if owner:IsPlayer() then
 			owner:LagCompensation( true )
 		end
-		self:ACEFireBullet(owner:GetShootPos(), self:GetShootDir())
+		self:ACEFireBullet(self:GetFakeShootPos(), self:GetShootDir())
 		if owner:IsPlayer() then
 			owner:LagCompensation( false )
 		end
@@ -452,7 +474,7 @@ function SWEP:PrimaryAttack()
 		self:TakePrimaryAmmo(1)
 	end
 	self:SendWeaponAnim(ACT_VM_PRIMARYATTACK)
-	self:GetOwner():SetAnimation(PLAYER_ATTACK1)
+	if IsValid(owner) then owner:SetAnimation(PLAYER_ATTACK1) end
 	self:SetNextPrimaryFire(CurTime() + math.Round(1 / self.FireRate, 2))
 
 	self.LastFired = CurTime()
@@ -479,6 +501,11 @@ function SWEP:SecondaryAttack()
 end
 
 function SWEP:Holster()
+	if CLIENT and IsValid(self.fakeGunModel) then
+		self.fakeGunModel:Remove()
+		self.fakeGunModel = nil
+	end
+
 	if SERVER then
 		self:SetZoomState(false)
 		self:SetOwnerZoomSpeed(false)
@@ -538,6 +565,41 @@ end
 function SWEP:OnThink()
 end
 
+if CLIENT then
+	-- Draws the world model on the fake ragdoll's right hand while the owner
+	-- is downed. FakeGunPos/FakeGunAng let each weapon tune the grip offset.
+	function SWEP:ThinkFakeGun()
+		local owner = self:GetOwner()
+		local rag = self:FakeBody()
+		local model = self.fakeGunModel
+
+		if not rag or not IsValid(owner) or owner:GetActiveWeapon() ~= self then
+			if IsValid(model) then
+				model:Remove()
+				self.fakeGunModel = nil
+			end
+			return
+		end
+
+		if not IsValid(model) then
+			model = ClientsideModel(self.WorldModel)
+			if not IsValid(model) then return end
+			model:SetNoDraw(true)
+			self.fakeGunModel = model
+		end
+
+		local bone = rag:LookupBone("ValveBiped.Bip01_R_Hand")
+		local matrix = bone and rag:GetBoneMatrix(bone)
+		if not matrix then return end
+
+		local pos, ang = LocalToWorld(self.FakeGunPos or vector_origin, self.FakeGunAng or angle_zero, matrix:GetTranslation(), matrix:GetAngles())
+		model:SetRenderOrigin(pos)
+		model:SetRenderAngles(ang)
+		model:SetupBones()
+		model:DrawModel()
+	end
+end
+
 function SWEP:Think()
 	if CLIENT and not self.m_bInitialized then
 		self:Initialize()
@@ -563,6 +625,10 @@ function SWEP:Think()
 
 	self:HandleRecoil()
 	self:OnThink()
+
+	if CLIENT and self.ThinkFakeGun then
+		self:ThinkFakeGun()
+	end
 
 --DEEPSEEKDEEPSEEKDEEPSEEKDEEPSEEKDEEPSEEK
 

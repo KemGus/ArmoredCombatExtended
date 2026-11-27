@@ -120,16 +120,16 @@ check(base == "120mmC@junk", "ParseKey invalid suffix keeps whole id")
 base = GS.ParseKey(nil)
 check(base == nil, "ParseKey nil-safe")
 
--- Key/ParseOpts round trip --------------------------------------------------
+-- Key/ParseSpec round trip --------------------------------------------------
 check(GS.Key("120mmC", 140, 55) == "120mmC@140x55", "Key build")
 check(GS.Key("120mmC", 140) == "120mmC@140", "Key cal-only")
 check(GS.Key("120mmC") == "120mmC", "Key no params")
-local oc, ol = GS.ParseOpts("140x55")
-check(oc == 140 and ol == 55, "ParseOpts")
-oc, ol = GS.ParseOpts("")
-check(oc == nil and ol == nil, "ParseOpts empty")
-oc, ol = GS.ParseOpts("120mmC@130x50")
-check(oc == 130 and ol == 50, "ParseOpts tolerates full key")
+local oc, ol = GS.ParseSpec("140x55")
+check(oc == 140 and ol == 55, "ParseSpec")
+oc, ol = GS.ParseSpec("")
+check(oc == nil and ol == nil, "ParseSpec empty")
+oc, ol = GS.ParseSpec("120mmC@130x50")
+check(oc == 130 and ol == 50, "ParseSpec tolerates full key")
 
 -- ResolveDef / Limits -------------------------------------------------------
 check(GS.ResolveDef("120mmC@140x55") == ACE.Weapons.Guns["120mmC"], "ResolveDef keyed")
@@ -155,9 +155,9 @@ near(mlim.lenmax, mlim.baselen, 1e-9, "Cal-only lenmax locks to baselen")
 local mc, ml = GS.Normalize("120mmM", 140, 60)
 near(mc, 140, 1e-9, "Cal-only Normalize caliber")
 near(ml, mlim.baselen, 1e-9, "Cal-only Normalize len clamps to baselen")
-check(GS.OptString("120mmM", 140, mlim.baselen) == "140", "Cal-only OptString drops len")
-local pc, pl = GS.ParseOpts("140")
-check(pc == 140 and pl == nil, "ParseOpts cal-only suffix")
+check(GS.SpecString("120mmM", 140, mlim.baselen) == "140", "Cal-only SpecString drops len")
+local pc, pl = GS.ParseSpec("140")
+check(pc == 140 and pl == nil, "ParseSpec cal-only suffix")
 local mst = GS.Stats(ACE.Weapons.Guns["120mmM"], 14, mlim.baselen)
 near(mst.calscale, 14 / 12, 1e-9, "Cal-only stats calscale")
 near(mst.lenscale, 1, 1e-9, "Cal-only stats lenscale is 1")
@@ -254,10 +254,10 @@ local sn = GS.Stats(ACE.Weapons.Guns["30mmHMG"], nil, nil)
 near(sn.mass, 180, 1e-6, "Non-scalable stats mass")
 near(sn.mvmod, 1, 1e-9, "Non-scalable stats mvmod")
 
--- OptString -----------------------------------------------------------------
-check(GS.OptString("120mmC", 120, 45) == "", "OptString empty at base")
-check(GS.OptString("120mmC", 140, 55) == "140x55", "OptString scaled")
-check(GS.OptString("30mmHMG", 30, 20) == "", "OptString non-scalable")
+-- SpecString -----------------------------------------------------------------
+check(GS.SpecString("120mmC", 120, 45) == "", "SpecString empty at base")
+check(GS.SpecString("120mmC", 140, 55) == "140x55", "SpecString scaled")
+check(GS.SpecString("30mmHMG", 30, 20) == "", "SpecString non-scalable")
 
 -- AmmoFits ------------------------------------------------------------------
 local gun = { Id = "30mmHMG", Class = "HMG", Caliber = 3.0 }
@@ -313,6 +313,9 @@ fakeGun.GetBodygroup = function() return 0 end
 check(GS.ResolveBarrel(fakeGun) == "muzzle", "ResolveBarrel def barrels fallback")
 
 -- Piecewise map ---------------------------------------------------------------
+-- The joint/tubelen constants below are not tunable flavor — they were
+-- measured offline from each model's physics mesh (breech/tube boundary and
+-- barrel length in model space) and live in ACE.GunScale.BarrelJoints.
 -- tankgun_120mm: joint (18.6,0,-0.212), bore +x, tubelen 188.4.
 local sp = GS.BarrelInfo("models/tankgun/tankgun_120mm.mdl")
 check(sp ~= nil, "BarrelInfo registered")

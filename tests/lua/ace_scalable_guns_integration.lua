@@ -149,14 +149,14 @@ check(close(lim.calmin, 3.7, 0.001), "cannon min caliber 3.7cm")
 local ncal = (GS.Normalize("C", 250, 45))
 check(close(ncal, 200, 0.001), "250mm request clamps to 200mm")
 
--- 7b. OptString round-trip contract for alias ids: the factories store the
+-- 7b. SpecString round-trip contract for alias ids: the factories store the
 -- original (alias) id on the entity and pass that same id here, so "" must
 -- mean exactly "the spec a bare paste of this id would produce". An alias
 -- gun dialed down to the class pivot needs an explicit suffix — otherwise
 -- the next paste silently restores the alias dimensions.
-check(GS.OptString("140mmC", 140, 45) == "", "alias-at-default OptString empty (got '" .. GS.OptString("140mmC", 140, 45) .. "')")
-check(GS.OptString("140mmC", 120, 45) == "120x45", "alias-at-pivot OptString explicit (got '" .. GS.OptString("140mmC", 120, 45) .. "')")
-check(GS.OptString("120mmC", 120, 45) == "", "pivot-alias at pivot stays empty (got '" .. GS.OptString("120mmC", 120, 45) .. "')")
+check(GS.SpecString("140mmC", 140, 45) == "", "alias-at-default SpecString empty (got '" .. GS.SpecString("140mmC", 140, 45) .. "')")
+check(GS.SpecString("140mmC", 120, 45) == "120x45", "alias-at-pivot SpecString explicit (got '" .. GS.SpecString("140mmC", 120, 45) .. "')")
+check(GS.SpecString("120mmC", 120, 45) == "", "pivot-alias at pivot stays empty (got '" .. GS.SpecString("120mmC", 120, 45) .. "')")
 
 -- 8. caliber-only classes: length axis locked
 local glm = GS.Limits("GL")

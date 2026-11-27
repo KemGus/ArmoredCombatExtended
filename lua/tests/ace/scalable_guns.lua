@@ -95,7 +95,7 @@ return {
 				expect( gun.ScalableSpec ).to.exist()
 				-- Identity scale keeps the stock hull: IsScalable stays unset.
 				expect( gun.IsScalable ).to.equal( nil )
-				expect( gun.GunOpts ).to.equal( "" )
+				expect( gun.GunSpec ).to.equal( "" )
 				expect( gun.Muzzle ).to.exist()
 
 				gun:Remove()
@@ -121,7 +121,7 @@ return {
 				expect( gun.ScaleData.Split ).to.exist()
 				expect( gun.ScaleData.LenScale ).to.beGreaterThan( 1 )
 				expect( gun.TubeSplit ).to.equal( gun.ScaleData.Split )
-				expect( gun.GunOpts ).to.equal( "140x55" )
+				expect( gun.GunSpec ).to.equal( "140x55" )
 				expect( gun.GunKey ).to.equal( "C@140x55" )
 				expect( gun.MuzVelMod ).to.beGreaterThan( 1 )
 				expect( gun.ChamberLen ).to.beGreaterThan( 110 )
@@ -181,7 +181,7 @@ return {
 				expect( gun.ScaleData ).to.exist()
 				-- No barrel split: the whole model keeps a uniform scale.
 				expect( gun.ScaleData.Split ).to.equal( nil )
-				expect( gun.GunOpts ).to.equal( "140" )
+				expect( gun.GunSpec ).to.equal( "140" )
 				expect( gun.GunKey ).to.equal( "MO@140" )
 
 				gun:Remove()
@@ -200,7 +200,7 @@ return {
 				expect( gun.ScaleData ).to.exist()
 				expect( gun.ScaleData.Split ).to.exist()
 				expect( gun.ScaleData.Split.bore.x ).to.equal( 1 )
-				expect( gun.GunOpts ).to.equal( "50x55" )
+				expect( gun.GunSpec ).to.equal( "50x55" )
 				expect( gun.GunKey ).to.equal( "SA@50x55" )
 
 				gun:Remove()
@@ -285,9 +285,9 @@ return {
 				local owner = makeTestOwner()
 				local gun = spawnGun( owner, Vector( 0, 0, 64 ), "120mmC", "140x55" )
 
-				-- The duplicator stores GunOpts; pasting feeds it back to MakeGun.
-				expect( gun.GunOpts ).to.equal( "140x55" )
-				local clone = spawnGun( owner, Vector( 0, 128, 64 ), gun.Id, gun.GunOpts )
+				-- The duplicator stores GunSpec; pasting feeds it back to MakeGun.
+				expect( gun.GunSpec ).to.equal( "140x55" )
+				local clone = spawnGun( owner, Vector( 0, 128, 64 ), gun.Id, gun.GunSpec )
 
 				expect( clone.CaliberMM ).to.equal( gun.CaliberMM )
 				expect( clone.BoreLength ).to.equal( gun.BoreLength )
