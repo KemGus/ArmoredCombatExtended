@@ -603,7 +603,16 @@ function ENT:Update( ArgTable )
 		local oldphys = self:GetPhysicsObject()
 		WasFrozen = IsValid( oldphys ) and not oldphys:IsMotionEnabled()
 	end
-	if self:GetModel() ~= self.Model then self:SetModel( self.Model ) end
+	-- Attachment ids are model-local: the same numeric id means different
+	-- positions on different models, so the muzzle bind cache must not
+	-- survive a model swap (an unscaled gun keeps its cached muzzle
+	-- otherwise — e.g. 12.7mm muzzle at 37 units read on a 40mm muzzle
+	-- at 96 units when both models call it attachment 1).
+	if self:GetModel() ~= self.Model then
+		self:SetModel( self.Model )
+		self.MuzzleBindPos = nil
+		self.MuzzleBindAtt = nil
+	end
 	self:PhysicsInit( SOLID_VPHYSICS )
 	self:SetMoveType( MOVETYPE_VPHYSICS )
 	self:SetSolid( SOLID_VPHYSICS )
@@ -670,15 +679,26 @@ function ENT:Update( ArgTable )
 		if WasFrozen then phys:EnableMotion( false ) end
 	end
 
+	-- The hull just changed size while the damage model caches its surface
+	-- area — without invalidation the retuned gun keeps the old spec's
+	-- health and armor numbers. Recalc mode preserves the damage fraction.
+	if self.ACE then
+		self.ACE.Area = nil
+		ACE.Activate( self, 1 )
+	end
+
 	self:UpdateMuzzlePoint()
 	self:UpdateOverlayText()
 
 	-- Ammo links survive when the crate still fits the new spec; anything
 	-- incompatible drops, since silently keeping it would fail at fire time.
+	local involved
 	if self.AmmoLink then
 		local kept = {}
+		involved = {}
 		for _, crate in ipairs( self.AmmoLink ) do
 			if IsValid( crate ) then
+				involved[#involved + 1] = crate
 				local fits = true
 				if self.ScalableSpec and crate.BulletData then
 					fits = ACE.GunScale.AmmoFits( self, crate.BulletData )
@@ -705,6 +725,17 @@ function ENT:Update( ArgTable )
 			end
 		end
 		self.AmmoLink = kept
+	end
+
+	-- Retuning rewrites the pricing inputs (muzzle-velocity multiplier, linked
+	-- round, caliber) without firing any link/unlink event, so the cached
+	-- contraption totals would never recompute on their own. Invalidate with
+	-- everyone involved: the gun plus every crate that was linked either side
+	-- of the reconciliation.
+	if ACE.PointsInputChanged then
+		local affected = { self }
+		if involved then for _, crate in ipairs( involved ) do affected[#affected + 1] = crate end end
+		ACE.PointsInputChanged( affected, "gun-updated" )
 	end
 
 	return true, "Gun updated to " .. ( Limits and ACE.GunScale.DisplayName( Lookup, CalMM, BoreLen ) or Lookup.name )
