@@ -234,16 +234,9 @@ do
 		local KeyCal, KeyLen
 		Id, KeyCal, KeyLen = ACE.GunScale.ParseKey(Id)
 
-		-- Resolution order matters and must match the crate factory exactly:
-		-- resolve through the modern chain FIRST (exact defs, legacy aliases,
-		-- then the suffix-migration fallback), and rewrite through the legacy
-		-- BackComp table only when nothing recognizes the id. The migration
-		-- layer resolves ids like "105mmSB" at their true caliber, so applying
-		-- BackComp first would pin the gun to the rewrite target (100mmSBC)
-		-- while the crate factory — which resolves first — builds rounds at
-		-- 105mm, breaking ammo links on pasted dupes. BackComp remains the
-		-- last resort for ids the migration suffixes don't know ("40mmGLSingle",
-		-- missile rewrites).
+		-- Resolve through the modern chain first; BackComp is the last resort
+		-- for ids it doesn't know. Must match the crate factory's order or
+		-- pasted dupe ammo links break.
 		if BackComp then
 			local Probe = ACE.GunScale.ResolveSpec( Id )
 			if not Probe then Id = BackComp[Id] or Id end
@@ -528,10 +521,8 @@ function ENT:Update( ArgTable )
 	local NewId, Lookup, ClassData, Limits, Stats, CalMM, BoreLen = ACE.ResolveGunSpec( Id, GunSpec, BackComp )
 	if not Lookup then return false, "Unknown gun id" end
 
-	-- Quota categories mirror the spawn path in MakeGun. A retune can move a
-	-- gun across category lines (a small gun becoming a large one), so the
-	-- target category must be validated and the sandbox count registration
-	-- migrated — otherwise retunes bypass the spawn quotas entirely.
+	-- Quota categories must mirror the spawn path; the count registration
+	-- migrates with the gun or retunes would bypass the spawn quotas.
 	local function QuotaCategory( classid, effcal )
 		if classid == "SL" then return "_ace_smokelauncher" end
 		if classid == "RAC" or classid == "MG" or classid == "AC" or classid == "SA" or classid == "HMG" then return "_ace_rapidgun" end
@@ -588,11 +579,8 @@ function ENT:Update( ArgTable )
 		self.MagSize = math.max( self.MagSize, Stats.magsize or Lookup.magsize )
 	end
 
-	-- Wire inputs are spec-dependent, same selection as the spawn path:
-	-- magazine support decides whether a manual Reload port exists, caliber
-	-- decides the Fuse Time port (30mm threshold). Adjust in place rather
-	-- than recreating so wiring on the common ports (Fire, Unload, ROFLimit)
-	-- keeps its connections across the retune.
+	-- AdjustInputs preserves connections on same-named ports; only the
+	-- spec-dependent Reload/Fuse ports change.
 	if WireLib and WireLib.AdjustInputs and SelectGunInputs then
 		self.Inputs = WireLib.AdjustInputs( self, SelectGunInputs( Lookup.magsize ~= nil, self.Caliber ) )
 	end
@@ -623,10 +611,8 @@ function ENT:Update( ArgTable )
 	self.BulletData      = { Type = "Empty", PropMass = 0, ProjMass = 0 }
 	self.Heat            = ACE.AmbientTemp
 
-	-- The chambered round survives when it genuinely fits the new spec: the
-	-- caliber must be unchanged (a 120mm shell never belongs in a rebored
-	-- chamber, longer or shorter tube notwithstanding) and the round type
-	-- must pass the same blacklist the crate-link reconciliation re-runs.
+	-- The chambered round survives when caliber is unchanged and the round
+	-- type passes the same blacklist the crate links re-run.
 	if Chambered and Stats.caliber == OldCaliber then
 		local Blacklist   = ACE.AmmoBlacklist[ Chambered.Type ] or {}
 		local Fam         = ( ACE.Classes.GunClass[ self.Class ] or {} ).ammofamily
@@ -659,11 +645,8 @@ function ENT:Update( ArgTable )
 		local oldphys = self:GetPhysicsObject()
 		WasFrozen = IsValid( oldphys ) and not oldphys:IsMotionEnabled()
 	end
-	-- Attachment ids are model-local: the same numeric id means different
-	-- positions on different models, so the muzzle bind cache must not
-	-- survive a model swap (an unscaled gun keeps its cached muzzle
-	-- otherwise — e.g. 12.7mm muzzle at 37 units read on a 40mm muzzle
-	-- at 96 units when both models call it attachment 1).
+	-- Attachment ids are model-local, so the muzzle bind cache must not
+	-- survive a model swap.
 	if self:GetModel() ~= self.Model then
 		self:SetModel( self.Model )
 		self.MuzzleBindPos = nil
@@ -730,10 +713,8 @@ function ENT:Update( ArgTable )
 		end
 	end
 
-	-- Returning all the way to pivot sends no scale packet on its own, so
-	-- without an explicit reset clients keep the old render matrix, collision
-	-- hull and cached tube split. The server hull is already correct — the
-	-- PhysicsInit above rebuilt the base mesh — this is purely a client sync.
+	-- Returning to pivot sends no scale packet on its own; without an
+	-- explicit reset clients keep the old matrix, hull and tube split.
 	if WasScaled and not self.IsScalable and ACE.NetworkScaleReset then
 		ACE.NetworkScaleReset( self )
 	end
@@ -769,11 +750,8 @@ function ENT:Update( ArgTable )
 				if self.ScalableSpec and crate.BulletData then
 					fits = ACE.GunScale.AmmoFits( self, crate.BulletData )
 				end
-				-- The round-type blacklist is a link-time check, so a retune
-				-- must re-run it: without this, linking APFSDS to an autoloader
-				-- and retuning into a plain cannon would smuggle a round past
-				-- the class restriction (the exploit family ACF-3's blanket
-				-- unlink-on-update guards against).
+				-- The round-type blacklist is a link-time check; a retune must
+				-- re-run it or restricted rounds could be smuggled across classes.
 				if fits then
 					local Blacklist = ACE.AmmoBlacklist[ crate.RoundType ] or {}
 					local Fam = ( ACE.Classes.GunClass[ self.Class ] or {} ).ammofamily
@@ -793,11 +771,8 @@ function ENT:Update( ArgTable )
 		self.AmmoLink = kept
 	end
 
-	-- Retuning rewrites the pricing inputs (muzzle-velocity multiplier, linked
-	-- round, caliber) without firing any link/unlink event, so the cached
-	-- contraption totals would never recompute on their own. Invalidate with
-	-- everyone involved: the gun plus every crate that was linked either side
-	-- of the reconciliation.
+	-- No link/unlink event fires on retune, so cached contraption totals
+	-- would never recompute without an explicit invalidation.
 	if ACE.PointsInputChanged then
 		local affected = { self }
 		if involved then for _, crate in ipairs( involved ) do affected[#affected + 1] = crate end end
