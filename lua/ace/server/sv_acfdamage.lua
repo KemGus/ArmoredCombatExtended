@@ -919,12 +919,6 @@ function ACE.RoundImpact( Bullet, Speed, Energy, Target, HitPos, HitNormal , Bon
 	local Angle	= ACE.GetHitAngle( HitNormal , Bullet["Flight"] )
 	local HitRes	= ACE.Damage( Target, Energy, Bullet["PenArea"], Angle, Bullet["Owner"], Bone, Bullet["Gun"], Bullet["Type"], HitPos, Bullet["Flight"] )
 
-	if GetConVar("ace_ballistics_debug"):GetBool() then
-		PrintMessage(HUD_PRINTTALK, string.format("[ACE] %s - %.1fmm %s | HP %.0f/%.0f | %s",
-			tostring(Target), Target.ACE and Target.ACE.Armour or -1, tostring(Target.ACE and Target.ACE.Material),
-			Target.ACE and Target.ACE.Health or -1, Target.ACE and Target.ACE.MaxHealth or -1, tostring(Target.ACE and Target.ACE.Type)))
-	end
-
 	HitRes.Ricochet = false
 	HitRes.RicochetSelected = false
 
@@ -978,18 +972,14 @@ function ACE.RoundImpact( Bullet, Speed, Energy, Target, HitPos, HitNormal , Bon
 		Bullet.Ricochets	= Bullet.Ricochets + 1
 		Bullet["Pos"]	= HitPos + HitNormal * 0.05
 		Bullet.FlightTime	= 0
-		Bullet.Flight	= (ACE.RicochetVector(Bullet.Flight, HitNormal) + VectorRand() * 0.05):GetNormalized() * Speed * Ricochet
+		Bullet.Flight = Bullet.Flight * 0.05 --0.05 = ~35 m/s for a 700 m/s projectile
+		Bullet.Flight	= (ACE.RicochetVector(Bullet.Flight, HitNormal) + VectorRand() * 0.05):GetNormalized() * Ricochet
 
 		if IsValid( ACE.GetPhysicalParent(Target):GetPhysicsObject() ) then
 			Bullet.TraceBackComp = math.max(ACE.GetPhysicalParent(Target):GetPhysicsObject():GetVelocity():Dot(Bullet["Flight"]:GetNormalized()),0)
 		end
 
 		HitRes.Ricochet = true
-
-		debugoverlay.Cross( HitPos, 5, 30, Color(255,255,0), true )
-		debugoverlay.Line( HitPos, HitPos + Bullet.Flight:GetNormalized() * 100, 30, Color(255,255,0), true ) -- yellow: intended bounce dir
-		debugoverlay.Line( Bullet.Pos, Bullet.NextPos, 30, Color(255,0,0), true ) -- red: actual next segment (into ground = stale)
-		debugoverlay.Text( HitPos + HitNormal * 15, "v=" .. math.Round(Bullet.Flight:Length(),2), 30 )
 	end
 
 	HitRes.PostPenetration = ACE.GetPostPenetration( HitRes, Energy )
@@ -1007,293 +997,62 @@ function ACE.RoundImpact( Bullet, Speed, Energy, Target, HitPos, HitNormal , Bon
 	return HitRes
 end
 
--- Port of ACF-3's lua/acf/ballistics/world_pen_sh.lua (ACF.Ballistics): deterministic
--- rolls, a dig trace that finds real exits through thin walls and brush seams,
--- density-scaled penetration costs, and measured penetration of map brush entities.
--- Rolls are seeded only when Bullet.PredictionID is set; unseeded bullets behave
--- exactly like the old math.random / VectorRand code did.
+--Handles Ground penetrations
+function ACE.PenetrateGround( Bullet, Energy, HitPos, HitNormal )
 
-ACE.Ballistics = ACE.Ballistics or {}
-local Ballistics = ACE.Ballistics
+	Bullet.GroundRicos = Bullet.GroundRicos or 0
 
-do -- Random rolls --------------------------------
-	-- Predicted bullets roll the same numbers on the server and on the owner's client,
-	-- from their PredictionID and how many times they hit the map. Every other bullet
-	-- rolls normally.
-	local function Roll(Bullet, Key)
-		return tonumber(util.CRC(Bullet.PredictionID .. ":" .. (Bullet.WorldHits or 0) .. ":" .. Key)) / 4294967296
-	end
+	local MaxDig = (( Energy.Penetration * 1 / Bullet.PenArea ) * ACE.KEtoRHA / ACE.GroundtoRHA ) / 25.4
 
-	-- Same as math.Rand
-	function Ballistics.Random(Bullet, Key, Min, Max)
-		if not Bullet.PredictionID then return math.Rand(Min, Max) end
+	--print("Max Dig: " .. MaxDig .. "\nEnergy Pen: " .. Energy.Penetration .. "\n")
 
-		return Min + (Max - Min) * Roll(Bullet, Key)
-	end
+	local HitRes = {Penetrated = false, Ricochet = false}
+	local TROffset = 0.235 * Bullet.Caliber / 1.14142 --Square circumscribed by circle. 1.14142 is an aproximation of sqrt 2. Radius and divide by 2 for min/max cancel.
 
-	-- Same as math.random(Min, Max), which takes non-integer bounds too
-	function Ballistics.RandomInt(Bullet, Key, Min, Max)
-		if not Bullet.PredictionID then return math.random(Min, Max) end
+	local DigRes = util.TraceHull( {
 
-		return math.floor(Roll(Bullet, Key) * (Max - Min + 1)) + Min
-	end
+		start = HitPos + Bullet.Flight:GetNormalized() * 0.1,
+		endpos = HitPos + Bullet.Flight:GetNormalized() * (MaxDig + 0.1),
+		filter = Bullet.Filter,
+		mins = Vector( -TROffset, -TROffset, -TROffset ),
+		maxs = Vector( TROffset, TROffset, TROffset ),
+		mask = MASK_SOLID_BRUSHONLY
 
-	-- Same as VectorRand
-	function Ballistics.RandomVector(Bullet, Key)
-		if not Bullet.PredictionID then return VectorRand() end
+		} )
 
-		return Vector(Roll(Bullet, Key .. "X") * 2 - 1, Roll(Bullet, Key .. "Y") * 2 - 1, Roll(Bullet, Key .. "Z") * 2 - 1)
-	end
-end
+	--debugoverlay.Box( DigRes.StartPos, Vector( -TROffset, -TROffset, -TROffset ), Vector( TROffset, TROffset, TROffset ), 5, Color(0,math.random(100,255),0) )
+	--debugoverlay.Box( DigRes.HitPos, Vector( -TROffset, -TROffset, -TROffset ), Vector( TROffset, TROffset, TROffset ), 5, Color(0,math.random(100,255),0) )
+	--debugoverlay.Line( DigRes.StartPos, HitPos + Bullet.Flight:GetNormalized() * (MaxDig + 0.1), 5 , Color(0,math.random(100,255),0) )
 
-do -- Ricochets -----------------------------------
-	-- Re-seeds a bullet's flight after a ricochet and resets Pos/NextPos so the
-	-- immediate re-trace this tick starts from the ricochet point. Speed is
-	-- unscaled (real-world) velocity; Spread is the jitter magnitude.
-	function Ballistics.ApplyRicochet(Bullet, Position, HitNormal, Speed, Ricochet, Spread, DeltaTime)
-		local Direction = ACE.RicochetVector(Bullet.Flight, HitNormal) + Ballistics.RandomVector(Bullet, "RicochetSpread") * Spread
-		local Flight    = Direction:GetNormalized() * Speed * Ricochet * ACE.VelScale
+	local loss = DigRes.FractionLeftSolid
 
-		Bullet.Flight  = Flight
-		Bullet.Pos     = Position
-		Bullet.NextPos = Position + Flight * DeltaTime
-	end
+	--couldn't penetrate
+	if loss == 1 or loss == 0 then
 
-	function Ballistics.DoRicochet(Bullet, HitPos, HitNormal)
-		Bullet.GroundRicos = Bullet.GroundRicos or 0
+		local Ricochet  = 0
+		local Speed	= Bullet.Flight:Length() / ACE.VelScale
+		local Angle	= ACE.GetHitAngle( HitNormal, Bullet.Flight )
+		local MinAngle  = math.min(Bullet.Ricochet - Speed / 39.37 / 30 + 20,89.9)  --Making the chance of a ricochet get higher as the speeds increase
 
-		local Speed    = Bullet.Flight:Length() / ACE.VelScale
-		local Angle    = ACE.GetHitAngle( HitNormal, Bullet.Flight )
-		local MinAngle = math.min(Bullet.Ricochet - Speed / 39.37 / 30 + 20, 89.9) -- Making the chance of a ricochet get higher as the speeds increase
-		local Ricochet = 0
-
-		if Angle > Ballistics.RandomInt(Bullet, "Ricochet", MinAngle, 90) and Angle < 89.9 then -- Checking for ricochet
+		if Angle > math.random(MinAngle,90) and Angle < 89.9 then	--Checking for ricochet
 			Ricochet = Angle / 90 * 0.75
 		end
 
 		if Ricochet > 0 and Bullet.GroundRicos < 2 then
-			Bullet.GroundRicos = Bullet.GroundRicos + 1
-			Ballistics.ApplyRicochet(Bullet, HitPos + HitNormal, HitNormal, Speed, Ricochet, 0.05, Bullet.DeltaTime or engine.TickInterval())
-
-			debugoverlay.Cross( HitPos, 5, 30, Color(0,255,255), true )
-			debugoverlay.Line( HitPos, HitPos + Bullet.Flight:GetNormalized() * 100, 30, Color(0,255,255), true ) -- cyan: world bounce dir
-			debugoverlay.Text( HitPos + HitNormal * 15, "v=" .. math.Round(Bullet.Flight:Length(),2), 30 )
-
-			return true
+			Bullet.GroundRicos  = Bullet.GroundRicos + 1
+			Bullet.Pos		= HitPos + HitNormal * 1
+			Bullet.Flight	= (ACE.RicochetVector(Bullet.Flight, HitNormal) + VectorRand() * 0.05):GetNormalized() * Speed * Ricochet
+			HitRes.Ricochet	= true
 		end
 
-		return false
-	end
-end
-
--- Digs through worldspawn. Finds the real exit through thin layers, brush seams
--- and no-draw displacement layers instead of reading one hull trace's
--- FractionLeftSolid. Returns true + exit position when the bullet gets through.
-function Ballistics.DigTrace(From, To)
-	local Dig = util.TraceLine({
-		start  = From,
-		endpos = To,
-		mask   = MASK_NPCSOLID_BRUSHONLY, -- Map and brushes only
-	})
-
-	if Dig.StartSolid then -- Started inside solid map volume
-		if Dig.FractionLeftSolid == 0 then -- Trace could not move inside
-			local Displacement = To - From
-			local Normal       = Displacement:GetNormalized()
-			local Length       = Displacement:Length()
-			local C = math.Round(Length / 12)
-			local N = Length / C
-
-			for I = 1, C do
-				local P = From + Normal * I * N
-				local Back = util.TraceLine({ -- Send a trace backwards to hit the other side
-					start  = P,
-					endpos = From, -- Countering the initial offset position of the dig trace to handle things <1 inch thick
-					mask   = MASK_NPCSOLID_BRUSHONLY,
-				})
-
-				if Back.StartSolid or Back.HitNoDraw then continue end
-
-				return true, Back.HitPos
-			end
-
-			return false
-		elseif Dig.FractionLeftSolid == 1 then -- Non-penetration: too thick
-			return false
-		else -- Penetrated
-			if Dig.HitNoDraw then -- Hit a layer inside
-				return Ballistics.DigTrace(Dig.HitPos + (To - From):GetNormalized() * 0.1, To) -- Try again
-			else -- Complete penetration
-				local Back = util.TraceLine({
-					start  = Dig.StartPos,
-					endpos = From,
-					mask   = MASK_NPCSOLID_BRUSHONLY,
-				})
-
-				-- False positive, still inside the world
-				-- Typically occurs when two brushes meet
-				if Back.StartSolid or Back.HitNoDraw then
-					return Ballistics.DigTrace(Dig.StartPos + (To - From):GetNormalized() * 0.1, To)
-				end
-
-				return true, Dig.StartPos
-			end
-		end
-	else -- Started in open space (past a thin wall or in a brush gap)
-		local Back = util.TraceLine({ -- Send a trace backwards to hit the other side
-			start  = Dig.HitPos,
-			endpos = From + (From - Dig.HitPos):GetNormalized(), -- Countering the initial offset position of the dig trace to handle things <1 inch thick
-			mask   = MASK_NPCSOLID_BRUSHONLY,
-		})
-
-		if Back.StartSolid then -- object is too thick
-			return false
-		elseif not Back.Hit or Back.HitNoDraw then
-			-- Hit nothing on the way back
-			-- Map edge, going into the ground, whatever...
-			-- Effectively infinitely thick
-			return false
-		else -- Penetration
-			return true, Dig.StartPos
-		end
-	end
-end
-
--- Shared penetration budget setup: density-derived RHA-equivalent thickness this
--- bullet can still punch through. MaxPen is mm of RHA via ACE.CalcPenetration,
--- so the ground cost scales with the surface's physical density instead of a
--- flat GroundtoRHA for every material.
-function Ballistics.GetPenetrationSetup(Bullet, Energy, SurfaceProps, HitPos)
-	local Surface = util.GetSurfaceData(SurfaceProps or 0)
-	local Density = ((Surface and Surface.density * 0.5 or 500) * Ballistics.Random(Bullet, "Density", 0.9, 1.1)) ^ 0.9 / 10000
-	local MaxPen  = ACE.CalcPenetration(Energy, Bullet.PenArea) -- Base RHA penetration of the projectile
-
-	-- Shaped-charge rounds dig on the jet's authored penetration, not the shell body's kinetic energy
-	if Bullet.SlugMV and isnumber(Bullet.MaxPen) then
-		MaxPen = Bullet.MaxPen
-	end
-	local RHAe    = math.max(MaxPen / Density, 1) -- RHA-equivalent thickness of the target material
-	local Enter   = HitPos -- Impact point
-	local Fwd     = Bullet.Flight:GetNormalized()
-
-	return Density, MaxPen, RHAe, Enter, Fwd
-end
-
---Handles Ground penetrations
-function ACE.PenetrateGround( Bullet, Energy, HitPos, HitNormal )
-
-	Bullet.WorldHits = (Bullet.WorldHits or 0) + 1 -- Keeps the rolls of every map hit different
-
-	local HitRes = { Penetrated = false, Ricochet = false }
-
-	-- A spent shaped-charge casing carries no penetration: it ricochets or dies at the surface
-	if Bullet.Detonated and Bullet.SlugMV then
-		HitRes.Ricochet = ACE.Ballistics.DoRicochet(Bullet, HitPos, HitNormal)
-
-		debugoverlay.Cross( HitPos, 10, 30, Color(255,80,80), true )
-		debugoverlay.Text( HitPos, "spent casing", 30 )
-
-		return HitRes
+	--penetrated
+	else
+		--print("Pen")
+		Bullet.Flight	= Bullet.Flight * (1 - loss)
+		Bullet.Pos		= DigRes.StartPos + Bullet.Flight:GetNormalized() * 0.25 --this is actually where trace left brush
+		HitRes.Penetrated	= true
 	end
 
-	local Density, MaxPen, RHAe, Enter, Fwd = ACE.Ballistics.GetPenetrationSetup(Bullet, Energy, Bullet.SurfaceProps, HitPos)
-	local Penetrated, Exit = ACE.Ballistics.DigTrace(Enter + Fwd, Enter + Fwd * RHAe / 25.4)
-
-	debugoverlay.Line( Enter, Enter + Fwd * (RHAe / 25.4), 30 , Color(255,255,0), true ) -- Yellow: dig budget, wall was thicker if no green line
-	debugoverlay.Text( Enter + Fwd * (RHAe / 25.4), math.Round(RHAe) .. "mm budget", 30 )
-
-	if Penetrated then
-		local Thickness = (Exit - Enter):Length() * Density * 25.4 -- RHAe of the material passed through
-
-		Bullet.Flight  = Bullet.Flight * (1 - Thickness / MaxPen)
-		Bullet.Pos     = Exit + Fwd * 0.25
-		HitRes.Penetrated = true
-
-		debugoverlay.Line( Enter, Exit, 30 , Color(0,255,0), true ) -- Green dig path through the world
-	else -- Ricochet
-		HitRes.Ricochet = ACE.Ballistics.DoRicochet(Bullet, HitPos, HitNormal)
-	end
-
-	return HitRes
-end
-
---- Measures and penetrates map brush entities (func_door, func_brush,
---- prop_door_rotating...) that have no armor data, instead of letting them pass
---- shells through for free. Called from the bullet-impact dispatch when the hit
---- entity is a physobj-less map brush; everything else keeps the old path.
---- @param Bullet table The bullet being flown
---- @param TraceRes table The TraceResult the bullet just hit with
---- @return table HitRes { Penetrated = bool, Ricochet = bool }
-function ACE.PenetrateMapEntity( Bullet, TraceRes )
-
-	Bullet.WorldHits = (Bullet.WorldHits or 0) + 1 -- Keeps the rolls of every map hit different
-
-	local HitRes = { Penetrated = false, Ricochet = false }
-	local Speed  = Bullet.Flight:Length() / ACE.VelScale
-	local Energy = ACE.Kinetic( Speed, Bullet.ProjMass, Bullet.LimitVel )
-	if Bullet.Detonated and Bullet.SlugMV then
-		HitRes.Ricochet = ACE.Ballistics.DoRicochet(Bullet, TraceRes.HitPos, TraceRes.HitNormal)
-
-		debugoverlay.Cross( TraceRes.HitPos, 10, 30, Color(255,80,80), true )
-		debugoverlay.Text( TraceRes.HitPos, "spent casing", 30 )
-
-		return HitRes
-	end
-
-	local Density, MaxPen, RHAe, Enter, Fwd = ACE.Ballistics.GetPenetrationSetup(Bullet, Energy, TraceRes.SurfaceProps, TraceRes.HitPos)
-
-	debugoverlay.Line( Enter, Enter + Fwd * (RHAe / 25.4), 30 , Color(255,255,0), true ) -- Yellow: dig budget
-	debugoverlay.Text( Enter + Fwd * (RHAe / 25.4), math.Round(RHAe) .. "mm budget", 30 )
-
-	local PassThrough = util.TraceLine({
-		start  = Enter,
-		endpos = Enter + Fwd * RHAe / 25.4,
-		mask   = MASK_SOLID_BRUSHONLY
-	})
-
-	local Filt = {}
-	local Back
-
-	repeat
-		Back = util.TraceLine({
-			start  = PassThrough.HitPos,
-			endpos = Enter,
-			filter = Filt
-		})
-
-		-- NOTE: carried over from ACF-3
-		-- Sometimes, really short flight projectiles will be processed
-		-- after a bounce or penetration of another map entity.
-		-- These are created in the air, so no entity is ever hit
-		-- which leads to an infinite loop.
-		if not Back.Hit then return HitRes end
-
-		if Back.HitNonWorld and Back.Entity ~= TraceRes.Entity then
-			Filt[#Filt + 1] = Back.Entity
-
-			continue
-		end
-
-		-- Cannot measure a real thickness: the entity sits inside world geometry
-		-- or the back-trace ran into solid map. ACE addition: Back.HitWorld also
-		-- terminates here, ACF-3 would loop forever on world-adjacent brushes.
-		if Back.StartSolid or Back.HitWorld then
-			HitRes.Ricochet = ACE.Ballistics.DoRicochet(Bullet, TraceRes.HitPos, TraceRes.HitNormal)
-
-			return HitRes
-		end
-	until Back.Entity == TraceRes.Entity
-
-	local Thickness = (Back.HitPos - Enter):Length() * Density * 25.4 -- Obstacle thickness in RHA
-
-	Bullet.Flight  = Bullet.Flight * (1 - Thickness / MaxPen)
-	Bullet.Pos     = Back.HitPos + Fwd * 0.25 -- Reseed Pos: ACE re-traces from Pos, NextPos is recomputed
-
-	debugoverlay.Line( Enter, Back.HitPos, 30 , Color(0,255,255), true ) -- Cyan path through a map entity
-
-	table.insert(Bullet.Filter, Back.Entity)
-
-	HitRes.Penetrated = true
 	return HitRes
 end
 

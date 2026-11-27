@@ -5,29 +5,6 @@
 local FlightRes = { }
 local FlightTr = { output = FlightRes }
 
--- Ragdoll hitboxes never report a hitgroup; map the struck bone through the
--- model skeleton so organism bodies get hitgroup armor and damage scaling.
-local RagdollHitGroup = {
-	["ValveBiped.Bip01_Head1"]     = HITGROUP_HEAD,
-	["ValveBiped.Bip01_Neck1"]     = HITGROUP_HEAD,
-	["ValveBiped.Bip01_Spine2"]    = HITGROUP_CHEST,
-	["ValveBiped.Bip01_Spine1"]    = HITGROUP_CHEST,
-	["ValveBiped.Bip01_Spine"]     = HITGROUP_CHEST,
-	["ValveBiped.Bip01_Pelvis"]    = HITGROUP_STOMACH,
-	["ValveBiped.Bip01_L_UpperArm"]= HITGROUP_LEFTARM,
-	["ValveBiped.Bip01_L_Forearm"] = HITGROUP_LEFTARM,
-	["ValveBiped.Bip01_L_Hand"]    = HITGROUP_LEFTARM,
-	["ValveBiped.Bip01_R_UpperArm"]= HITGROUP_RIGHTARM,
-	["ValveBiped.Bip01_R_Forearm"] = HITGROUP_RIGHTARM,
-	["ValveBiped.Bip01_R_Hand"]    = HITGROUP_RIGHTARM,
-	["ValveBiped.Bip01_L_Thigh"]   = HITGROUP_LEFTLEG,
-	["ValveBiped.Bip01_L_Calf"]    = HITGROUP_LEFTLEG,
-	["ValveBiped.Bip01_L_Foot"]    = HITGROUP_LEFTLEG,
-	["ValveBiped.Bip01_R_Thigh"]   = HITGROUP_RIGHTLEG,
-	["ValveBiped.Bip01_R_Calf"]    = HITGROUP_RIGHTLEG,
-	["ValveBiped.Bip01_R_Foot"]    = HITGROUP_RIGHTLEG,
-}
-
 local Gravity = -GetConVar("sv_gravity"):GetInt()
 local GravityVector = Vector(0, 0, Gravity)
 ACE.BallisticsGravity = Gravity
@@ -568,10 +545,8 @@ do
 
 			-- If we hit a player or NPC, we need to retry the trace as a TraceLine
 			-- TraceHull hits player's physics collision boxes rather than proper hitboxes, causing near miss shots to hit
-			-- Z-City organism ragdolls get the same retry: a hull trace reports HitGroup 0 on a ragdoll,
-			-- which would skip body armor and hitgroup damage entirely
 			local HitEnt = FlightRes.Entity
-			if FlightRes.HitNonWorld and (HitEnt:IsPlayer() or HitEnt:IsNPC() or istable(HitEnt.organism)) then
+			if FlightRes.HitNonWorld and (HitEnt:IsPlayer() or HitEnt:IsNPC()) then
 
 				FlightTr.output = nil
 				ACE.BallisticsStats.TraceCalls = ACE.BallisticsStats.TraceCalls + 1
@@ -589,13 +564,6 @@ do
 					ACE.BallisticsStats.VisibilityRetries = ACE.BallisticsStats.VisibilityRetries + 1
 				end
 				FlightRes.HitGroup = PlayerHitCheck.HitGroup
-
-				-- A ragdoll's HitGroup stays 0 on any trace; resolve it from the physbone
-				if FlightRes.HitGroup == 0 and istable(HitEnt.organism) then
-					local BoneIndex = PlayerHitCheck.PhysicsBone and HitEnt:TranslatePhysBoneToBone(PlayerHitCheck.PhysicsBone)
-					local BoneName = BoneIndex and HitEnt:GetBoneName(BoneIndex)
-					FlightRes.HitGroup = BoneName and RagdollHitGroup[BoneName] or FlightRes.HitGroup
-				end
 			end
 		end
 
@@ -790,19 +758,7 @@ do
 
 			Bullet.Flight = Bullet.Flight - Drag * DTImpact
 
-			local HitEnt = FlightRes.Entity
-			local Retry
-
-			-- Map brush entities (func_door, func_brush, prop_door_rotating...) have no physobj
-			-- so ACE.Check can never activate them: today they pass shells through for free.
-			-- Measure their real thickness and charge penetration instead. Spawned props and
-			-- armored entities keep the old propimpact path.
-			if HitEnt:CreatedByMap() and not IsValid( HitEnt:GetPhysicsObject() ) and not HitEnt:IsWeapon() then
-				local HitRes = ACE.PenetrateMapEntity( Bullet, FlightRes )
-				Retry = HitRes.Penetrated and "Penetrated" or HitRes.Ricochet and "Ricochet" or false
-			else
-				Retry = ACE.BulletPropImpact( Index, Bullet, HitEnt , FlightRes.HitNormal , FlightRes.HitPos , FlightRes.HitGroup )
-			end
+			local Retry = ACE.BulletPropImpact( Index, Bullet, FlightRes.Entity , FlightRes.HitNormal , FlightRes.HitPos , FlightRes.HitGroup )
 
 			--don't process ACE.TraceFilter ents
 			if ACE.TraceFilter[FlightRes.Entity:GetClass()] and Retry == "Penetrated" then
@@ -819,9 +775,6 @@ do
 			if not FlightRes.HitSky then
 
 			ACE.BulletWorldImpact = ACE.RoundTypes[Bullet.Type]["worldimpact"]
-
-				-- Surface material drives the density-scaled dig cost in ACE.PenetrateGround
-				Bullet.SurfaceProps = FlightRes.SurfaceProps
 
 				local Retry = ACE.BulletWorldImpact( Index, Bullet, FlightRes.HitPos, FlightRes.HitNormal )
 

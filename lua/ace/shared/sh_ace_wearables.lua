@@ -501,27 +501,19 @@ if SERVER then
 	end
 
 	hook.Add("ACE_GetBodyArmor", "ACE_Wearables", function(Entity, Hitgroup, Layers, HitPos, Dir)
-		-- A downed Z-City player takes hits through their fake ragdoll. The armor
-		-- state and durability live on the player, but the bullet's path is
-		-- measured against the bones of the body that was actually hit.
-		local Wearer = Entity
-		if not Entity:IsPlayer() then
-			local Org = Entity.organism
-			Wearer = Org and Org.owner
-			if not IsValid(Wearer) then return end
-		end
+		if not Entity:IsPlayer() then return end
 
 		for Slot, Data in pairs(Wearables.Slots) do
 			local Plates = Data.Layers[Hitgroup]
 
-			if Plates and Wearables.IsWearing(Wearer, Slot) then
+			if Plates and Wearables.IsWearing(Entity, Slot) then
 				local Covered, Normal
 				if HitPos and Dir then Covered, Normal = Wearables.Covers(Entity, Slot, HitPos, Dir) end
 
 				-- Without a known path, one Coverage roll decides the whole stack, not each plate in it
 				if Covered or (Covered == nil and math.random() <= (Plates.Coverage or 1)) then
-					local Scale = Wearables.ProtectionScale(Wearables.GetHealth(Wearer, Slot))
-					local OnHit = function(_, AbsorbedJ) Wearables.Damage(Wearer, Slot, AbsorbedJ) end
+					local Scale = Wearables.ProtectionScale(Wearables.GetHealth(Entity, Slot))
+					local OnHit = function(Ply, AbsorbedJ) Wearables.Damage(Ply, Slot, AbsorbedJ) end
 
 					for _, Plate in ipairs(Plates) do
 						Layers[#Layers + 1] = { Material = Plate.Material, Armour = Plate.Armour * Scale, Normal = Normal, OnHit = OnHit }
@@ -560,21 +552,11 @@ end
 -- preview hits it).
 local Worn = {} -- [Player] = { [Slot] = ClientsideModel }
 
--- The entity a faked or dead player's body lives in. Z-City's net message can
--- reach the client before the ragdoll does, leaving ply.FakeRagdoll nil, so the
--- replicated NWEntity var is checked first and death ragdolls count too.
-local function FakeBody(Ply)
-	if IsValid(Ply:GetNWEntity("FakeRagdoll")) then return Ply:GetNWEntity("FakeRagdoll") end
-	if IsValid(Ply.FakeRagdoll) then return Ply.FakeRagdoll end
-	if IsValid(Ply:GetNWEntity("RagdollDeath")) then return Ply:GetNWEntity("RagdollDeath") end
-end
-
 local function ShouldDraw(Ply)
 	if not IsValid(Ply) or not Ply:Alive() or Ply:GetNoDraw() then return false end
 
 	local Me = LocalPlayer()
-	-- A fake ragdoll is always a visible third-person body, own gear should draw on it
-	if Ply == Me then return IsValid(FakeBody(Ply)) or Ply:ShouldDrawLocalPlayer() end
+	if Ply == Me then return Ply:ShouldDrawLocalPlayer() end
 
 	-- Spectating this player from their own eyes
 	return not (Me:GetObserverMode() == OBS_MODE_IN_EYE and Me:GetObserverTarget() == Ply)
@@ -591,7 +573,7 @@ local function FitBones(Ent)
 end
 
 local function RenderWearable(Ent)
-	local Ply = Ent.ACE_Owner or Ent:GetParent()
+	local Ply = Ent:GetParent()
 	if not ShouldDraw(Ply) then return end
 
 	local Tint = Ply:GetNW2Vector(NWColorKey(Ent.ACE_Slot), Vector(1, 1, 1))
@@ -633,8 +615,7 @@ local function CreateModel(Ply, Slot, Data)
 	if not IsValid(Ent) then return end
 
 	Ent.ACE_Slot = Slot
-	Ent.ACE_Owner = Ply
-	Attach(Ent, FakeBody(Ply) or Ply)
+	Attach(Ent, Ply)
 	-- The bones follow the player, not the model's own bounds, so cull by the player's
 	Ent:SetRenderBounds(Vector(-48, -48, -16), Vector(48, 48, 80))
 	Ent.RenderOverride = RenderWearable
@@ -656,16 +637,6 @@ hook.Add("Think", "ACE_Wearables", function()
 	end
 
 	for _, Ply in player.Iterator() do
-		-- Models that escaped Worn (lua refresh, retarget races) keep drawing at
-		-- their old parent. Remove any wearable of this player that isn't the
-		-- tracked live model for its slot.
-		local Live = Worn[Ply]
-		for _, Ent in ipairs(ents.GetAll()) do
-			if Ent.ACE_Owner == Ply and Ent.ACE_Slot and (not Live or Live[Ent.ACE_Slot] ~= Ent) then
-				Ent:Remove()
-			end
-		end
-
 		for Slot, Data in pairs(Wearables.Slots) do
 			local Wants = Wearables.IsWearing(Ply, Slot) and Ply:Alive() and Ply:LookupBone(Data.Bone) ~= nil
 			local Ent = Worn[Ply] and Worn[Ply][Slot]
@@ -675,12 +646,9 @@ hook.Add("Think", "ACE_Wearables", function()
 			elseif not Wants and Ent then
 				RemoveModel(Ply, Slot)
 			elseif Wants then
-				-- Follow the visible body: a faked player's ragdoll, else the
-				-- player. Clientside models also lose their parent when the
-				-- player goes dormant and comes back.
-				local Body = FakeBody(Ply) or Ply
-				if Ent:GetParent() ~= Body then Attach(Ent, Body) end
-				if Ent.ACE_FitModel ~= Body:GetModel() then FitModel(Ent, Body) end
+				-- Clientside models lose their parent when the player goes dormant and comes back
+				if Ent:GetParent() ~= Ply then Attach(Ent, Ply) end
+				if Ent.ACE_FitModel ~= Ply:GetModel() then FitModel(Ent, Ply) end
 
 				local Skin = Ply:GetNW2Int(NWSkinKey(Slot), 0)
 				if Ent:GetSkin() ~= Skin then Ent:SetSkin(Skin) end
