@@ -319,7 +319,7 @@ do
 		Gun.ChamberLen     = Stats.chamberLen
 		Gun.PropLimit      = Stats.propLimit
 		Gun.GunScaleVec    = Stats.scale
-		Gun.GunOpts        = Limits and ACE.GunScale.OptString(Lookup.id, CalMM, BoreLen) or nil
+		Gun.GunOpts        = Limits and ACE.GunScale.OptString(Id, CalMM, BoreLen) or nil
 		Gun.GunKey         = Limits and ACE.GunScale.Key(Lookup.id, CalMM, Limits.lenmin < Limits.lenmax and BoreLen or nil) or Id
 
 		Gun.noloaders	= ClassData.noloader or nil
@@ -575,7 +575,7 @@ function ENT:Update( ArgTable )
 	self.ChamberLen      = Stats.chamberLen
 	self.PropLimit       = Stats.propLimit
 	self.GunScaleVec     = Stats.scale
-	self.GunOpts         = Limits and ACE.GunScale.OptString( Lookup.id, CalMM, BoreLen ) or nil
+	self.GunOpts         = Limits and ACE.GunScale.OptString( NewId, CalMM, BoreLen ) or nil
 	self.GunKey          = Limits and ACE.GunScale.Key( Lookup.id, CalMM, Limits.lenmin < Limits.lenmax and BoreLen or nil ) or NewId
 
 	self.noloaders       = ClassData.noloader or nil

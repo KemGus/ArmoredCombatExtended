@@ -277,6 +277,7 @@ local MIGRATION_PATTERN = "^(%d+%.?%d*)mm([A-Z]+)$"
 
 --- Resolves a non-ACE id to a migration pseudo-alias, or nil when the id
 -- does not parse as a clean caliber+known-suffix combination.
+-- @param base string The id with any key suffix already stripped
 -- @return table|nil {class, caliber (cm), len?}
 function GunScale.MigrationAlias( base )
 	if not isstring( base ) then return end
@@ -288,6 +289,7 @@ function GunScale.MigrationAlias( base )
 end
 
 -- Drop-in replacement for ACE.Weapons.Guns[id] wherever the id may be a key.
+-- @param id string Gun id, optionally carrying a @key suffix
 -- @return table|nil Gun definition, or nil if the base id is unknown.
 function GunScale.ResolveDef( id )
 	local base = GunScale.ParseKey( id )
@@ -317,6 +319,7 @@ end
 -- @return table|nil def Synthetic (or surviving) def of the resolved class
 -- @return number|nil calMM Effective caliber in millimeters
 -- @return number|nil len Bore length in calibers
+-- @param id string Gun id or legacy alias, optionally carrying a @key suffix
 -- @return string|nil baseid The base id as given (for .Id reporting)
 function GunScale.ResolveSpec( id )
 	local base, calMM, len = GunScale.ParseKey( id )
@@ -634,6 +637,10 @@ end
 
 --- Formats the GunOpts suffix for a normalized pair, or "" when the pair is the
 -- base spec (so unscaled guns produce byte-identical dupe data).
+-- @param id string The id the entity stores — original alias included, since
+--   the empty-string contract is defined against what pasting that id yields
+-- @param calMM number Effective caliber in millimeters
+-- @param len number Bore length in calibers
 -- @return string
 function GunScale.OptString( id, calMM, len )
 	local lim = GunScale.Limits( id )
