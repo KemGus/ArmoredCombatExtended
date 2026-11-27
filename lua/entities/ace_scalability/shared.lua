@@ -5,14 +5,17 @@ ENT.WireDebugName	= "Scalable Entity"
 
 cleanup.Register("scalable entity")
 
-function ENT:ConvertMeshToScale(MeshData, Scale)
+function ENT:ConvertMeshToScale(MeshData, Scale, Split, LenScale)
 
 	local NewMesh = table.Copy(MeshData)
 
 	for _, vertexgroup in pairs(NewMesh) do
 
 		for k, vertex in pairs(vertexgroup) do
-			vertexgroup[k] = (istable(vertex) and vertex.pos or vertex) * Scale
+			local v = istable(vertex) and vertex.pos or vertex
+			v = Vector(v.x, v.y, v.z)
+
+			vertexgroup[k] = ACE.GunScale.MapPoint( v, Scale, Split, LenScale )
 		end
 
 	end

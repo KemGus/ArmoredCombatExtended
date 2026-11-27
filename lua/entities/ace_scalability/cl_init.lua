@@ -63,7 +63,7 @@ local function BuildRealPhysics( entity, Scale )
 
 
 		if entity.ConvertMeshToScale then
-			Mesh = entity:ConvertMeshToScale(Mesh, Scale)
+			Mesh = entity:ConvertMeshToScale(Mesh, Scale, entity.TubeSplit, entity.TubeLenScale)
 		end
 
 		local SafetyCatch = true --If the mesh would generate a crash bypass it. Only time will tell what this will unleash. Likely client only desync of the hitbox.
@@ -109,6 +109,14 @@ local function CreatePropVisualScale( entity, Scale )
 	entity.Matrix:Scale(Scale)
 	entity:EnableMatrix("RenderMultiply", entity.Matrix)
 
+	-- Guns with a barrel split stretch only the tube: the matrix above carries
+	-- the uniform caliber scale, the rig's tube/muzzledev bones add the length
+	-- on top. The server already applies the same manipulations (they network);
+	-- this keeps preview/fullupdate paths working regardless.
+	if entity.TubeSplit then
+		ACE.GunScale.ApplyBarrelBones( entity, entity.TubeLenScale, entity.TubeSplit )
+	end
+
 	BuildRealPhysics( entity, Scale )
 
 end
@@ -121,7 +129,15 @@ net.Receive("ACE_Scalable_Network", function()
 
 	local entity = net.ReadEntity()
 
+	local hasSplit = net.ReadBool()
+	local lenScale = hasSplit and net.ReadFloat() or nil
+
 	if IsValid(entity) then
+		if lenScale then
+			entity.TubeSplit    = ACE.GunScale.BarrelInfo( entity:GetModel() )
+			entity.TubeLenScale = lenScale
+		end
+
 		local Scale = Vector(x,y,z)
 		CreatePropVisualScale( entity, Scale )
 	end

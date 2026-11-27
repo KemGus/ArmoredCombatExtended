@@ -58,7 +58,7 @@ function ACE.MakeLegacyExplosive(Owner, Pos, Angle, Data1, Data2, Data3, Data4, 
 	Bomb:CPPISetOwner(Owner)
 
 
-	Mdl = Mdl or ACE.Weapons.Guns[Id].model
+	Mdl = Mdl or ACE.GunScale.ResolveDef( Id ).model
 
 	Bomb.Id = Id
 	Bomb:CreateBomb(Data1, Data2, Data3, Data4, Data5, Data6, Data7, Data8, Data9, Data10, Mdl, Data11, Data12, Data13 , Data14 , Data15)

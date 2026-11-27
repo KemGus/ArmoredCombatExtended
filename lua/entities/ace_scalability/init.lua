@@ -81,13 +81,22 @@ end
 ]]
 do
 
-	local function NetworkNewScale( Ent, Scale, ply )
+	local function NetworkNewScale( Ent, ScaleData, ply )
+
+		local Scale = ScaleData.Scale
 
 		net.Start("ACE_Scalable_Network")
 			net.WriteFloat(Scale.x)
 			net.WriteFloat(Scale.y)
 			net.WriteFloat(Scale.z)
 			net.WriteEntity( Ent )
+
+			-- Optional piecewise tube stretch; the split itself comes from the
+			-- shared ACE.GunScale.BarrelJoints registry via the entity's model.
+			net.WriteBool( ScaleData.Split ~= nil )
+			if ScaleData.Split then
+				net.WriteFloat( ScaleData.LenScale or 1 )
+			end
 
 		if IsValid(ply) then
 			net.Send(ply)
@@ -102,7 +111,7 @@ do
 		local Scale 		= ScaleData.Scale
 		local PhysMaterial 	= ScaleData.Material or ""
 
-		MeshData = self:ConvertMeshToScale( MeshData, Scale )
+		MeshData = self:ConvertMeshToScale( MeshData, Scale, ScaleData.Split, ScaleData.LenScale )
 
 		self:PhysicsInitMultiConvex( MeshData )
 		self:SetMoveType(MOVETYPE_VPHYSICS)
@@ -119,7 +128,7 @@ do
 			Phys:SetMaterial( PhysMaterial )
 		end
 
-		NetworkNewScale( self, ScaleData.Scale )
+		NetworkNewScale( self, ScaleData )
 
 	end
 
@@ -133,7 +142,7 @@ do
 		if IsValid(Ent) then
 			if Ent.IsScalable then
 				local ScaleData = Ent.ScaleData
-				NetworkNewScale( Ent, ScaleData.Scale, ply )
+				NetworkNewScale( Ent, ScaleData, ply )
 			end
 		else
 
@@ -151,7 +160,7 @@ do
 
 				if IsValid( ent ) then
 					local ScaleData = ent.ScaleData
-					NetworkNewScale( scalable_ents[ RepLeft ], ScaleData.Scale, ply )
+					NetworkNewScale( scalable_ents[ RepLeft ], ScaleData, ply )
 				end
 			end)
 		end
