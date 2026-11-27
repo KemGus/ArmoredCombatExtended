@@ -27,7 +27,7 @@ ACE.DefineGunClass("C", {
 	caliber      = { base = 12, min = 3.7, max = 20 }, -- cm
 	length       = { base = 45, min = 15, max = 70 }, -- L/d; short end absorbs the retired shortcannon class
 	mass         = 2100, -- kg at base caliber + base length
-	tubefrac     = 0.44, -- barrel mass fraction (Rh-120 L/44->L/55 calibrated)
+	tubefrac     = 0.44, -- fraction of total mass in the barrel tube; tube mass scales with bore area x length, the rest with volume (Rh-120 L/44->L/55 calibrated)
 	massoverhead = 0.08, -- fraction of mass that never scales (mechanism floor, calibrated vs real KwK 36/39/40 weights)
 	round        = { maxlength = 110, propweight = 18 }, -- at base caliber
 } )

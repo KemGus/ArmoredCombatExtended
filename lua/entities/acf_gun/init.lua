@@ -488,6 +488,10 @@ function ENT:Update( ArgTable )
 	if not IsValid( ply ) then return false, "No player" end
 	if not isstring( Id ) then return false, "No gun id" end
 
+	-- Retuning mid-fire would silently eat the in-flight cycle; same guard
+	-- ACF-3 uses on its update path.
+	if self.Firing then return false, "Stop firing before updating the gun" end
+
 	-- Ownership guard, same spirit as other ACE tools: the contraption's
 	-- owner retunes it, nobody else.
 	if CPPI and self.CPPIGetOwner then
@@ -668,6 +672,18 @@ function ENT:Update( ArgTable )
 				local fits = true
 				if self.ScalableSpec and crate.BulletData then
 					fits = ACE.GunScale.AmmoFits( self, crate.BulletData )
+				end
+				-- The round-type blacklist is a link-time check, so a retune
+				-- must re-run it: without this, linking APFSDS to an autoloader
+				-- and retuning into a plain cannon would smuggle a round past
+				-- the class restriction (the exploit family ACF-3's blanket
+				-- unlink-on-update guards against).
+				if fits then
+					local Blacklist = ACE.AmmoBlacklist[ crate.RoundType ] or {}
+					local Fam = ( ACE.Classes.GunClass[ self.Class ] or {} ).ammofamily
+					if table.HasValue( Blacklist, self.Class ) or ( Fam and table.HasValue( Blacklist, Fam ) ) then
+						fits = false
+					end
 				end
 				if fits then
 					kept[#kept + 1] = crate

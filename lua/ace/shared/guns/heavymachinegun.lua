@@ -35,7 +35,7 @@ ACE.DefineGunClass("HMG", {
 	model        = "models/machinegun/machinegun_30mm_compact.mdl",
 	caliber      = { base = 3, min = 2, max = 4 }, -- cm
 	mass         = 150, -- kg at base caliber + base length
-	tubefrac     = 0.44, -- barrel mass fraction (Rh-120 L/44->L/55 calibrated)
+	tubefrac     = 0.44, -- fraction of total mass in the barrel tube; tube mass scales with bore area x length, the rest with volume (Rh-120 L/44->L/55 calibrated)
 	massoverhead = 0.08, -- fraction of mass that never scales (mechanism floor, calibrated vs real KwK 36/39/40 weights)
 	round        = { maxlength = 39, propweight = 0.35 }, -- at base caliber
 } )

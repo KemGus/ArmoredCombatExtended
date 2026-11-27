@@ -27,7 +27,7 @@ ACE.DefineGunClass("MO", {
 	model        = "models/mortar/mortar_120mm.mdl",
 	caliber      = { base = 12, min = 5, max = 38 }, -- cm
 	mass         = 440, -- kg at base caliber + base length
-	tubefrac     = 0.44, -- barrel mass fraction (Rh-120 L/44->L/55 calibrated)
+	tubefrac     = 0.44, -- fraction of total mass in the barrel tube; tube mass scales with bore area x length, the rest with volume (Rh-120 L/44->L/55 calibrated)
 	massoverhead = 0.08, -- fraction of mass that never scales (mechanism floor, calibrated vs real KwK 36/39/40 weights)
 	round        = { maxlength = 180, propweight = 0.9 }, -- at base caliber
 } )
