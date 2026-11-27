@@ -24,6 +24,12 @@ ACE.DefineGunClass("AC", {
 	-- barrel tube (tube mass scales with bore area x length, everything else
 	-- with volume); massoverhead is the fixed mechanism floor that never
 	-- scales. The full mass law is documented in sh_ace_gunpack.lua.
+	-- Worked example for this envelope: dialing the 40mm autocannon to its
+	-- 5cm maximum gives caliber scale cs = 5/4 = 1.25. At pivot length the
+	-- non-tube mass scales cs^3 = 1.95x, the tube mass cs^2 = 1.56x (the
+	-- length term only enters when the length slider moves). Weighted by
+	-- tubefrac/massoverhead that lands near 1.72x overall — a 50mm version
+	-- is roughly 730kg, not the naive 425kg.
 	model        = "models/autocannon/autocannon_40mm.mdl",
 	caliber      = { base = 4, min = 2, max = 5 }, -- cm
 	mass         = 425, -- kg at base caliber + base length

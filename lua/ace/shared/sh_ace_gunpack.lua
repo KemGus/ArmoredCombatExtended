@@ -43,6 +43,47 @@
 
 	The legacy class-level `longbarrel` table keeps working and is treated as a
 	two-entry barrels list.
+
+	========================================================================
+	HOW THE PIECES FIT TOGETHER (and how to reproduce/extend this system)
+
+	Four files carry one scalable gun from menu trigger to rendered entity:
+
+		1. lua/ace/shared/guns/<class>.lua — the ENVELOPE. One file per gun
+		   class; declares base caliber/length, min/max slider ranges, pivot
+		   mass, tubefrac/massoverhead, sound/muzzleflash. This is the only
+		   file you touch for balance retunes.
+		2. lua/ace/shared/sh_ace_gunpack.lua (this file) — the KERNEL. Pure
+		   math: envelope clamping (Normalize), the mass law, the muzzle-
+		   velocity law, scale vectors, key parsing. No per-gun data here.
+		3. GunScale.BarrelJoints below — per-MODEL geometry: where the breech
+		   ends and the tube begins, so length stretch elongates the barrel
+		   instead of the whole gun. Required only for length-scaled models.
+		4. lua/ace/shared/ace_legacy_gun_aliases.lua — generated compat data
+		   mapping retired per-caliber ids onto classes; never hand-edit.
+
+	Common tasks, step by step:
+
+	ADD A NEW GUN CLASS (say a railgun):
+		a. Create lua/ace/shared/guns/railgun.lua following cannon.lua: pick
+		   the model, measure its real proportions, set caliber/length
+		   envelope, pivot mass, tubefrac. The class registers itself.
+		b. If the model should length-scale, measure its joint/tubelen (see
+		   the BarrelJoints header below) and add a registry entry.
+		c. Add legacy aliases ONLY if old dupes reference ids for it.
+		d. Extend tests/lua/ace_scalable_guns_integration.lua expectations.
+
+	ADD A NEW MODEL VARIANT to an existing class: measure joint/tubelen for
+	the model (below), add one BarrelJoints line, done — the envelope math
+	is model-independent.
+
+	RETUNE BALANCE (mass too heavy, MV too strong): edit the class file's
+	envelope numbers, or the kernel-wide defaults in the tunables block if
+	the change is truly universal. Never special-case inside the kernel.
+
+	KEY FORMAT decoded once more, since everything keys off it:
+	"120mmC@140x55" = base def 120mmC, dialed to 140mm caliber, L/55 bore.
+	The part after '@' is the "spec"; it rides dupes, crates and menu cvars.
 ]]--
 
 AddCSLuaFile()
@@ -92,6 +133,18 @@ GunScale.SoundPitch    = GunScale.SoundPitch    ~= false -- deeper sound on bigg
 -- lenScale), and `mdir` the slide direction in the parent (barrel) frame for
 -- ManipulateBonePosition. Models without an entry fall back to stretching the
 -- whole entity axially.
+--
+-- Where the numbers come from: every entry was measured offline from the
+-- model's own files, not eyeballed in game. `joint`/`tubelen` come from the
+-- physics mesh convex vertices (find the radius transition where the fat
+-- breech cylinder narrows to the thin tube — that plane is the joint, and
+-- tubelen is the distance from there to the muzzle-end vertices); `bore` is
+-- the mesh's long axis direction in bind space; `mdir` reads straight out of
+-- the model's bone hierarchy. The measurement scripts live in the gmodkit
+-- harness (out/mdl_bones.py, out/mdl_bounds.py). To measure a NEW model:
+-- dump its physics convexes, plot vertex radius vs position along the long
+-- axis, and read off the same two distances — expect a few millimeters of
+-- slack either way, the hull math is not sensitive to small joint error.
 GunScale.BarrelJoints = {
 	["models/autocannon/semiautocannon_25mm.mdl"] = { joint = Vector(0, -15.6251, 0), bore = Vector(0, -1, 0), tubelen = 28.33, mdir = Vector(1, 0, 0) },
 	["models/autocannon/semiautocannon_37mm.mdl"] = { joint = Vector(0, -23.1251, 0), bore = Vector(0, -1, 0), tubelen = 41.92, mdir = Vector(1, 0, 0) },
