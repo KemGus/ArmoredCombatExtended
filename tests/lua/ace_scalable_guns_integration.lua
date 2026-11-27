@@ -1,9 +1,9 @@
--- Stage-2 integration test: loads the REAL loader, gun class files and legacy
+-- Scalable-guns integration test: loads the REAL loader, gun class files and legacy
 -- alias table with a minimal GMod mock environment, then verifies the unified
 -- scalable-gun migration end to end: synthetic defs, alias resolution,
 -- scaling laws, envelope clamping, ammo-family crossfeed.
--- usage: luajit ace_stage2_integration.lua <ace-repo>
-local repo = assert(arg[1], "usage: luajit ace_stage2_integration.lua <ace-repo>")
+-- usage: luajit ace_scalable_guns_integration.lua <ace-repo>
+local repo = assert(arg[1], "usage: luajit ace_scalable_guns_integration.lua <ace-repo>")
 
 SERVER = true
 ACE = { Year = 3000, Translation = { GunClasses = setmetatable({}, { __index = function() return "" end }) } }
@@ -196,4 +196,26 @@ check(GS.Limits("120mmC") ~= nil, "Limits works on legacy id")
 local lmcal = (GS.Normalize("120mmC", nil, nil))
 check(lmcal ~= nil, "Normalize works on legacy id")
 
-print(string.format("ace_stage2_integration: %d passed, %d failed", passed, failed))
+-- 15. migration suffix fallback: non-ACE ids resolve into envelopes
+local mdef, mcal = GS.ResolveSpec("40mmC")
+check(mdef and mdef.id == "C", "40mmC migration resolves to cannon")
+check(close(mcal, 40, 0.001), "40mmC migration caliber preserved")
+local rdef, rcal = GS.ResolveSpec("127mmRAC")
+check(rdef and rdef.id == "RAC", "127mmRAC migration resolves to rotary")
+check(close(rcal, 127, 0.001), "127mmRAC authored caliber surfaces pre-clamp")
+local ncal127 = (GS.Normalize("127mmRAC", rcal, nil))
+check(close(ncal127, 30, 0.001), "127mmRAC clamps to RAC envelope max 30mm")
+local sdef, slen = select(1, GS.ResolveSpec("90mmSC"))
+if sdef then slen = select(3, GS.ResolveSpec("90mmSC")) end
+check(sdef and sdef.id == "C", "90mmSC migration folds to cannon")
+check(close(slen, 20, 0.001), "90mmSC migration gets shortcannon length L20")
+local sbdef = GS.ResolveSpec("120mmSB")
+check(sbdef and sbdef.id == "SBC", "ACF-3 smoothbore SB suffix maps to ACE SBC")
+-- exact ACE legacy aliases still win over the migration fallback
+local llen = select(3, GS.ResolveSpec("120mmC"))
+check(llen == 45, "ACE legacy 120mmC keeps authored L45 (not migration default)")
+-- garbage ids still fail closed
+check(GS.ResolveSpec("not_a_gun") == nil, "garbage id does not resolve")
+check(GS.ResolveSpec("120mmXX") == nil, "unknown suffix does not resolve")
+
+print(string.format("ace_scalable_guns_integration: %d passed, %d failed", passed, failed))

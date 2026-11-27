@@ -197,6 +197,43 @@ function GunScale.ParseOpts( str )
 end
 
 --- Resolves a possibly-parameterized id to its registry definition.
+-- Migration suffix map for ids that never existed in ACE: ACF-3 (and older)
+-- dupes carry caliber-keyed ids whose class suffix differs from ACE's legacy
+-- naming. When neither the gun table nor the exact legacy aliases know an
+-- id, a clean "<caliber>mm<SUFFIX>" parse through this map resolves it to the
+-- matching scalable class at that caliber, clamped to the class envelope —
+-- so a 127mmRAC pastes as a 30mm rotary (the envelope max) instead of an
+-- error, and ACF-3 smoothbores/shortcannons land in the right ACE classes.
+-- ACE-native suffixes double as generic fallbacks for the same reason.
+GunScale.MigrationSuffixes = GunScale.MigrationSuffixes or {
+	C   = { class = "C" },
+	AC  = { class = "AC" },  HAC = { class = "AC" },
+	MG  = { class = "MG" },  HMG = { class = "HMG" },
+	RAC = { class = "RAC" }, HRAC = { class = "RAC" },
+	SA  = { class = "SA" },
+	HW  = { class = "HW" },
+	GL  = { class = "GL" },  CL  = { class = "GL" },
+	MO  = { class = "MO" },  M   = { class = "MO" },
+	SBC = { class = "SBC" }, SB  = { class = "SBC" },
+	SC  = { class = "C", len = 20 }, -- shortcannon fold: short tube cannon
+	AL  = { class = "AL" },  BAL = { class = "BAL" },
+	ATR = { class = "ATR" }, SL  = { class = "SL" }, FGL = { class = "FGL" },
+}
+
+local MIGRATION_PATTERN = "^(%d+%.?%d*)mm([A-Z]+)$"
+
+--- Resolves a non-ACE id to a migration pseudo-alias, or nil when the id
+-- does not parse as a clean caliber+known-suffix combination.
+-- @return table|nil {class, caliber (cm), len?}
+function GunScale.MigrationAlias( base )
+	if not isstring( base ) then return end
+	local cal, suffix = string.match( base, MIGRATION_PATTERN )
+	if not cal then return end
+	local entry = GunScale.MigrationSuffixes[ suffix ]
+	if not entry then return end
+	return { class = entry.class, caliber = tonumber( cal ) / 10, len = entry.len, migration = true }
+end
+
 -- Drop-in replacement for ACE.Weapons.Guns[id] wherever the id may be a key.
 -- @return table|nil Gun definition, or nil if the base id is unknown.
 function GunScale.ResolveDef( id )
@@ -205,6 +242,7 @@ function GunScale.ResolveDef( id )
 	if def then return def end
 
 	local alias = ACE.LegacyGunAliases and ACE.LegacyGunAliases[ base ]
+	if not alias then alias = GunScale.MigrationAlias( base ) end
 	if alias then return ACE.Weapons.Guns[ alias.class ] end
 end
 
@@ -235,6 +273,7 @@ function GunScale.ResolveSpec( id )
 	if def then return def, calMM, len, base end
 
 	local alias = ACE.LegacyGunAliases and ACE.LegacyGunAliases[ base ]
+	if not alias then alias = GunScale.MigrationAlias( base ) end
 	if not alias then return end
 
 	def = ACE.Weapons.Guns[ alias.class ]
