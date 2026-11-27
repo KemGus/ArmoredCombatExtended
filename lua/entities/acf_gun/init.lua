@@ -502,6 +502,11 @@ function ENT:Update( ArgTable )
 	-- ACF-3 uses on its update path.
 	if self.Firing then return false, "Stop firing before updating the gun" end
 
+	-- Captured before the spec assignments overwrite them: the chambered
+	-- round and the caliber it was chambered for.
+	local OldCaliber  = self.Caliber
+	local Chambered   = ( self.BulletData and self.BulletData.Type ~= "Empty" ) and self.BulletData or nil
+
 	-- Ownership guard, same spirit as other ACE tools: the contraption's
 	-- owner retunes it, nobody else.
 	if CPPI and self.CPPIGetOwner then
@@ -518,6 +523,30 @@ function ENT:Update( ArgTable )
 	local BackComp = ACE.BackCompGun or {}
 	local NewId, Lookup, ClassData, Limits, Stats, CalMM, BoreLen = ACE.ResolveGunSpec( Id, GunOpts, BackComp )
 	if not Lookup then return false, "Unknown gun id" end
+
+	-- Quota categories mirror the spawn path in MakeGun. A retune can move a
+	-- gun across category lines (a small gun becoming a large one), so the
+	-- target category must be validated and the sandbox count registration
+	-- migrated — otherwise retunes bypass the spawn quotas entirely.
+	local function QuotaCategory( classid, effcal )
+		if classid == "SL" then return "_ace_smokelauncher" end
+		if classid == "RAC" or classid == "MG" or classid == "AC" or classid == "SA" or classid == "HMG" then return "_ace_rapidgun" end
+		if effcal >= ACE.LargeCaliber then return "_ace_largegun" end
+		return "_ace_gun"
+	end
+	local oldcat = QuotaCategory( self.Class, self.Caliber )
+	local newcat = QuotaCategory( Lookup.gunclass, Stats.caliber )
+	if oldcat ~= newcat then
+		if not ply:CheckLimit( newcat ) then return false, "Retuning would exceed your quota for that gun category" end
+		local key  = ply:UniqueID()
+		local objs = g_SBoxObjects and g_SBoxObjects[ key ]
+		if objs and objs[ oldcat ] then
+			for k, v in pairs( objs[ oldcat ] ) do
+				if v == self then objs[ oldcat ][ k ] = nil break end
+			end
+		end
+		ply:AddCount( newcat, self )
+	end
 
 	-- From here: apply the resolved spec in place. These assignments mirror
 	-- the spawn path field for field — anything spec-dependent must be
@@ -579,6 +608,19 @@ function ENT:Update( ArgTable )
 	self.NextFire        = CurTime()
 	self.BulletData      = { Type = "Empty", PropMass = 0, ProjMass = 0 }
 	self.Heat            = ACE.AmbientTemp
+
+	-- The chambered round survives when it genuinely fits the new spec: the
+	-- caliber must be unchanged (a 120mm shell never belongs in a rebored
+	-- chamber, longer or shorter tube notwithstanding) and the round type
+	-- must pass the same blacklist the crate-link reconciliation re-runs.
+	if Chambered and Stats.caliber == OldCaliber then
+		local Blacklist   = ACE.AmmoBlacklist[ Chambered.Type ] or {}
+		local Fam         = ( ACE.Classes.GunClass[ self.Class ] or {} ).ammofamily
+		local blacklisted = table.HasValue( Blacklist, self.Class ) or ( Fam and table.HasValue( Blacklist, Fam ) )
+		local fits        = true
+		if self.ScalableSpec then fits = ACE.GunScale.AmmoFits( self, Chambered ) end
+		if not blacklisted and fits then self.BulletData = Chambered end
+	end
 
 	if ClassData.color then
 		self:SetColor( Color( ClassData.color[1], ClassData.color[2], ClassData.color[3], 255 ) )
