@@ -611,6 +611,10 @@ end
 function ACE.CheckGun( gunid )
 
 	local gundata = ACE.Weapons.Guns[ gunid ]
+	if not gundata and ACE.GunScale then
+		-- Parameterized ids ("120mmC@140x55") resolve through the base def.
+		gundata = ACE.GunScale.ResolveDef( gunid )
+	end
 
 	if not gundata then return false end
 
@@ -1061,6 +1065,9 @@ function ACE.GetAmmoGunClass(bdata)
 	if gunClass and gunClass ~= "" then return gunClass end
 
 	local gunData = (bdata.Id and ACE and ACE.Weapons and ACE.Weapons.Guns and ACE.Weapons.Guns[bdata.Id]) or nil
+	if not gunData and bdata.Id and ACE.GunScale then
+		gunData = ACE.GunScale.ResolveDef( bdata.Id )
+	end
 	return gunData and gunData.gunclass or nil
 end
 
@@ -1294,6 +1301,15 @@ local function resolveWeaponPricingInputs(ent)
 	local round = candidate and candidate.Round
 	local rate = candidate and candidate.Rate or 0
 	local baseRoundCost = round and ACE.Points.BaseRoundCost(round, isRack) or 0
+	-- Cost follows performance: bore length moves penetration through the
+	-- muzzle-velocity law, so a gun's rounds are priced at THIS gun's velocity
+	-- modifier rather than the crate's shared base data. The modifier is
+	-- exactly 1 at pivot length, leaving legacy-spec gun costs unchanged, and
+	-- it is per-gun — one crate feeding guns of different lengths prices each
+	-- by its own performance. Racks have no scalable bore and stay flat.
+	if not isRack then
+		baseRoundCost = baseRoundCost * (tonumber(ent.MuzVelMod) or 1)
+	end
 	local roundScore = baseRoundCost
 	local guidance = isRack and ACE.Points.RackGuidanceMul(round) or 1
 	local points, baseRoundCostPoints, rackRawPoints

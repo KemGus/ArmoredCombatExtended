@@ -13,7 +13,8 @@ def main() -> int:
         print("luajit was not found on PATH", file=sys.stderr)
         return 2
 
-    tests = sorted((repo / "tests" / "lua").glob("*_selftest.lua"))
+    testdir = repo / "tests" / "lua"
+    tests = sorted(testdir.glob("*_selftest.lua")) + sorted(testdir.glob("*_integration.lua"))
     if not tests:
         print("no LuaJIT self-tests found", file=sys.stderr)
         return 2

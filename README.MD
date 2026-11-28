@@ -76,6 +76,8 @@ Or use [GitHub Desktop](https://desktop.github.com/), [GitKraken](https://www.gi
 ### 🔫 Weapons & Ammunition
 
 - Large arsenal of cannons, autocannons, mortars, howitzers and machine guns
+- Scalable gun system: dial caliber and bore length continuously instead of picking fixed per-caliber guns - unified classes span the whole legacy arsenal, with stats derived from scaling laws calibrated on real gun data. Legacy dupes, saves and chips keep working through the compatibility layer
+- In-place gun retuning: click an existing gun with the spawn tool to change its caliber or bore length without rebuilding it - wiring, constraints and compatible ammo links survive
 - Missiles with 5+ guidance types and many accurate to real life models
 - Bombs and rockets for aircraft
 - Diverse ammo: AP, APHE, APFSDS, HEAT, HE, Smoke, and more

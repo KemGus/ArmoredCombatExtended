@@ -136,10 +136,62 @@ end
 -- Be patient. There are alot of functions here
 
 --Gun class definition
+--- Registers a gun class. Besides the legacy class metadata, a class whose
+-- `caliber` field is a table (`{ base = cm, min = cm, max = cm }`) is a
+-- scalable class: this function synthesizes the single pivot weapon def for
+-- it (registered in ACE.Weapons.Guns under the class id, so it is spawnable),
+-- and the scaling kernel in sh_ace_gunpack.lua derives every concrete
+-- caliber/length spec from that pivot. `length = { base, min, max }` (in L/d)
+-- adds the barrel-length slider; omit it for fixed-length classes.
+-- @param id string class id, e.g. "C"
+-- @param data table class fields (type, name, sound, model, caliber, mass, ...)
 function ACE.DefineGunClass( id, data )
 	if (data.year or 0) < ACE.Year then
 		data.id = id
 		GunClasses[ id ] = data
+
+		-- Scalable gun classes: when `caliber` is an envelope table rather
+		-- than a number, there is no per-caliber def ladder. We synthesize the
+		-- single pivot def here; the scaling kernel (sh_ace_gunpack.lua)
+		-- derives every concrete spec from it. Legacy ids resolve through
+		-- ACE.LegacyGunAliases.
+		if istable( data.caliber ) then
+			local env = data.caliber
+			local len = data.length
+			local baselen = ( len and len.base ) or data.borelength or 45
+			local def = {
+				id            = id,
+				name          = data.name,
+				desc          = data.desc,
+				gunclass      = id,
+				model         = data.model,
+				sound         = data.sound,
+				caliber       = env.base,
+				weight        = data.mass,
+				year          = data.year,
+				maxrof        = data.maxrof,
+				scalable      = true,
+				calrange      = { env.min * 10, env.max * 10 },
+				borelength    = baselen,
+				lenrange      = len and { len.min, len.max } or { baselen, baselen },
+				tubefrac      = data.tubefrac,
+				massoverhead  = data.massoverhead,
+				ammofamily    = data.ammofamily,
+				magsize       = data.magsize,
+				magreload     = data.magreload,
+				round         = {
+					id         = id,
+					maxlength  = data.round.maxlength,
+					propweight = data.round.propweight
+				},
+			}
+			table.Inherit( def, gun_base )
+			GunTable[ id ] = def
+
+			if def.model and not ModelData[ def.model ] then
+				ACE.DefineModelData( id .. "_model", { Model = def.model } )
+			end
+		end
 	end
 end
 
@@ -173,6 +225,20 @@ function ACE.DefineGun( id, data )
 		data.round.id = id
 		table.Inherit( data, gun_base )
 		GunTable[ id ] = data
+
+		-- Scalable guns need their model in ModelData so clients can rebuild
+		-- matching collision hulls from the scaled convexes. Without this the
+		-- server hull is correct but the client-side physics mesh keeps the
+		-- unscaled shape — bullets and vcollide_wireframe disagree with the
+		-- server, worst exactly where the barrel stretched.
+		local sc = data.scalable
+		if sc == nil then
+			local class = GunClasses[ data.gunclass ]
+			sc = class and class.scalable
+		end
+		if sc and data.model and not ModelData[ data.model ] then
+			ACE.DefineModelData( id .. "_model", { Model = data.model } )
+		end
 	end
 end
 

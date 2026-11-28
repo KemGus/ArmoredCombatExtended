@@ -9,15 +9,36 @@ do
 
 	function ACE.RoundBaseGunpowder( PlayerData, Data, ServerData, GUIData )
 
-		local GunData = ACE.Weapons["Guns"][PlayerData["Id"]]
+		-- Parameterized ammo keys ("120mmC@140") carry the round's effective
+		-- caliber in mm; the base def supplies the round template.
+		local BaseId, KeyCalMM = ACE.GunScale.ParseKey( PlayerData["Id"] )
+		local GunData = ACE.GunScale.ResolveDef( BaseId )
 		local BulletMax = GunData["round"]
 		local GunClass = ACE.Classes.GunClass[GunData["gunclass"]] or {}
 		local IsMissile = GunClass.type == "missile"
 		--local Type = PlayerData.Type or ""
 
-		GUIData.MaxTotalLength    = BulletMax.maxlength * (Data.LengthAdj or 1)
+		-- Legacy aliased ids carry no key suffix but still imply their authored
+		-- caliber: a crate keyed "140mmC" must build 140mm rounds, or old dupes
+		-- stop linking. Key suffixes win when both are present.
+		local EffCalMM = KeyCalMM
+		if not EffCalMM then
+			local _, AliasCalMM = ACE.GunScale.ResolveSpec( BaseId )
+			EffCalMM = AliasCalMM
+		end
 
-		Data.BodyCaliber          = GunData["caliber"]
+		-- CalScale is the ratio between the round's actual caliber and the
+		-- caliber the round data was authored at. Every linear round dimension
+		-- (length, diameter, frontal area) multiplies by it, so a 140mm round
+		-- built from the 120mm cannon pivot gets CalScale 140/120 = 1.1667.
+		local CalScale = 1
+		if EffCalMM then
+			CalScale = ( ACE.GunScale.ClampCalMM( PlayerData["Id"], EffCalMM ) / 10 ) / GunData["caliber"]
+		end
+
+		GUIData.MaxTotalLength    = BulletMax.maxlength * CalScale * (Data.LengthAdj or 1)
+
+		Data.BodyCaliber          = GunData["caliber"] * CalScale
 		-- Missiles now use real body caliber end-to-end by default.
 		-- This removes dependence on per-missile override hacks/fake ballistic calibers.
 		Data.WarheadCaliber       = Data.BodyCaliber
@@ -28,7 +49,7 @@ do
 		Data.TwoPiece             = PlayerData.TwoPiece > 0 and 1 or 0
 
 
-		local PropMax = (BulletMax.propweight * 1000 / ACE.PDensity) / Data.FrArea	--Current casing absolute max propellant capacity
+		local PropMax = (BulletMax.propweight * CalScale ^ 3 * 1000 / ACE.PDensity) / Data.FrArea	--Current casing absolute max propellant capacity
 		local CurLength = (PlayerData.ProjLength + math.min(PlayerData.PropLength,PropMax) + Data.Tracer )
 
 		GUIData.MinPropLength = 0.01
@@ -140,7 +161,7 @@ do
 		function ACE.AmmoCapacity( Data )
 
 			local GunId	= acemenupanel.AmmoData.Data.id
-			local AmmoGunData = ACE.Weapons.Guns[GunId]
+			local AmmoGunData = ACE.GunScale.ResolveDef( GunId )
 			local GunClass	= AmmoGunData.gunclass
 			local ClassData	= ACE.Classes.GunClass[GunClass]
 

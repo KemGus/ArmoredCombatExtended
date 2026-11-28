@@ -35,7 +35,7 @@ function Round.convert( _, PlayerData )
 
 	PlayerData, Data, ServerData, GUIData = ACE.RoundBaseGunpowder( PlayerData, Data, ServerData, GUIData )
 
-	local GunClass = ACE.Weapons["Guns"][Data["Id"] or PlayerData["Id"]]["gunclass"]
+	local GunClass = ACE.GunScale.ResolveDef( Data["Id"] or PlayerData["Id"] )["gunclass"]
 
 	if GunClass == "AC" or GunClass == "HMG" then
 

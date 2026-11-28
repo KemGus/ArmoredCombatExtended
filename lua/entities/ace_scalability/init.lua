@@ -81,13 +81,46 @@ end
 ]]
 do
 
-	local function NetworkNewScale( Ent, Scale, ply )
+	--- Networks an explicit pivot reset to clients. Needed when a previously
+	--- scaled entity returns to its unscaled spec: no scale packet would go
+	--- out on its own, so clients would keep the old render matrix, collision
+	--- hull and cached tube split forever.
+	--- @param Ent entity The entity returning to pivot scale
+	--- @param ply? player Optional single recipient; broadcasts when omitted
+	function ACE.NetworkScaleReset( Ent, ply )
+		net.Start("ACE_Scalable_Network")
+			net.WriteFloat(1)
+			net.WriteFloat(1)
+			net.WriteFloat(1)
+			net.WriteEntity( Ent )
+			net.WriteBool( false )
+		if IsValid(ply) then
+			net.Send(ply)
+		else
+			net.Broadcast()
+		end
+	end
+
+	local function NetworkNewScale( Ent, ScaleData, ply )
+
+		local Scale = ScaleData.Scale
 
 		net.Start("ACE_Scalable_Network")
 			net.WriteFloat(Scale.x)
 			net.WriteFloat(Scale.y)
 			net.WriteFloat(Scale.z)
 			net.WriteEntity( Ent )
+
+			-- Optional piecewise tube stretch; the split itself comes from the
+			-- shared ACE.GunScale.BarrelJoints registry via the entity's model.
+			-- Example: a 120mm cannon dialed from L/45 to L/70 gets LenScale
+			-- 70/45 = 1.556; clients stretch every hull vertex past the
+			-- breech/tube joint along the bore by that factor, so the physics
+			-- mesh elongates exactly like the visual barrel does.
+			net.WriteBool( ScaleData.Split ~= nil )
+			if ScaleData.Split then
+				net.WriteFloat( ScaleData.LenScale or 1 )
+			end
 
 		if IsValid(ply) then
 			net.Send(ply)
@@ -102,7 +135,7 @@ do
 		local Scale 		= ScaleData.Scale
 		local PhysMaterial 	= ScaleData.Material or ""
 
-		MeshData = self:ConvertMeshToScale( MeshData, Scale )
+		MeshData = self:ConvertMeshToScale( MeshData, Scale, ScaleData.Split, ScaleData.LenScale )
 
 		self:PhysicsInitMultiConvex( MeshData )
 		self:SetMoveType(MOVETYPE_VPHYSICS)
@@ -119,7 +152,7 @@ do
 			Phys:SetMaterial( PhysMaterial )
 		end
 
-		NetworkNewScale( self, ScaleData.Scale )
+		NetworkNewScale( self, ScaleData )
 
 	end
 
@@ -133,7 +166,7 @@ do
 		if IsValid(Ent) then
 			if Ent.IsScalable then
 				local ScaleData = Ent.ScaleData
-				NetworkNewScale( Ent, ScaleData.Scale, ply )
+				NetworkNewScale( Ent, ScaleData, ply )
 			end
 		else
 
@@ -151,7 +184,7 @@ do
 
 				if IsValid( ent ) then
 					local ScaleData = ent.ScaleData
-					NetworkNewScale( scalable_ents[ RepLeft ], ScaleData.Scale, ply )
+					NetworkNewScale( scalable_ents[ RepLeft ], ScaleData, ply )
 				end
 			end)
 		end

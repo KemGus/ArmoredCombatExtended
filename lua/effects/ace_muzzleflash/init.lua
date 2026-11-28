@@ -51,7 +51,15 @@ function EFFECT:Init( data )
 
 		ACE.SGunFire( Gun, Sound, SoundPitch, Propellant )
 
-		local Muzzle = Gun:GetAttachment( Gun:LookupAttachment(Attachment)) or { Pos = Gun:GetPos(), Ang = Gun:GetAngles() }
+		-- Scalable guns network their Lua-resolved muzzle offset; QC attachments
+		-- don't follow the render-matrix scale, so prefer it when present.
+		local MuzzleLocal = Gun:GetNWVector( "ACE_Muzzle" )
+		local Muzzle
+		if MuzzleLocal ~= vector_origin then
+			Muzzle = { Pos = Gun:LocalToWorld( MuzzleLocal ), Ang = Gun:GetAngles() }
+		else
+			Muzzle = Gun:GetAttachment( Gun:LookupAttachment(Attachment)) or { Pos = Gun:GetPos(), Ang = Gun:GetAngles() }
+		end
 
 		self.Origin 		= Muzzle.Pos
 		self.DirAng			= Muzzle.Ang

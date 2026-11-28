@@ -1,4 +1,11 @@
---define the class
+-- Unified scalable gun class. A single definition covers the whole caliber
+-- (and, where present, barrel-length) envelope — the spawn menu shows sliders
+-- instead of the old fixed per-caliber list. Legacy ids like the retired
+-- per-caliber defs resolve to this class through
+-- lua/ace/shared/ace_legacy_gun_aliases.lua, and the scaling math lives in
+-- lua/ace/shared/sh_ace_gunpack.lua. When adding a new gun class, copy this
+-- pattern: pick pivot values from a real reference gun.
+-- Pivot spec: 30mmHMG (3.0cm, 150kg). Scaling is relative to these base values.
 ACE.DefineGunClass("HMG", {
 	type = "Gun",
 	spread = 0.17,
@@ -14,92 +21,21 @@ ACE.DefineGunClass("HMG", {
 		index = 2,
 		submodel = 4,
 		newpos = "muzzle2"
-	}
-} )
-
-ACE.DefineGun("30mmHMGShort", {
-	name = "Shortened 30mm Heavy Machinegun",
-	desc = "30mm shell chucker, light and compact. Great for lobbing mid sized HE shells at infantry.",
-	model = "models/machinegun/machinegun_30mm_compact.mdl",
-	sound = "ace_weapons/multi_sound/30mm_hmg_multi.mp3",
-	gunclass = "HMG",
-	caliber = 3.01,
-	weight = 140,
-	year = 1941,
-	rofmod = 0.55, --at 1.05, 495rpm;
-	round = {
-		maxlength = 25,
-		propweight = 0.03
 	},
-} )
+	magsize = 50, -- rounds at base caliber; scales inverse-sqrt with caliber
+	magreload = 6, -- seconds at base caliber; scales with caliber^0.7
 
-ACE.DefineGun("40mmHMGShort", {
-	name = "Shortened 40mm Heavy Machinegun",
-	desc = "The heaviest of the heavy machineguns. Lobs low velocity shells at a decent rof for its weight.",
-	model = "models/machinegun/machinegun_40mm_compact.mdl",
-	sound = "ace_weapons/multi_sound/30mm_hmg_multi.mp3",
-	gunclass = "HMG",
-	caliber = 4.0,
-	weight = 205,
-	year = 1955,
-	rofmod = 0.45, --at 0.75, 455rpm
-	round = {
-		maxlength = 32,
-		propweight = 0.12
-	},
-} )
-
---add a gun to the class
-ACE.DefineGun("20mmHMG", {
-	name = "20mm Heavy Machinegun",
-	desc = "The lightest of the HMGs, the 20mm has a rapid fire rate but suffers from poor payload size.  Often used to strafe ground troops or annoy low-flying aircraft.",
-	model = "models/machinegun/machinegun_20mm_compact.mdl",
-	sound = "ace_weapons/multi_sound/20mm_hmg_multi.mp3",
-	gunclass = "HMG",
-	caliber = 2.0,
-	weight = 80,
-	year = 1935,
-	rofmod = 0.6, --at 1.5, 675rpm; at 2.0, 480rpm
-	magsize = 60,
-	magreload = 5,
-	round = {
-		maxlength = 32,
-		propweight = 0.13
-	},
-} )
-
-ACE.DefineGun("30mmHMG", {
-	name = "30mm Heavy Machinegun",
-	desc = "30mm shell chucker, light and compact. Your average cold war dogfight go-to.",
-	model = "models/machinegun/machinegun_30mm_compact.mdl",
-	sound = "ace_weapons/multi_sound/30mm_hmg_multi.mp3",
-	gunclass = "HMG",
-	caliber = 3.0,
-	weight = 150,
-	year = 1941,
-	rofmod = 0.4, --at 1.05, 495rpm;
-	magsize = 50,
-	magreload = 6,
-	round = {
-		maxlength = 39,
-		propweight = 0.35
-	},
-} )
-
-ACE.DefineGun("40mmHMG", {
-	name = "40mm Heavy Machinegun",
-	desc = "The heaviest of the heavy machineguns.  Massively powerful with a killer reload and hefty ammunition requirements, it can pop even relatively heavy targets with ease.",
-	model = "models/machinegun/machinegun_40mm_compact.mdl",
-	sound = "ace_weapons/multi_sound/30mm_hmg_multi.mp3",
-	gunclass = "HMG",
-	caliber = 4.0,
-	weight = 300,
-	year = 1955,
-	rofmod = 0.47, --at 0.75, 455rpm
-	magsize = 35,
-	magreload = 7,
-	round = {
-		maxlength = 45,
-		propweight = 0.9
-	},
+		-- Scaling envelope: the caliber/length slider ranges in the spawn menu.
+	-- caliber is in cm; length is in L/d (calibers — barrel length as a
+	-- multiple of bore diameter, so L/45 on a 120mm gun is a 5.4m tube);
+	-- mass in kg at the pivot spec. tubefrac is the fraction of mass in the
+	-- barrel tube (tube mass scales with bore area x length, everything else
+	-- with volume); massoverhead is the fixed mechanism floor that never
+	-- scales. The full mass law is documented in sh_ace_gunpack.lua.
+	model        = "models/machinegun/machinegun_30mm_compact.mdl",
+	caliber      = { base = 3, min = 2, max = 4 }, -- cm
+	mass         = 150, -- kg at base caliber + base length
+	tubefrac     = 0.44, -- fraction of total mass in the barrel tube; tube mass scales with bore area x length, the rest with volume (Rh-120 L/44->L/55 calibrated)
+	massoverhead = 0.08, -- fraction of mass that never scales (mechanism floor, calibrated vs real KwK 36/39/40 weights)
+	round        = { maxlength = 39, propweight = 0.35 }, -- at base caliber
 } )

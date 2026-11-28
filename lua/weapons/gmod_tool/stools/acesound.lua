@@ -43,7 +43,7 @@ ACE.SoundToolSupport = ACE.SoundToolSupport or {
 		ResetSound = function(ent)
 
 			local Class = ent.Class
-			local lookup = GunTable[ent.Id]
+			local lookup = GunTable[ent.Id] or ACE.GunScale.ResolveDef(ent.Id)
 
 			local sound = lookup.sound or GunClasses[Class]["sound"]
 

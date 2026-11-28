@@ -92,7 +92,22 @@ function ACE.GunGUICreate( Table )
 	GunDisplay:SetLookAt( Vector( 0, 0, 0 ) )
 	GunDisplay:SetFOV( 20 )
 	GunDisplay:SetSize(acemenupanel:GetWide(),acemenupanel:GetWide())
-	GunDisplay.LayoutEntity = function() end
+	GunDisplay.LayoutEntity = function( _, ent )
+		-- Preview the scalable spec on the model panel.
+		local Vec = acemenupanel.GunScaleVec
+		if Vec and ( Vec.x ~= 1 or Vec.y ~= 1 or Vec.z ~= 1 ) then
+			local M = Matrix()
+			M:Scale( Vec )
+			ent:EnableMatrix( "RenderMultiply", M )
+		else
+			ent:DisableMatrix( "RenderMultiply" )
+		end
+
+		local Len = acemenupanel.GunScaleLen
+		if Len then
+			ACE.GunScale.ApplyBarrelBones( ent, Len, acemenupanel.GunScaleSplit )
+		end
+	end
 	acemenupanel.CustomDisplay:AddItem( GunDisplay )
 
 	local GunClass = ACE.Classes.GunClass[Table.gunclass]
@@ -148,6 +163,230 @@ function ACE.GunGUICreate( Table )
 
 	end
 
+	-- Scalable gun controls: caliber (mm) + bore length (calibers) sliders that
+	-- write the acemenu_gunspec spawn cvar. Live stats preview via GunScale.
+	local ScaleLimits = ACE.GunScale and ACE.GunScale.Limits( Table.id )
+	if ScaleLimits and not ScaleLimits.hasbarrels then
+
+		-- Slider state starts at the class pivot; the current value of the
+		-- acemenu_gunspec convar (the spec suffix the tool will spawn with)
+		-- overrides it when the player already dialed something in.
+		local GunScaleState = { cal = ScaleLimits.basecal * 10, len = ScaleLimits.baselen }
+		local CurSpec = GetConVar( "acemenu_gunspec" )
+		if CurSpec then
+			local c, l = ACE.GunScale.ParseSpec( CurSpec:GetString() )
+			if c then GunScaleState.cal = math.Clamp( c, ScaleLimits.calmin * 10, ScaleLimits.calmax * 10 ) end
+			if l then GunScaleState.len = math.Clamp( l, ScaleLimits.lenmin, ScaleLimits.lenmax ) end
+		end
+
+		acemenupanel:CPanelText("GunScaleTitle", "Scalable Configuration", "DermaDefaultBold")
+
+		local function PushGunSpec()
+			local cal, len = ACE.GunScale.Normalize( Table.id, GunScaleState.cal, GunScaleState.len )
+			GunScaleState.cal, GunScaleState.len = cal, len
+
+			RunConsoleCommand( "acemenu_gunspec", ACE.GunScale.SpecString( Table.id, cal, len ) )
+
+			local S = ACE.GunScale.Stats( Table, cal / 10, len )
+			acemenupanel.GunScaleVec = S.scale
+			acemenupanel.GunScaleLen = S.split and S.lenscale or nil
+			acemenupanel.GunScaleSplit = S.split
+			acemenupanel:CPanelText("GunScaleStats", string.format(
+				"Spec: %gmm L%g - %d kg\nMuzzle velocity modifier: x%.2f\nChamber: %gcm - Max propellant: %g kg",
+				cal, len, math.Round( S.mass ), S.mvmod, S.chamberLen, S.propLimit ) )
+		end
+
+		local CalSlider = vgui.Create( "DNumSlider", acemenupanel.CustomDisplay )
+		CalSlider:SetText( "Caliber (mm)" )
+		CalSlider:SetDark( true )
+		CalSlider:SetMin( ScaleLimits.calmin * 10 )
+		CalSlider:SetMax( ScaleLimits.calmax * 10 )
+		CalSlider:SetDecimals( 1 )
+		CalSlider:SetValue( GunScaleState.cal )
+		acemenupanel.CustomDisplay:AddItem( CalSlider )
+
+		-- Caliber-only classes lock the length axis; no point showing it.
+		local LenSlider
+		if ScaleLimits.lenmin < ScaleLimits.lenmax then
+			LenSlider = vgui.Create( "DNumSlider", acemenupanel.CustomDisplay )
+			LenSlider:SetText( "Bore length (calibers)" )
+			LenSlider:SetDark( true )
+			LenSlider:SetMin( ScaleLimits.lenmin )
+			LenSlider:SetMax( ScaleLimits.lenmax )
+			LenSlider:SetDecimals( 0 )
+			LenSlider:SetValue( GunScaleState.len )
+			acemenupanel.CustomDisplay:AddItem( LenSlider )
+		end
+
+		CalSlider.OnValueChanged = function( _, val )
+			GunScaleState.cal = val
+			PushGunSpec()
+		end
+		if LenSlider then
+			LenSlider.OnValueChanged = function( _, val )
+				GunScaleState.len = val
+				PushGunSpec()
+			end
+		end
+
+		PushGunSpec()
+	else
+		acemenupanel.GunScaleVec = nil
+		acemenupanel.GunScaleLen = nil
+		acemenupanel.GunScaleSplit = nil
+		RunConsoleCommand( "acemenu_gunspec", "" )
+	end
+
+	acemenupanel.CustomDisplay:PerformLayout()
+
+end
+
+--- Unified scalable-class entry: one menu node per gun class whose sliders
+-- span the whole family. The caliber slider resolves the nearest concrete def
+-- (its model, stats and envelope), so a family like Cannon still spawns a real
+-- 120mmC/140mmC under the hood - old ids, dupes and keys are untouched.
+function ACE.GunFamilyGUICreate( Table )
+
+	acemenupanel:CPanelText("Name", Table.name, "DermaDefaultBold")
+
+	local fam = Table.family
+	local GunScaleState = { cal = nil, len = nil }
+
+	local CurSpec = GetConVar( "acemenu_gunspec" )
+	local initDef = ACE.GunScale.ResolveFamilyDef( fam, fam.defs[1].caliber * 10 )
+	if CurSpec then
+		local c, l = ACE.GunScale.ParseSpec( CurSpec:GetString() )
+		if c then GunScaleState.cal = math.Clamp( c, fam.calmin * 10, fam.calmax * 10 ) end
+		if l then GunScaleState.len = math.Clamp( l, fam.lenmin, fam.lenmax ) end
+	end
+	GunScaleState.cal = GunScaleState.cal or ( initDef.caliber * 10 )
+	GunScaleState.len = GunScaleState.len or ACE.GunScale.Limits( initDef.id ).baselen
+
+	local Def = initDef
+	local GunDisplay = vgui.Create( "DModelPanel", acemenupanel.CustomDisplay )
+	GunDisplay:SetModel( Def.model )
+	GunDisplay:SetCamPos( Vector( 250, 500, 250 ) )
+	GunDisplay:SetLookAt( Vector( 0, 0, 0 ) )
+	GunDisplay:SetFOV( 20 )
+	GunDisplay:SetSize(acemenupanel:GetWide(),acemenupanel:GetWide())
+	GunDisplay.LayoutEntity = function( _, ent )
+		local Vec = acemenupanel.GunScaleVec
+		if Vec and ( Vec.x ~= 1 or Vec.y ~= 1 or Vec.z ~= 1 ) then
+			local M = Matrix()
+			M:Scale( Vec )
+			ent:EnableMatrix( "RenderMultiply", M )
+		else
+			ent:DisableMatrix( "RenderMultiply" )
+		end
+
+		local Len = acemenupanel.GunScaleLen
+		if Len then
+			ACE.GunScale.ApplyBarrelBones( ent, Len, acemenupanel.GunScaleSplit )
+		end
+	end
+	acemenupanel.CustomDisplay:AddItem( GunDisplay )
+
+	local GunClass = ACE.Classes.GunClass[Table.class]
+	if GunClass then acemenupanel:CPanelText("ClassDesc", GunClass.desc) end
+
+	-- Drum and breech autoloaders are separate classes sharing one menu entry;
+	-- the mechanism dropdown rebuilds this panel for the other class. Both
+	-- share the caliber/length envelope, so slider state carries over.
+	if Table.class == "AL" or Table.class == "BAL" then
+		local MechBox = vgui.Create( "DComboBox", acemenupanel.CustomDisplay )
+		MechBox:SetText( "Mechanism" )
+		MechBox:AddChoice( "Drum Autoloader", "AL", Table.class == "AL" )
+		MechBox:AddChoice( "Breech Autoloader", "BAL", Table.class == "BAL" )
+		MechBox:SetDark( true )
+		MechBox.OnSelect = function( _, _, _, classId )
+			if classId == Table.class then return end
+			local fams = ACE.GunScale.Families( classId )
+			if not fams or not fams[1] then return end
+			local fam = fams[1]
+			acemenupanel:UpdateDisplay( {
+				id       = fam.defs[1].id,
+				type     = "Guns",
+				name     = "Autoloader",
+				model    = fam.defs[1].model,
+				class    = classId,
+				gunclass = classId,
+				family   = fam,
+				guicreate = function( _, T ) ACE.GunFamilyGUICreate( T ) end,
+				guiupdate = function() return end,
+			} )
+		end
+		acemenupanel.CustomDisplay:AddItem( MechBox )
+	end
+
+	acemenupanel:CPanelText("GunScaleTitle", "Scalable Configuration", "DermaDefaultBold")
+
+	local function PushGunSpec()
+		local newDef = ACE.GunScale.ResolveFamilyDef( fam, GunScaleState.cal )
+		if newDef ~= Def then
+			-- Reset stale bone manipulations before the model swap: they are
+			-- keyed by index, so the old rig's values would land on the wrong
+			-- bones of the next model.
+			local ent = GunDisplay.GetEntity and GunDisplay:GetEntity() or GunDisplay.Entity
+			if IsValid( ent ) then
+				for i = 0, ent:GetBoneCount() - 1 do
+					ent:ManipulateBoneScale( i, Vector( 1, 1, 1 ) )
+					ent:ManipulateBonePosition( i, Vector( 0, 0, 0 ) )
+					ent:ManipulateBoneAngles( i, Angle( 0, 0, 0 ) )
+				end
+			end
+			Def = newDef
+			GunDisplay:SetModel( Def.model )
+		end
+
+		local cal, len = ACE.GunScale.Normalize( Def.id, GunScaleState.cal, GunScaleState.len )
+		GunScaleState.cal, GunScaleState.len = cal, len
+
+		RunConsoleCommand( "acemenu_id", Def.id )
+		RunConsoleCommand( "acemenu_gunspec", ACE.GunScale.SpecString( Def.id, cal, len ) )
+
+		local S = ACE.GunScale.Stats( Def, cal / 10, len )
+		acemenupanel.GunScaleVec = S.scale
+		acemenupanel.GunScaleLen = S.split and S.lenscale or nil
+		acemenupanel.GunScaleSplit = S.split
+		acemenupanel:CPanelText("GunScaleDef", "Spawns as: " .. ACE.GunScale.DisplayName( Def, cal, len ) )
+		acemenupanel:CPanelText("GunScaleStats", string.format(
+			"Spec: %gmm L%g - %d kg\nMuzzle velocity modifier: x%.2f\nChamber: %gcm - Max propellant: %g kg",
+			cal, len, math.Round( S.mass ), S.mvmod, S.chamberLen, S.propLimit ) )
+	end
+
+	local CalSlider = vgui.Create( "DNumSlider", acemenupanel.CustomDisplay )
+	CalSlider:SetText( "Caliber (mm)" )
+	CalSlider:SetDark( true )
+	CalSlider:SetMin( fam.calmin * 10 )
+	CalSlider:SetMax( fam.calmax * 10 )
+	CalSlider:SetDecimals( 1 )
+	CalSlider:SetValue( GunScaleState.cal )
+	acemenupanel.CustomDisplay:AddItem( CalSlider )
+
+	local LenSlider
+	if fam.lenmin < fam.lenmax then
+		LenSlider = vgui.Create( "DNumSlider", acemenupanel.CustomDisplay )
+		LenSlider:SetText( "Bore length (calibers)" )
+		LenSlider:SetDark( true )
+		LenSlider:SetMin( fam.lenmin )
+		LenSlider:SetMax( fam.lenmax )
+		LenSlider:SetDecimals( 0 )
+		LenSlider:SetValue( GunScaleState.len )
+		acemenupanel.CustomDisplay:AddItem( LenSlider )
+	end
+
+	CalSlider.OnValueChanged = function( _, val )
+		GunScaleState.cal = val
+		PushGunSpec()
+	end
+	if LenSlider then
+		LenSlider.OnValueChanged = function( _, val )
+			GunScaleState.len = val
+			PushGunSpec()
+		end
+	end
+
+	PushGunSpec()
 	acemenupanel.CustomDisplay:PerformLayout()
 
 end
